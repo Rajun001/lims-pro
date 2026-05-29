@@ -1,0 +1,46 @@
+{
+  "name": "lims-pro",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "api",
+    "analyzer-service"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev -w api\" \"npm run dev -w analyzer-service\"",
+    "dev:frontend": "vite",
+    "build": "vite build",
+    "start:prod": "pm2 start ecosystem.config.cjs",
+    "stop:prod": "pm2 stop ecosystem.config.cjs",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^12.11.0",
+    "html2pdf.js": "^0.14.0",
+    "lucide-react": "^1.7.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.2.4",
+    "react-barcode": "^1.6.1",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.14.0",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.4.27",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.2",
+    "vite": "^8.0.4"
+  }
+}

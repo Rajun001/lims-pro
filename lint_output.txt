@@ -1,0 +1,333 @@
+
+> lims-pro@0.0.0 lint
+> eslint .
+
+
+C:\Users\OFICINA\lims-pro\middleware\firebaseSync.js
+   1:1   error  'require' is not defined  no-undef
+   2:27  error  'require' is not defined  no-undef
+   3:40  error  'require' is not defined  no-undef
+   4:63  error  'require' is not defined  no-undef
+  59:1   error  'module' is not defined   no-undef
+
+C:\Users\OFICINA\lims-pro\middleware\hl7Parser.js
+  57:1  error  'module' is not defined  no-undef
+
+C:\Users\OFICINA\lims-pro\middleware\index.js
+   1:13  error  'require' is not defined                                                 no-undef
+   2:22  error  'require' is not defined                                                 no-undef
+   3:28  error  'require' is not defined                                                 no-undef
+   5:14  error  'process' is not defined                                                 no-undef
+   8:21  error  'process' is not defined                                                 no-undef
+   9:7   error  'process' is not defined                                                 no-undef
+  55:53  error  Unexpected control character(s) in regular expression: \x0b, \x1c, \x0d  no-control-regex
+
+C:\Users\OFICINA\lims-pro\middleware\mockAnalyzer.js
+   1:13  error  'require' is not defined                                                 no-undef
+  28:39  error  Unexpected control character(s) in regular expression: \x0b, \x1c, \x0d  no-control-regex
+
+C:\Users\OFICINA\lims-pro\src\App.jsx
+    4:33  error    'signInAnonymously' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+   42:82  error    'ViewComponent' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+   55:41  error    Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  53 |                 clientName: 'Cliente Mock (Simulación)',
+  54 |                 analysisRequested: 'Análisis Demostrativo',
+> 55 |                 requestDate: { seconds: Date.now() / 1000 },
+     |                                         ^^^^^^^^^^ Cannot call impure function
+  56 |                 status: 'En Proceso'
+  57 |             };
+  58 |         }                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/purity
+  171:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  169 |             addNotification(`Nuevos resultados de equipo automatizado listos. Tienes ${pendingCount} pendiente(s) de revisión.`, 'warning');
+  170 |         }
+> 171 |         setPrevPendingCount(pendingCount);
+      |         ^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  172 |     }, [requests, isAuthReady, loading]);
+  173 |
+  174 |     const navigateTo = async (viewName, id = null) => {  react-hooks/set-state-in-effect
+  172:8   warning  React Hook useEffect has missing dependencies: 'addNotification' and 'prevPendingCount'. Either include them or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    react-hooks/exhaustive-deps
+  197:68  error    '__initial_auth_token' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  198:55  error    '__initial_auth_token' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-undef
+  222:13  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  220 |         if (!isAuthReady) return;
+  221 |         if (!user) {
+> 222 |             setLoading(false);
+      |             ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  223 |             return;
+  224 |         }
+  225 |         setLoading(true);                                                                                                                                                             react-hooks/set-state-in-effect
+
+C:\Users\OFICINA\lims-pro\src\App_backup.jsx
+     1:47   error  'useRef' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+    16:5    error  'updateDoc' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-unused-vars
+    17:5    error  'deleteDoc' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              no-unused-vars
+    76:37   error  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-unused-vars
+   164:71   error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  162 |         <div className="h-8 flex items-end justify-center gap-[2px] mb-1 px-1">
+  163 |             {[...Array(24)].map((_, i) => (
+> 164 |                 <div key={i} className="bg-slate-900" style={{ width: Math.random() > 0.5 ? '2px' : '1px', height: `${50 + Math.random() * 50}%` }}></div>
+      |                                                                       ^^^^^^^^^^^^^ Cannot call impure function
+  165 |             ))}
+  166 |         </div>
+  167 |         <p className="font-mono text-[10px] tracking-widest text-slate-600">{value}</p>                                                       react-hooks/purity
+   164:124  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  162 |         <div className="h-8 flex items-end justify-center gap-[2px] mb-1 px-1">
+  163 |             {[...Array(24)].map((_, i) => (
+> 164 |                 <div key={i} className="bg-slate-900" style={{ width: Math.random() > 0.5 ? '2px' : '1px', height: `${50 + Math.random() * 50}%` }}></div>
+      |                                                                                                                            ^^^^^^^^^^^^^ Cannot call impure function
+  165 |             ))}
+  166 |         </div>
+  167 |         <p className="font-mono text-[10px] tracking-widest text-slate-600">{value}</p>  react-hooks/purity
+  1187:11   error  'isPatient' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     no-unused-vars
+  1691:23   error  'navigateTo' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  1803:24   error  'navigateTo' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  1888:20   error  'navigateTo' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  2162:45   error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  2160 |     const uniqueFormId = useMemo(() => {
+  2161 |         const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+> 2162 |         const randomStr = Math.floor(1000 + Math.random() * 9000);
+       |                                             ^^^^^^^^^^^^^ Cannot call impure function
+  2163 |         return `FRM-${dateStr}-${randomStr}`;
+  2164 |     }, []);
+  2165 |                                                                                                                                                                                                                                 react-hooks/purity
+  2279:12   error  'csvData' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+  2299:15   error  'headers' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       no-unused-vars
+  2580:68   error  '__initial_auth_token' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-undef
+  2581:55   error  '__initial_auth_token' is not defined                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-undef
+  2641:41   error  Error: Cannot call impure function during render
+
+`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  2639 |                 clientName: 'Cliente Mock (Simulación)',
+  2640 |                 analysisRequested: 'Análisis Demostrativo',
+> 2641 |                 requestDate: { seconds: Date.now() / 1000 },
+       |                                         ^^^^^^^^^^ Cannot call impure function
+  2642 |                 status: 'En Proceso'
+  2643 |             };
+  2644 |         }                                                                                                                                                                                                                                                  react-hooks/purity
+
+C:\Users\OFICINA\lims-pro\src\components\UI.jsx
+   11:37   error  'error' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             no-unused-vars
+  114:71   error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  112 |         <div className="h-8 flex items-end justify-center gap-[2px] mb-1 px-1">
+  113 |             {[...Array(24)].map((_, i) => (
+> 114 |                 <div key={i} className="bg-slate-900" style={{ width: Math.random() > 0.5 ? '2px' : '1px', height: `${50 + Math.random() * 50}%` }}></div>
+      |                                                                       ^^^^^^^^^^^^^ Cannot call impure function
+  115 |             ))}
+  116 |         </div>
+  117 |         <p className="font-mono text-[10px] tracking-widest text-slate-600">{value}</p>                                                       react-hooks/purity
+  114:124  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+  112 |         <div className="h-8 flex items-end justify-center gap-[2px] mb-1 px-1">
+  113 |             {[...Array(24)].map((_, i) => (
+> 114 |                 <div key={i} className="bg-slate-900" style={{ width: Math.random() > 0.5 ? '2px' : '1px', height: `${50 + Math.random() * 50}%` }}></div>
+      |                                                                                                                            ^^^^^^^^^^^^^ Cannot call impure function
+  115 |             ))}
+  116 |         </div>
+  117 |         <p className="font-mono text-[10px] tracking-widest text-slate-600">{value}</p>  react-hooks/purity
+
+C:\Users\OFICINA\lims-pro\src\contexts\NotificationContext.jsx
+   6:14  error    Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            react-refresh/only-export-components
+  17:17  error    Error: Cannot access variable before it is declared
+
+`removeNotification` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  15 |         if (duration > 0) {
+  16 |             setTimeout(() => {
+> 17 |                 removeNotification(id);
+     |                 ^^^^^^^^^^^^^^^^^^ `removeNotification` accessed before it is declared
+  18 |             }, duration);
+  19 |         }
+  20 |     }, []);
+
+  20 |     }, []);
+  21 |
+> 22 |     const removeNotification = useCallback((id) => {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 23 |         setNotifications(prev => prev.filter(n => n.id !== id));
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 24 |     }, []);
+     | ^^^^^^^^^^^^ `removeNotification` is declared here
+  25 |
+  26 |     const getIcon = (type) => {
+  27 |         switch (type) {  react-hooks/immutability
+  20:8   warning  React Hook useCallback has a missing dependency: 'removeNotification'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   react-hooks/exhaustive-deps
+
+C:\Users\OFICINA\lims-pro\src\views\AnalysisSettings.jsx
+  12:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+  13:37  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+  14:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+  15:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\OFICINA\lims-pro\src\views\AnalyzerInboxView.jsx
+  8:41  error  'navigateTo' is defined but never used  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\AuditView.jsx
+  11:29  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+  12:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\OFICINA\lims-pro\src\views\BillingView.jsx
+  4:31  error  'navigateTo' is defined but never used  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\BulkUploadView.jsx
+   8:12  error  'csvData' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  28:15  error  'headers' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\CRMView.jsx
+   6:59  error    'navigateTo' is defined but never used                                                                        no-unused-vars
+  69:8   warning  React Hook useMemo has a missing dependency: 'mockClients'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\OFICINA\lims-pro\src\views\ClientPortal.jsx
+  202:11  error  'isPatient' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\Dashboard.jsx
+  15:38  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getClientName`, but the source dependencies were [requests, searchTerm]. Inferred different dependency than source.
+
+  13 |     };
+  14 |
+> 15 |     const filteredRequests = useMemo(() => {
+     |                                      ^^^^^^^
+> 16 |         if (!requests) return [];
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 17 |         return requests.filter(req => {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 18 |             const term = searchTerm.toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 19 |             const clientName = getClientName(req).toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 20 |             const id = (req.id || '').toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 21 |             return clientName.includes(term) || id.includes(term);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 22 |         });
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 23 |     }, [requests, searchTerm]);
+     | ^^^^^^ Could not preserve existing manual memoization
+  24 |
+  25 |     return (
+  26 |         <div className="space-y-6">  react-hooks/preserve-manual-memoization
+  15:38  error    Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `getClientName`, but the source dependencies were [requests, searchTerm]. Inferred different dependency than source.
+
+  13 |     };
+  14 |
+> 15 |     const filteredRequests = useMemo(() => {
+     |                                      ^^^^^^^
+> 16 |         if (!requests) return [];
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 17 |         return requests.filter(req => {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 18 |             const term = searchTerm.toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 19 |             const clientName = getClientName(req).toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 20 |             const id = (req.id || '').toLowerCase();
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 21 |             return clientName.includes(term) || id.includes(term);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 22 |         });
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 23 |     }, [requests, searchTerm]);
+     | ^^^^^^ Could not preserve existing manual memoization
+  24 |
+  25 |     return (
+  26 |         <div className="space-y-6">  react-hooks/preserve-manual-memoization
+  23:8   warning  React Hook useMemo has a missing dependency: 'getClientName'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               react-hooks/exhaustive-deps
+
+C:\Users\OFICINA\lims-pro\src\views\LabSettings.jsx
+  11:29  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\OFICINA\lims-pro\src\views\ManualFormView.jsx
+  9:45  error  Error: Cannot call impure function during render
+
+`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).
+
+   7 |     const uniqueFormId = useMemo(() => {
+   8 |         const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+>  9 |         const randomStr = Math.floor(1000 + Math.random() * 9000);
+     |                                             ^^^^^^^^^^^^^ Cannot call impure function
+  10 |         return `FRM-${dateStr}-${randomStr}`;
+  11 |     }, []);
+  12 |  react-hooks/purity
+
+C:\Users\OFICINA\lims-pro\src\views\QCView.jsx
+  7:30  error  'navigateTo' is defined but never used  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\QuotesView.jsx
+  4:30  error  'navigateTo' is defined but never used  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\RequestDetails.jsx
+   12:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   13:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   16:57  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render                                                                  react-hooks/rules-of-hooks
+   17:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   20:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   21:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   22:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   23:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   24:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   27:53  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   28:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   31:55  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   32:51  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   33:53  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   34:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   35:57  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   36:57  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   39:53  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   40:57  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   41:55  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   42:49  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   43:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   44:43  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   45:53  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?   react-hooks/rules-of-hooks
+   48:30  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+   58:34  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+   68:30  error  React Hook "useMemo" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?    react-hooks/rules-of-hooks
+  220:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?  react-hooks/rules-of-hooks
+
+C:\Users\OFICINA\lims-pro\src\views\StorageMapView.jsx
+  4:34  error  'navigateTo' is defined but never used                                                          no-unused-vars
+  6:25  error  'setSelectedBox' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\OFICINA\lims-pro\src\views\SystemDiagnosticsView.jsx
+  12:39  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+  13:33  error  React Hook "useState" is called conditionally. React Hooks must be called in the exact same order in every component render   react-hooks/rules-of-hooks
+  15:5   error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+✖ 98 problems (94 errors, 4 warnings)
+

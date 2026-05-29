@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Patient {
+  id        Int      @id @default(autoincrement())
+  uniqueId  String?  @unique // DNI/Passport
+  firstName String
+  lastName  String
+  dob       DateTime?
+  gender    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  samples   Sample[]
+}
+
+model Sample {
+  id          Int       @id @default(autoincrement())
+  patientId   Int?      // Optional for industrial samples that don't have a human patient
+  patient     Patient?  @relation(fields: [patientId], references: [id])
+  sampleType  String    // e.g., "Blood", "Urine", "Food", "Water"
+  barcode     String    @unique
+  batchNumber String?   // For industrial/food lots
+  collectedAt DateTime?
+  receivedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orders       Order[]
+  workcards    Workcard[]
+  antibiograms Antibiogram[]
+}
+
+model Order {
+  id        Int      @id @default(autoincrement())
+  sampleId  Int
+  sample    Sample   @relation(fields: [sampleId], references: [id])
+  status    String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, VALIDATED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tests     Test[]
+}
+
+model Test {
+  id             Int      @id @default(autoincrement())
+  orderId        Int
+  order          Order    @relation(fields: [orderId], references: [id])
+  testName       String   // e.g., "Glucose", "Aerobic Plate Count"
+  resultValue    String?
+  referenceRange String?
+  unit           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Workcard {
+  id              Int       @id @default(autoincrement())
+  sampleId        Int
+  sample          Sample    @relation(fields: [sampleId], references: [id])
+  mediaType       String    // e.g., "Blood Agar", "MacConkey"
+  incubationStart DateTime?
+  readDay1        String?   // Observation Day 1
+  readDay2        String?   // Observation Day 2
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Antibiogram {
+  id                 Int      @id @default(autoincrement())
+  sampleId           Int
+  sample             Sample   @relation(fields: [sampleId], references: [id])
+  bacteriaIdentified String
+  guidelineUsed      String   // "CLSI" or "EUCAST"
+  // JSONB used to store dynamic arrays of antibiotic tests { antibiotic: "Penicillin", mic: 0.5, interpretation: "S" }
+  jsonResults        String     
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

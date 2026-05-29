@@ -1,0 +1,744 @@
+[
+  {
+    "category": "Química Sanguínea",
+    "code": "1020",
+    "name": "Acido Fólico",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1030",
+    "name": "Acido úrico",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1040",
+    "name": "Aldolasa",
+    "price": "30000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1050",
+    "name": "Amilasemia",
+    "price": "13000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1060",
+    "name": "Amonemia",
+    "price": "31000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1070",
+    "name": "APO A-1, APO B (c/u)",
+    "price": "20000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1080",
+    "name": "B2 microglobulina",
+    "price": "39000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1090",
+    "name": "Balance óseo",
+    "price": "47000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1100",
+    "name": "Bilirrubina total y directa",
+    "price": "15000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1110",
+    "name": "Calcio",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1120",
+    "name": "Cálculos Urinarios (Marcha analítica)",
+    "price": "32000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1130",
+    "name": "Carotenos",
+    "price": "20000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1140",
+    "name": "Ceruloplasmina",
+    "price": "13000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1150",
+    "name": "Cloruros",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1160",
+    "name": "Cobre",
+    "price": "14500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1170",
+    "name": "Colesterol Total",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1180",
+    "name": "Colinesterasa Eritrocítica",
+    "price": "13000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1190",
+    "name": "Colinesterasa Sérica",
+    "price": "10000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1200",
+    "name": "Creatina",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1210",
+    "name": "Creatina fosfokinasa CPK",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1220",
+    "name": "Creatina fosfokinasa Isoenzima MB (CPK-MB)",
+    "price": "31000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1230",
+    "name": "Creatinina",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1270",
+    "name": "Deshidrogenasa láctica (DHL)",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1310",
+    "name": "Electrolitos, metales y otros por absorción atómica",
+    "price": "39000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1320",
+    "name": "Espermograma",
+    "price": "20000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1360",
+    "name": "Fosfatasa Ácida Total",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1370",
+    "name": "Fosfatasa Alcalina",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1400",
+    "name": "Fósforo",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1430",
+    "name": "Gama Glutamil Transpeptidasa (GGT)",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1450",
+    "name": "Glicemia",
+    "price": "8500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1460",
+    "name": "Glicemia 2 horas post pandrial (2HPP)",
+    "price": "8500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1470",
+    "name": "Glicemia de curva tolerancia (50-75-100 g)",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1490",
+    "name": "HDL - Colesterol",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1500",
+    "name": "Hemoglobina Glicosilada",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1550",
+    "name": "LDL - Colesterol (Directo)",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1560",
+    "name": "Lipasa",
+    "price": "19500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1570",
+    "name": "Magnesio",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1610",
+    "name": "Nitrógeno Ureico",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1640",
+    "name": "Perfil de lipidos",
+    "price": "23000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1670",
+    "name": "Potasio",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1680",
+    "name": "Proteínas totales y fraccionadas",
+    "price": "18500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1720",
+    "name": "SGOT/AST",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1730",
+    "name": "SGPT/ALT",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1740",
+    "name": "Sodio",
+    "price": "11000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1750",
+    "name": "Triglicéridos",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Química Sanguínea",
+    "code": "1760",
+    "name": "Vitamina B12",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2040",
+    "name": "ACTH",
+    "price": "34000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2070",
+    "name": "Cortisol",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2090",
+    "name": "Estradiol",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2120",
+    "name": "Hormona del Crecimiento",
+    "price": "25000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2130",
+    "name": "Hormona estimulante de la tiroides (TSH)",
+    "price": "19000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2140",
+    "name": "Hormona Foliculo estimulante (FSH)",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2150",
+    "name": "Hormona luteinizante (LH)",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2160",
+    "name": "Insulinemia en ayunas",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2180",
+    "name": "Progesterona",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2190",
+    "name": "Prolactina",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2210",
+    "name": "Subunidad beta Cualitativa",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2220",
+    "name": "Subunidad beta Cuantitativa",
+    "price": "23000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2230",
+    "name": "T3",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2240",
+    "name": "T3 Libre",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2250",
+    "name": "T4",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2260",
+    "name": "T4 Libre",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2270",
+    "name": "Testosterona Libre",
+    "price": "23000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hormonas",
+    "code": "2280",
+    "name": "Testosterona Total",
+    "price": "20000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Marcadores",
+    "code": "3020",
+    "name": "Antígeno carcinoembriónico (CEA - ACE)",
+    "price": "21000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Marcadores",
+    "code": "3030",
+    "name": "Antígeno Prostático Específico (PSA libre)",
+    "price": "21000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Marcadores",
+    "code": "3040",
+    "name": "Antígeno Prostático Específico (PSA total)",
+    "price": "19000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Marcadores",
+    "code": "3080",
+    "name": "CA 125",
+    "price": "21000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6040",
+    "name": "Cómputo de plaquetas",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6050",
+    "name": "Cómputo de Reticulocitos",
+    "price": "10500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6190",
+    "name": "Ferritina",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6200",
+    "name": "Fibrinógeno",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6220",
+    "name": "Hemoglobina y Hematocrito",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6230",
+    "name": "Hemograma completo",
+    "price": "13000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6240",
+    "name": "Hierro Sérico y capacidad total de fijación (IS)",
+    "price": "18500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6270",
+    "name": "Leucograma",
+    "price": "13000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6310",
+    "name": "Morfología de Sangre Periférica",
+    "price": "9500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6350",
+    "name": "Tiempo de coagulación y sangrado (c/u)",
+    "price": "6500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6360",
+    "name": "Tiempo de Protrombina",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6370",
+    "name": "Tiempo de Tromboplastina parcial activada",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Hematología",
+    "code": "6400",
+    "name": "Velocidad de sedimentación globular (VSG)",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7020",
+    "name": "Acido Urico en Orina 24 horas",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7110",
+    "name": "Creatininuria",
+    "price": "8000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7130",
+    "name": "Depuración de creatinina",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7190",
+    "name": "Orina General (EGO)",
+    "price": "7000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7270",
+    "name": "Proteinuria 24 horas",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7330",
+    "name": "Tincion de sedimento urinario",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Orina",
+    "code": "7340",
+    "name": "Urocultivo con recuento de colonias",
+    "price": "18000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Bacteriología",
+    "code": "8010",
+    "name": "Análisis de Exudados, transudados (c/u)",
+    "price": "45500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Bacteriología",
+    "code": "8040",
+    "name": "Antibiograma/Micobacterias",
+    "price": "32500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Bacteriología",
+    "code": "8110",
+    "name": "Frotis bacteriológico, otros",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Bacteriología",
+    "code": "8130",
+    "name": "Hemocultivo",
+    "price": "35000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Micología",
+    "code": "9040",
+    "name": "Cultivo por hongos",
+    "price": "23500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Micología",
+    "code": "9060",
+    "name": "Examen directo en KOH",
+    "price": "12000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Parasitología",
+    "code": "10060",
+    "name": "Coprocultivo",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Parasitología",
+    "code": "10100",
+    "name": "Heces por parásitos",
+    "price": "6500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Parasitología",
+    "code": "10130",
+    "name": "Sangre Oculta",
+    "price": "10000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Inmunología",
+    "code": "12030",
+    "name": "Aglutinaciones febriles",
+    "price": "18500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Inmunología",
+    "code": "12370",
+    "name": "Anticuerpos Anti-Hepatitis C IgG (ELISA)",
+    "price": "22000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Inmunología",
+    "code": "12371",
+    "name": "Anticuerpos Anti SARS - CoV - 2 IgG",
+    "price": "19000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Inmunología",
+    "code": "12380",
+    "name": "Antiestreptolisina O (ASO) latex",
+    "price": "14500",
+    "currency": "CRC"
+  },
+  {
+    "category": "Inmunología",
+    "code": "12950",
+    "name": "VDRL",
+    "price": "10000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Drogas de abuso, cuantificadas",
+    "code": "13010",
+    "name": "Alcoholemia",
+    "price": "26000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Drogas de abuso, cuantificadas",
+    "code": "13020",
+    "name": "Anfetaminas",
+    "price": "10000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Drogas de abuso, cuantificadas",
+    "code": "13040",
+    "name": "Canabinoides",
+    "price": "10000",
+    "currency": "CRC"
+  },
+  {
+    "category": "Drogas de abuso, cuantificadas",
+    "code": "13050",
+    "name": "Cocaina",
+    "price": "10000",
+    "currency": "CRC"
+  }
+]
