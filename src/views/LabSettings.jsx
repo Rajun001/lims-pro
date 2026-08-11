@@ -8,7 +8,8 @@ import { Building2, PlusCircle, Edit3, Trash2, CheckCircle2, Star, MapPin, Phone
 
 export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
     const [info, setInfo] = useState(() => {
-        const base = labInfo || {};
+        // Deep-copy to avoid mutating the incoming prop reference (ESLint: no prop mutation)
+        const base = { ...(labInfo || {}) };
         if (!base.branches || base.branches.length === 0) {
             base.branches = [
                 {
@@ -29,6 +30,9 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     active: true
                 }
             ];
+        } else {
+            // Always spread the branches array to avoid shared reference mutation
+            base.branches = [...base.branches];
         }
         return base;
     });

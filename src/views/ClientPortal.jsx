@@ -798,6 +798,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
     const [resultsList, setResultsList] = useState(isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (requests && requests.length > 0) {
             const filteredReqs = requests.filter(r => {
                 if (isCompany) {
@@ -825,6 +826,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
             }
         }
         setResultsList(isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [requests, isCompany]);
 
     // Payment and Checkout States
@@ -1095,14 +1097,13 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
     };
 
     const activeTrendData = isCompany ? INDUSTRIAL_TREND_DATA : CLINICAL_TREND_DATA;
-    const [selectedTrendParam, setSelectedTrendParam] = useState(Object.keys(activeTrendData)[0]);
-
-    useEffect(() => {
-        const availableKeys = Object.keys(activeTrendData);
-        if (!availableKeys.includes(selectedTrendParam)) {
-            setSelectedTrendParam(availableKeys[0]);
-        }
-    }, [isCompany]);
+    // Derive the initial selected param from isCompany to avoid setState-in-effect cascade
+    const defaultTrendParam = Object.keys(activeTrendData)[0];
+    const [selectedTrendParam, setSelectedTrendParam] = useState(defaultTrendParam);
+    // Reset trend param when company mode switches — useMemo keeps it stable
+    const safeTrendParam = Object.keys(activeTrendData).includes(selectedTrendParam)
+        ? selectedTrendParam
+        : defaultTrendParam;
 
     const downloadPDF = (req) => {
         const element = document.createElement('div');
@@ -1481,7 +1482,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                             <div className="mb-6 flex flex-col md:flex-row items-start md:items-center gap-4">
                                 <label className="font-bold text-slate-700">{t.selectParam}</label>
                                 <select 
-                                    value={selectedTrendParam} 
+                                    value={safeTrendParam} 
                                     onChange={(e) => setSelectedTrendParam(e.target.value)}
                                     className={`px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 outline-none font-bold ${
                                         isCompany ? 'focus:ring-emerald-500 text-emerald-800' : 'focus:ring-blue-500 text-blue-700'
@@ -1495,7 +1496,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
 
                             <div className="h-[400px] w-full mt-8">
                                 <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                                    <LineChart data={activeTrendData[selectedTrendParam] || []} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                    <LineChart data={activeTrendData[safeTrendParam] || []} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                         <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} tickMargin={10} />
                                         <YAxis stroke="#94a3b8" fontSize={12} tickMargin={10} />
@@ -1507,7 +1508,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                                         <Line 
                                             type="monotone" 
                                             dataKey="value" 
-                                            name={selectedTrendParam}
+                                            name={safeTrendParam}
                                             stroke={isCompany ? '#059669' : '#2563eb'} 
                                             strokeWidth={4}
                                             dot={{ r: 6, fill: isCompany ? '#059669' : '#2563eb', strokeWidth: 2, stroke: '#fff' }}

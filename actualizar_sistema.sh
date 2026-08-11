@@ -1,43 +1,66 @@
 #!/bin/bash
 # =========================================================
-# LIMS-PRO - Auto Actualizador para macOS y Linux
+# LIMS-PRO - Auto Actualizador v2 para macOS y Linux
+# Compatible con: Mac Mini Server, Ubuntu, Debian
 # =========================================================
 
+set -e  # Detener en cualquier error
+
 echo "========================================================="
-echo "   🚀 ACTUALIZANDO LIMS-PRO A LA ÚLTIMA VERSIÓN..."
+echo "   ACTUALIZANDO LIMS-PRO A LA ULTIMA VERSION..."
 echo "========================================================="
 echo ""
+
+# Crear directorio de logs si no existe
+mkdir -p logs
 
 # 1. Sincronizar con el repositorio oficial
-echo "[1/4] Descargando últimas mejoras de GitHub..."
+echo "[1/5] Descargando ultimas mejoras de GitHub..."
 git pull origin main
-if [ $? -ne 0 ]; then
-    echo "❌ Error al descargar del repositorio. Verifica tu conexión."
-    exit 1
-fi
-echo "✅ Código actualizado con éxito."
+echo "OK: Codigo actualizado."
 echo ""
 
-# 2. Instalar dependencias si hay nuevas librerías
-echo "[2/4] Verificando dependencias de Node.js..."
+# 2. Instalar dependencias
+echo "[2/5] Verificando dependencias de Node.js..."
 npm install --prefer-offline --no-audit
-echo "✅ Dependencias verificadas."
+echo "OK: Dependencias verificadas."
 echo ""
 
-# 3. Sincronizar Prisma y Base de Datos local
-echo "[3/4] Sincronizando estructura de base de datos..."
+# 3. Sincronizar Base de Datos con Prisma
+echo "[3/5] Sincronizando estructura de base de datos..."
 if [ -d "api" ]; then
-    cd api && npx prisma db push && cd ..
+    cd api
+    if [ "$NODE_ENV" = "production" ]; then
+        npx prisma migrate deploy 2>/dev/null || npx prisma db push
+    else
+        npx prisma db push
+    fi
+    cd ..
 fi
-echo "✅ Base de datos al día."
+echo "OK: Base de datos al dia."
 echo ""
 
 # 4. Compilar Frontend
-echo "[4/4] Compilando versión de producción..."
+echo "[4/5] Compilando version de produccion..."
 npm run build
-echo "✅ Compilación completada."
+echo "OK: Compilacion completada."
+echo ""
+
+# 5. Reiniciar servicios con PM2
+echo "[5/5] Reiniciando servicios con PM2..."
+if command -v pm2 &> /dev/null; then
+    pm2 reload ecosystem.config.cjs --update-env 2>/dev/null || pm2 start ecosystem.config.cjs
+    pm2 save
+    echo "OK: Servicios PM2 reiniciados."
+else
+    echo "AVISO: PM2 no instalado. Para instalar: npm install -g pm2"
+fi
 echo ""
 
 echo "========================================================="
-echo "   ✨ ¡SISTEMA ACTUALIZADO AL 100% CON ÉXITO! ✨"
+echo "   SISTEMA ACTUALIZADO AL 100% CON EXITO!"
 echo "========================================================="
+echo ""
+echo "App Cloud:  https://lims-microlabs.web.app"
+echo "API Local:  http://localhost:3001/health"
+echo ""

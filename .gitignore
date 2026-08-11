@@ -41,3 +41,6 @@ api/prisma/dev.db-wal
 .firebase/
 cloudflared.exe
 
+
+logs/*.log
+

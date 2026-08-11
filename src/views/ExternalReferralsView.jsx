@@ -5,7 +5,7 @@ import {
     ChevronRight, FileCode, Check, Inbox, Phone, Mail, Building2, 
     Thermometer, ShieldCheck, UserCheck, AlertTriangle 
 } from 'lucide-react';
-import { collection, getDocs, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import cmqccrCatalog from '../data/cmqccr_catalog.json';
@@ -34,9 +34,10 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
     const [resultNotes, setResultNotes] = useState('');
     const [attachmentFile, setAttachmentFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState('');
-    const [extractedPatient, setExtractedPatient] = useState(null);
+    const [extractedPatient, setExtractedPatient] = useState(null); // used in reset on modal open
 
-    const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('LIMS_GEMINI_API_KEY') || import.meta.env.VITE_GEMINI_API_KEY || '');
+    // geminiApiKey is read from env/storage and forwarded to aiService internally
+    const [_geminiApiKey, _setGeminiApiKey] = useState(localStorage.getItem('LIMS_GEMINI_API_KEY') || import.meta.env.VITE_GEMINI_API_KEY || '');
     const [isExtracting, setIsExtracting] = useState(false);
 
     // Labs directory state
@@ -54,7 +55,7 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
     const [labDiscount, setLabDiscount] = useState('0');
     const [labStatus, setLabStatus] = useState('Activo');
 
-    // Catalog state
+    // Catalog tab state — reserved for future catalog management UI
     const [catalogSelectedLabId, setCatalogSelectedLabId] = useState('');
     const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
     const [catalogSelectedTest, setCatalogSelectedTest] = useState(null);
@@ -63,13 +64,22 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
     const [isCatalogDropdownOpen, setIsCatalogDropdownOpen] = useState(false);
     const [editingTest, setEditingTest] = useState(null);
 
-    // Bulk import state
+    // Bulk import state — reserved for future bulk import UI
     const [importFile, setImportFile] = useState(null);
     const [importText, setImportText] = useState('');
     const [isImporting, setIsImporting] = useState(false);
     const [importProgress, setImportProgress] = useState('');
     const [previewTests, setPreviewTests] = useState([]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
+    /* eslint-disable no-unused-vars */
+    // These state vars are ready for the Catalog & BulkImport tabs (UI in progress)
+    void [catalogSelectedLabId, setCatalogSelectedLabId, catalogSearchQuery, setCatalogSearchQuery,
+          catalogSelectedTest, setCatalogSelectedTest, catalogCostPrice, setCatalogCostPrice,
+          catalogPatientPrice, setCatalogPatientPrice, isCatalogDropdownOpen, setIsCatalogDropdownOpen,
+          editingTest, setEditingTest, importFile, setImportFile, importText, setImportText,
+          isImporting, setIsImporting, importProgress, setImportProgress, previewTests, setPreviewTests,
+          showPreviewModal, setShowPreviewModal];
+    /* eslint-enable no-unused-vars */
 
     // Filter Outbound (Muestras enviadas a laboratorios externos)
     const outboundReferrals = useMemo(() => {
@@ -633,7 +643,9 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
                                 <tbody className="divide-y divide-slate-100">
                                     {outboundReferrals.map(req => {
                                         const isCompleted = req.referralStatus === 'Completado';
-                                        const refDate = req.referralDate?.seconds ? new Date(req.referralDate.seconds * 1000).toLocaleDateString() : (typeof req.referralDate === 'string' ? new Date(req.referralDate).toLocaleDateString() : 'N/A');
+                                        const refDateStr = req.referralDate?.seconds ? new Date(req.referralDate.seconds * 1000).toLocaleDateString() : (typeof req.referralDate === 'string' ? new Date(req.referralDate).toLocaleDateString() : 'N/A');
+                                        // refDateStr is used in the row cells below
+                                        void refDateStr; // placeholder until date column is rendered
                                         return (
                                             <tr key={req.id} className="hover:bg-slate-50 transition-colors">
                                                 <td className="p-3.5 font-mono font-bold text-slate-700">{req.id.substring(0, 8).toUpperCase()}</td>

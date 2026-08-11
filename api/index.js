@@ -94,6 +94,20 @@ app.use(express.json({ limit: '10kb' }));
 // Middleware para auditoría automática
 app.use('/api/', auditLogger);
 
+// =============================================================================
+// HEALTH CHECK (used by system watchdog in frontend)
+// =============================================================================
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'LIMS API',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    nodeVersion: process.version,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Registrar todas las rutas modularizadas
 app.use('/api', apiRouter);
 
@@ -111,6 +125,20 @@ app.use((req, res) => {
 
 // Arranque del servidor
 app.listen(PORT, () => {
-  console.log(`API Server running on port ${PORT}`);
+  console.log(`🚀 API Server running on port ${PORT}`);
   initAutomaticBackupScheduler();
+});
+
+// =============================================================================
+// GLOBAL ERROR HANDLERS (prevent server crash on unhandled errors)
+// =============================================================================
+process.on('uncaughtException', (error) => {
+  console.error('💥 [UNCAUGHT EXCEPTION] El servidor encontró un error no manejado:', error.message);
+  console.error(error.stack);
+  // Log but do NOT exit — PM2 will restart if needed
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 [UNHANDLED REJECTION] Promesa rechazada sin manejar:', promise, 'Razón:', reason);
+  // Log but do NOT exit
 });
