@@ -244,14 +244,21 @@ export const ResultsReviewView = ({ db, user, requests, analyses, labInfo, navig
                     </h2>
                     <p className="text-slate-500 text-sm mt-1">Avance sus muestras a través del flujo ISO/IEC 17025 (Preparación {'>'} Lectura {'>'} Aprobación).</p>
                 </div>
-                <div className="flex gap-3 items-center">
+                <div className="flex flex-wrap gap-2.5 items-center">
+                    <button 
+                        onClick={handleSelectAll} 
+                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs"
+                        title="Selecciona automáticamente todas las muestras con parámetros 100% dentro de límites normales"
+                    >
+                        <CheckSquare size={16} /> Auto-Aprobar Normales
+                    </button>
                     {selectedIds.length > 0 && (
-                        <button onClick={handleBatchRelease} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-md animate-slide-in-right">
-                            <CheckSquare size={18} /> Liberar Lote ({selectedIds.length})
+                        <button onClick={handleBatchRelease} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2 transition-all shadow-md animate-slide-in-right">
+                            <CheckCircle2 size={16} /> Liberar Lote ({selectedIds.length})
                         </button>
                     )}
-                    <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl font-bold flex items-center gap-2 border border-amber-200 shadow-sm shrink-0">
-                        <Clock size={18} /> {pendingRequests.length} Pendientes
+                    <div className="bg-amber-100 text-amber-800 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 border border-amber-200 shadow-sm shrink-0">
+                        <Clock size={16} /> {pendingRequests.length} Pendientes
                     </div>
                 </div>
             </div>

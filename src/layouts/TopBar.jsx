@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Users, FlaskConical, Settings, Play, Sparkles } from 'lucide-react';
+import { Bell, Users, FlaskConical, Settings, Play, Sparkles, Activity, ShieldCheck } from 'lucide-react';
 import { Logo } from '../components/UI';
+import { systemWatchdog } from '../utils/systemWatchdog';
 
 export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
     const [showNotifications, setShowNotifications] = useState(false);
     const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    const [watchdogStatus, setWatchdogStatus] = useState({ api: 'ONLINE', analyzers: 'STANDBY' });
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -14,9 +16,13 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
+        systemWatchdog.startAutoCheck();
+        const unsubscribe = systemWatchdog.subscribe((s) => setWatchdogStatus(s));
+
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
+            unsubscribe();
         };
     }, []);
 
