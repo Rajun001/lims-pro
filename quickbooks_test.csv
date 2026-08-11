@@ -1,0 +1,7 @@
+Customer,Company,Email,Phone,Identificacion,Tipo Cedula,Actividad Economica,Billing Street
+Alajuela Clinica S.A.,Alajuela Clinica S.A.,alajuela@clinica.com,2440-1234,3101123456,Cédula Jurídica,851901,Alajuela
+Juan Perez Perez,,juan@perez.com,8888-8888,111111111,Cédula Física,851902,San Jose
+Jean Paul DIMEX,,jean@dimex.com,7777-7777,123456789012,DIMEX,851903,Heredia
+Auto Detect Corp S.A.,Auto Detect Corp,autodetect@corp.com,5555-5555,3101999999,,851904,Cartago
+Auto Detect DIMEX,,autodetect@dimex.com,6666-6666,12345678901,,851905,Guanacaste
+Auto Detect Fisica,,autodetect@fisica.com,4444-4444,987654321,,851906,Puntarenas

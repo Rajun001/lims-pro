@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { CheckCircle2, AlertCircle, FlaskConical, Beaker, Clock, AlertOctagon, CheckSquare } from 'lucide-react';
-import { doc, updateDoc, writeBatch, collection, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, writeBatch } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import NotificationService from '../services/NotificationService';
+import { deductInventoryForRequest } from '../utils/inventoryDeduction';
 
 const validStatuses = ['En Proceso', 'Pendiente Lectura', 'Pendiente Revisión', 'Pendiente Aprobación'];
 
-export const ResultsReviewView = ({ db, requests, analyses, navigateTo }) => {
+export const ResultsReviewView = ({ db, user, requests, analyses, labInfo, navigateTo }) => {
     const [selectedIds, setSelectedIds] = useState([]);
 
 
@@ -53,38 +54,80 @@ export const ResultsReviewView = ({ db, requests, analyses, navigateTo }) => {
     };
 
     const handleBatchRelease = async () => {
-        if (!db || selectedIds.length === 0) return;
+        if (selectedIds.length === 0) return;
         if (!window.confirm(`¿Desea validar y liberar el lote de ${selectedIds.length} muestras seleccionadas?`)) return;
 
+        const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldán Ajún Chaverri';
+        const signerCode = labInfo?.directorCode || '802';
+        const validationTimestamp = new Date().toISOString();
+
         try {
-            // Chunking para evitar el límite de 500 operaciones de Firestore
-            const CHUNK_SIZE = 450;
-            for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
-                const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
-                const batch = writeBatch(db);
-                
-                chunk.forEach(id => {
-                    const req = pendingRequests.find(r => r.id === id);
-                    if (req) {
-                        const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, id);
-                        const updatedResults = req.analyzerResults?.map(r => ({ ...r, status: 'released' })) || [];
-                        batch.update(reqRef, {
-                            analyzerResults: updatedResults,
-                            status: 'Completado'
-                        });
+            if (user?.uid === 'offline-user') {
+                const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                selectedIds.forEach(id => {
+                    const idx = localReqs.findIndex(r => r.id === id);
+                    if (idx > -1) {
+                        const updatedResults = localReqs[idx].analyzerResults?.map(r => ({ ...r, status: 'released' })) || [];
+                        localReqs[idx].status = 'Completado';
+                        localReqs[idx].analyzerResults = updatedResults;
+                        localReqs[idx].signedByName = signerName;
+                        localReqs[idx].signedByCode = signerCode;
+                        localReqs[idx].validatedAt = validationTimestamp;
+                        localReqs[idx].validationDate = validationTimestamp;
+                        localReqs[idx].isVerified = true;
                     }
                 });
-                await batch.commit();
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                setSelectedIds([]);
+                alert(`Lote de ${selectedIds.length} muestras liberado y firmado digitalmente.`);
+            } else {
+                if (!db) return;
+                // Chunking para evitar el límite de 500 operaciones de Firestore
+                const CHUNK_SIZE = 450;
+                for (let i = 0; i < selectedIds.length; i += CHUNK_SIZE) {
+                    const chunk = selectedIds.slice(i, i + CHUNK_SIZE);
+                    const batch = writeBatch(db);
+                    
+                    chunk.forEach(id => {
+                        const req = pendingRequests.find(r => r.id === id);
+                        if (req) {
+                            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, id);
+                            const updatedResults = req.analyzerResults?.map(r => ({ ...r, status: 'released' })) || [];
+                            batch.update(reqRef, {
+                                analyzerResults: updatedResults,
+                                status: 'Completado',
+                                signedByName: signerName,
+                                signedByCode: signerCode,
+                                validatedAt: validationTimestamp,
+                                validationDate: validationTimestamp,
+                                isVerified: true
+                            });
+                        }
+                    });
+                    await batch.commit();
+                }
+
+                // Descuento automático de inventario para cada solicitud del lote
+                for (const id of selectedIds) {
+                    const req = pendingRequests.find(r => r.id === id);
+                    if (req) {
+                        await deductInventoryForRequest(db, req, user);
+                    }
+                }
+
+                setSelectedIds([]);
+                alert(`Lote de ${selectedIds.length} muestras liberado y firmado digitalmente.`);
             }
-            setSelectedIds([]);
         } catch (e) {
             console.error(e);
-            alert("Error al liberar resultados en lote.");
+            alert("Error al liberar resultados en lote: " + e.message);
         }
     };
 
     const advanceWorkflowStep = async (request) => {
-        if (!db) return;
+        const isOffline = user?.uid === 'offline-user';
+        if (!db && !isOffline) return;
         
         let nextStatus = 'Completado';
         let actionMessage = 'aprobado';
@@ -111,45 +154,77 @@ export const ResultsReviewView = ({ db, requests, analyses, navigateTo }) => {
         }
 
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
+            const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldán Ajún Chaverri';
+            const signerCode = labInfo?.directorCode || '802';
+            const validationTimestamp = new Date().toISOString();
+
             const updatePayload = { status: nextStatus };
-            
-            if (nextStatus === 'Completado' && request.analyzerResults) {
-                updatePayload.analyzerResults = request.analyzerResults.map(r => ({ ...r, status: 'released' }));
-                
-                // Integración ERP: Descontar de inventario automáticamente si existe un reactivo asociado
-                try {
-                    const invSnapshot = await getDocs(collection(db, `artifacts/${LIMSSystemId}/public/data/inventory`));
-                    invSnapshot.forEach(async (invDoc) => {
-                        const invData = invDoc.data();
-                        // Deduct if the inventory name is mentioned in the analysis Requested or tests
-                        if (invData.name && request.analysisRequested && request.analysisRequested.toLowerCase().includes(invData.name.toLowerCase().replace('reactivo', '').trim())) {
-                            if (invData.quantity && invData.quantity > 0) {
-                                await updateDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/inventory`, invDoc.id), {
-                                    quantity: invData.quantity - 1
-                                });
-                                console.log(`Consumo automático ERP: Descontado 1 unidad de ${invData.name}`);
-                            }
-                        }
-                    });
-                } catch (erpError) {
-                    console.error("Error en módulo ERP:", erpError);
+            if (nextStatus === 'Completado') {
+                if (request.analyzerResults) {
+                    updatePayload.analyzerResults = request.analyzerResults.map(r => ({ ...r, status: 'released' }));
                 }
+                updatePayload.signedByName = signerName;
+                updatePayload.signedByCode = signerCode;
+                updatePayload.validatedAt = validationTimestamp;
+                updatePayload.validationDate = validationTimestamp;
+                updatePayload.isVerified = true;
             }
 
-            await updateDoc(reqRef, updatePayload);
-            setSelectedIds(selectedIds.filter(id => id !== request.id));
-            
-            // Disparador de Notificación Externa si se ha completado
-            if (nextStatus === 'Completado') {
-                await NotificationService.notifyClientResultsReady(request, alert);
+            if (isOffline) {
+                const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                const idx = localReqs.findIndex(r => r.id === request.id);
+                if (idx > -1) {
+                    localReqs[idx] = { ...localReqs[idx], ...updatePayload };
+                }
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+
+                // ERP Inventory deduction offline
+                if (nextStatus === 'Completado') {
+                    try {
+                        const localInv = JSON.parse(localStorage.getItem('lims_local_inventory') || '[]');
+                        let inventoryUpdated = false;
+                        localInv.forEach(item => {
+                            if (item.name && request.analysisRequested && request.analysisRequested.toLowerCase().includes(item.name.toLowerCase().replace('reactivo', '').trim())) {
+                                if (item.quantity && item.quantity > 0) {
+                                    item.quantity = item.quantity - 1;
+                                    inventoryUpdated = true;
+                                    console.log(`Consumo automático ERP (Offline): Descontado 1 unidad de ${item.name}`);
+                                }
+                            }
+                        });
+                        if (inventoryUpdated) {
+                            localStorage.setItem('lims_local_inventory', JSON.stringify(localInv));
+                        }
+                    } catch (erpError) {
+                        console.error("Error en módulo ERP offline:", erpError);
+                    }
+                }
+
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                setSelectedIds(selectedIds.filter(id => id !== request.id));
+                
+                if (nextStatus === 'Completado') {
+                    await NotificationService.notifyClientResultsReady(request, alert);
+                } else {
+                    alert(`Flujo actualizado: Muestra ${actionMessage}.`);
+                }
             } else {
-                alert(`Flujo actualizado: Muestra ${actionMessage}.`);
+                const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
+                await updateDoc(reqRef, updatePayload);
+
+                if (nextStatus === 'Completado') {
+                    // Descuento automático de inventario
+                    await deductInventoryForRequest(db, request, user);
+                    await NotificationService.notifyClientResultsReady(request, alert);
+                } else {
+                    alert(`Flujo actualizado: Muestra ${actionMessage}.`);
+                }
+
+                setSelectedIds(selectedIds.filter(id => id !== request.id));
             }
-            
-        } catch (e) {
-            console.error(e);
-            alert("Error al avanzar el flujo de trabajo.");
+        } catch (error) {
+            console.error("Error al avanzar etapa:", error);
+            alert("Ocurrió un error al actualizar la solicitud.");
         }
     };
 
@@ -251,7 +326,7 @@ export const ResultsReviewView = ({ db, requests, analyses, navigateTo }) => {
                                                 return (
                                                 <tr key={i} className={boundError ? 'bg-red-50/50' : ''}>
                                                     <td className="py-2 font-medium text-slate-700">
-                                                        {res.testCode}
+                                                        {analyses?.find(a => a.code === res.testCode)?.name || res.testCode}
                                                         {boundError && <p className="text-[10px] text-red-600 font-bold uppercase">{boundError}</p>}
                                                     </td>
                                                     <td className={`py-2 font-black text-base ${boundError ? 'text-red-600' : 'text-blue-700'}`}>

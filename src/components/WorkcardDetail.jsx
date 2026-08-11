@@ -3,6 +3,8 @@ import { X, Save, User, FlaskConical, Calendar, Stethoscope } from 'lucide-react
 import { ASTMatrix } from './ASTMatrix';
 import { FormInput, StatusBadge } from './UI';
 
+import { formatToCRDate } from '../utils/dateFormatter.js';
+
 export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
     // Parse media state safely
     const initialMedia = request?.media ? (typeof request.media === 'string' ? JSON.parse(request.media) : request.media) : {
@@ -98,7 +100,7 @@ export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
                             <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Calendar size={20} /></div>
                             <div>
                                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Fecha Recepción</p>
-                                <p className="font-semibold text-slate-800">{request.date ? new Date(request.date).toLocaleDateString() : 'N/A'}</p>
+                                <p className="font-semibold text-slate-800">{request.date ? formatToCRDate(request.date) : 'N/A'}</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-3">

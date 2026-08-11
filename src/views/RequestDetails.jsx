@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, FileText, ShieldCheck, Check, Package, Microscope, Activity, CheckCircle2, FlaskConical, Trash2, Edit, Users, User, MapPin, Lock } from 'lucide-react';
+import { ArrowLeft, FileText, ShieldCheck, Check, Package, Microscope, Activity, CheckCircle2, FlaskConical, Trash2, Edit, Users, User, MapPin, Lock, Share2 } from 'lucide-react';
 import { StatusBadge } from '../components/UI';
 import { ASTMatrix } from '../components/ASTMatrix';
 import { UFCCalculator } from '../components/UFCCalculator';
@@ -7,22 +7,63 @@ import { AirSamplerCalculator } from '../components/AirSamplerCalculator';
 import { CAMTUCalculator } from '../components/CAMTUCalculator';
 import { NMPCalculator } from '../components/NMPCalculator';
 import { BarcodePrinter } from '../components/BarcodePrinter';
+import { ShareReportModal } from '../components/ShareReportModal';
+import { SampleTraceabilityRoute } from '../components/SampleTraceabilityRoute';
+import { evaluateCriticalPanicValue, calculateDeltaCheck } from '../utils/criticalAlerts';
+import { deductInventoryForRequest } from '../utils/inventoryDeduction';
 import { doc, updateDoc, deleteDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { generateAnalysisCode } from '../utils/generators';
 import { useNotification } from '../contexts/NotificationContext';
+import { runClinicalCalculations } from '../utils/clinicalCalcs';
+import cmqccrCatalog from '../data/cmqccr_catalog.json';
 
-export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, user }) => {
+export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, user, labInfo }) => {
     const [activeTab, setActiveTab] = useState('custody');
     const [auditLogs, setAuditLogs] = useState([]);
+    const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const { addNotification } = useNotification();
+
+    const updateRequestOfflineOrOnline = async (payload, auditAction = null, auditDetails = null) => {
+        try {
+            if (user?.uid === 'offline-user') {
+                const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                const idx = localReqs.findIndex(r => r.id === request.id);
+                if (idx > -1) {
+                    localReqs[idx] = { ...localReqs[idx], ...payload };
+                }
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                if (auditAction) {
+                    await logAuditAction(db, user?.uid, auditAction, auditDetails, request.id);
+                }
+            } else {
+                const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
+                await updateDoc(reqRef, payload);
+                if (auditAction) {
+                    await logAuditAction(db, user?.uid, auditAction, auditDetails, request.id);
+                }
+            }
+        } catch (err) {
+            console.error("Error updating request:", err);
+            throw err;
+        }
+    };
     
     const handleDeleteRequest = async () => {
         if (window.confirm(`¿Está seguro de eliminar esta Orden de Laboratorio (${request.id.substring(0, 8).toUpperCase()})? Se perderán todos los resultados y el historial asociado a esta muestra. Esta acción es irreversible.`)) {
             try {
-                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id));
-                await logAuditAction(db, user?.uid, 'ELIMINAR_ORDEN', `Orden eliminada desde detalles: ${request.id}`, request.id);
+                if (user?.uid === 'offline-user') {
+                    const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                    const filtered = localReqs.filter(r => r.id !== request.id);
+                    localStorage.setItem('lims_local_requests', JSON.stringify(filtered));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_ORDEN', `Orden eliminada desde detalles: ${request.id}`, request.id);
+                } else {
+                    await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id));
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_ORDEN', `Orden eliminada desde detalles: ${request.id}`, request.id);
+                }
                 if (addNotification) addNotification("Orden eliminada exitosamente.", "success");
                 navigateTo('dashboard');
             } catch (error) {
@@ -33,8 +74,23 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
     
     // IA States
-    const [interpretationText, setInterpretationText] = useState(request?.clinicalInterpretation || '');
+    const isIndustrial = request?.clientType?.toLowerCase().includes('industria') || 
+                         request?.sampleType?.toLowerCase().includes('alimento') || 
+                         request?.sampleType?.toLowerCase().includes('superficie') || 
+                         request?.sampleType?.toLowerCase().includes('agua') || 
+                         request?.sampleType?.toLowerCase().includes('hielo') || 
+                         request?.sampleType?.toLowerCase().includes('aire') || 
+                         request?.analysisRequested?.toLowerCase().includes('camtu') || 
+                         request?.analysisRequested?.toLowerCase().includes('nmp') || 
+                         !!request?.foodUFCResult;
+
+    const defaultClinicalEs = "Los resultados presentados están dentro de los límites de detección del método utilizado. Correlacionar con la clínica del paciente.";
+    const defaultIndustrialEs = "Los resultados presentados están dentro de los límites de detección del método utilizado.";
+    const defaultInterpretation = isIndustrial ? defaultIndustrialEs : defaultClinicalEs;
+
+    const [interpretationText, setInterpretationText] = useState(request?.clinicalInterpretation || defaultInterpretation);
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [selectedMicrobiologist, setSelectedMicrobiologist] = useState('director');
 
     // Manual Results Entry States
     const [showManualForm, setShowManualForm] = useState(false);
@@ -64,31 +120,61 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     const [receiverPin, setReceiverPin] = useState('');
     const [isSavingTransfer, setIsSavingTransfer] = useState(false);
 
+    // Filter available analyses strictly by request domain (Clinical vs Industrial/Food/Water)
+    const combinedAnalyses = useMemo(() => {
+        if (isIndustrial) {
+            // Only industrial/food & water analyses
+            return (availableAnalyses || []).filter(a => 
+                (a.category && a.category.includes('Microbiología (Alimentos')) || 
+                (a.category && a.category.includes('Físico-Químico')) || 
+                !a.isClinical
+            );
+        } else {
+            // Clinical catalog
+            const clinicalFromCmq = cmqccrCatalog.map(item => ({
+                id: `cmq-${item.code}`,
+                code: item.code,
+                name: item.name,
+                category: item.category || 'Química Clínica',
+                isClinical: true,
+                minRange: item.minRange || '',
+                maxRange: item.maxRange || '',
+                unit: item.unit || ''
+            }));
+            const existing = (availableAnalyses || []).filter(a => a.isClinical || a.category !== 'Microbiología (Alimentos y Aguas)');
+            const merged = [...existing];
+            clinicalFromCmq.forEach(c => {
+                if (!merged.some(m => m.code === c.code)) merged.push(c);
+            });
+            return merged;
+        }
+    }, [availableAnalyses, isIndustrial]);
+
     // Filter available analyses by query
     const filteredAnalyses = useMemo(() => {
-        if (!availableAnalyses) return [];
+        if (!combinedAnalyses) return [];
         const query = searchParamQuery.toLowerCase();
-        return availableAnalyses.filter(ana => 
+        return combinedAnalyses.filter(ana => 
             (ana.name || '').toLowerCase().includes(query) || 
             (ana.code || '').toLowerCase().includes(query)
         );
-    }, [availableAnalyses, searchParamQuery]);
+    }, [combinedAnalyses, searchParamQuery]);
 
     // Filter available analyses by edit search query
     const filteredEditAnalyses = useMemo(() => {
-        if (!availableAnalyses) return [];
+        if (!combinedAnalyses) return [];
         const query = editSearchQuery.toLowerCase();
-        return availableAnalyses.filter(ana => 
+        return combinedAnalyses.filter(ana => 
             (ana.name || '').toLowerCase().includes(query) || 
             (ana.code || '').toLowerCase().includes(query)
         );
-    }, [availableAnalyses, editSearchQuery]);
+    }, [combinedAnalyses, editSearchQuery]);
 
     // Find selected analysis for ranges preview
     const selectedAnalysis = useMemo(() => {
         if (!manualTestCode || manualTestCode === 'CUSTOM') return null;
-        return availableAnalyses?.find(a => a.code === manualTestCode);
-    }, [manualTestCode, availableAnalyses]);
+        return combinedAnalyses?.find(a => a.code === manualTestCode);
+    }, [manualTestCode, combinedAnalyses]);
 
     const handleSaveEditedAnalysis = async () => {
         if (!db || !request?.id) return;
@@ -105,13 +191,10 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                 ? generateAnalysisCode(finalAnalysisName)
                 : editSelectedCode;
 
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 analysisRequested: finalAnalysisName,
                 analysisCode: finalAnalysisCode
-            });
-
-            await logAuditAction(db, user?.uid, 'MODIFICAR_ANALISIS', `Modificó el análisis solicitado a: ${finalAnalysisName} (${finalAnalysisCode})`, request.id);
+            }, 'MODIFICAR_ANALISIS', `Modificó el análisis solicitado a: ${finalAnalysisName} (${finalAnalysisCode})`);
 
             setIsEditingAnalysis(false);
             setEditSearchQuery('');
@@ -128,7 +211,7 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
     const handleSaveManualResult = async (e) => {
         e.preventDefault();
-        if (!db || !request?.id) return;
+        if (!request?.id) return;
 
         const finalCode = manualTestCode === 'CUSTOM' ? customTestCode : manualTestCode;
         if (!finalCode) {
@@ -138,7 +221,6 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
         setIsSavingManual(true);
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
             const currentResults = request.analyzerResults || [];
             
             const existsIdx = currentResults.findIndex(r => r.testCode === finalCode);
@@ -158,22 +240,23 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                 updatedResults.push(newResItem);
             }
 
+            // Run automated clinical calculations
+            updatedResults = runClinicalCalculations(updatedResults);
+
+
             let newStatus = request.status;
             if (request.status !== 'Completado') {
                 newStatus = updatedResults.some(r => r.value && r.value.trim() !== '') ? 'Pendiente Revisión' : 'En Proceso';
             }
 
-            await updateDoc(reqRef, {
-                analyzerResults: updatedResults,
-                status: newStatus
-            });
-
-            // Log audit action
             const actionText = isPendingResult 
                 ? `Registró parámetro de examen pendiente: ${finalCode} (pendiente)` 
                 : `Registró resultado manual para ${finalCode}: ${manualValue.trim()}`;
-            
-            await logAuditAction(db, user?.uid, 'REGISTRAR_RESULTADO', actionText, request.id);
+
+            await updateRequestOfflineOrOnline({
+                analyzerResults: updatedResults,
+                status: newStatus
+            }, 'REGISTRAR_RESULTADO', actionText);
 
             // Clean up
             setManualValue('');
@@ -190,25 +273,26 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
 
     const handleDeleteResult = async (testCodeToDelete) => {
-        if (!db || !request?.id) return;
+        if (!request?.id) return;
         if (!confirm(`¿Está seguro de eliminar el resultado para la prueba ${testCodeToDelete}?`)) return;
 
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
             const currentResults = request.analyzerResults || [];
-            const updatedResults = currentResults.filter(r => r.testCode !== testCodeToDelete);
+            let updatedResults = currentResults.filter(r => r.testCode !== testCodeToDelete);
+
+            // Run automated clinical calculations to recalculate or clear derived parameters
+            updatedResults = runClinicalCalculations(updatedResults);
+
 
             let newStatus = request.status;
             if (request.status !== 'Completado') {
                 newStatus = updatedResults.length === 0 ? 'Pendiente' : (updatedResults.some(r => r.value && r.value.trim() !== '') ? 'Pendiente Revisión' : 'En Proceso');
             }
 
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 analyzerResults: updatedResults,
                 status: newStatus
-            });
-
-            await logAuditAction(db, user?.uid, 'ELIMINAR_RESULTADO', `Eliminó el resultado/parámetro para la prueba: ${testCodeToDelete}`, request.id);
+            }, 'ELIMINAR_RESULTADO', `Eliminó el resultado/parámetro para la prueba: ${testCodeToDelete}`);
         } catch (error) {
             console.error("Error deleting result:", error);
             alert("Error al eliminar el resultado.");
@@ -238,7 +322,22 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
 
     useEffect(() => {
-        if (!db || !request?.id) return;
+        if (!request?.id) return;
+
+        if (user?.uid === 'offline-user') {
+            const loadLocalAudit = () => {
+                const localLogs = JSON.parse(localStorage.getItem('lims_local_audit_logs') || '[]');
+                const filtered = localLogs.filter(log => log.relatedId === request.id);
+                // Sort by timestamp ascending
+                filtered.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                setAuditLogs(filtered);
+            };
+            loadLocalAudit();
+            window.addEventListener('lims_local_data_updated', loadLocalAudit);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalAudit);
+        }
+
+        if (!db) return;
         const q = query(collection(db, `artifacts/${LIMSSystemId}/public/data/audit_logs`), where('relatedId', '==', request.id));
         const unsub = onSnapshot(q, (snap) => {
             const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -246,21 +345,18 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
             setAuditLogs(logs);
         });
         return () => unsub();
-    }, [db, request?.id]);
+    }, [db, request?.id, user]);
 
     if (!request) return null;
 
-    const reqDate = request.requestDate?.seconds ? new Date(request.requestDate.seconds * 1000) : new Date();
+    const reqDate = request.requestDate?.seconds ? new Date(request.requestDate.seconds * 1000) : (request.requestDate instanceof Date ? request.requestDate : new Date());
 
     const handleSaveAST = async (astData) => {
-        if (!db || !request?.id) return;
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 microbiologyAST: astData,
                 status: 'Pendiente Revisión'
-            });
-            await logAuditAction(db, user?.uid, 'REGISTRAR_RESULTADO', `Antibiograma registrado para patógeno: ${astData.pathogen}`, request.id);
+            }, 'REGISTRAR_RESULTADO', `Antibiograma registrado para patógeno: ${astData.pathogen}`);
             alert("Antibiograma guardado exitosamente.");
         } catch (error) {
             console.error("Error saving AST:", error);
@@ -278,14 +374,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     const isFoodOrIndustrial = !isCAMTU && !isNMP && (request.clientType?.toLowerCase().includes('industria') || request.sampleType?.toLowerCase().includes('alimento') || request.sampleType?.toLowerCase().includes('superficie'));
 
     const handleSaveUFC = async (ufcData) => {
-        if (!db || !request?.id) return;
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 foodUFCResult: ufcData,
                 status: 'Pendiente Revisión'
-            });
-            await logAuditAction(db, user?.uid, 'REGISTRAR_RESULTADO', `Cálculo UFC registrado: ${ufcData.resultUFC} UFC/g/mL`, request.id);
+            }, 'REGISTRAR_RESULTADO', `Cálculo UFC registrado: ${ufcData.resultUFC} UFC/g/mL`);
             alert("Recuento UFC guardado exitosamente.");
         } catch (error) {
             console.error("Error saving UFC:", error);
@@ -294,14 +387,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
 
     const handleSaveCAMTU = async (camtuData) => {
-        if (!db || !request?.id) return;
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 camtuResult: camtuData,
                 status: 'Pendiente Revisión'
-            });
-            await logAuditAction(db, user?.uid, 'REGISTRAR_RESULTADO', `Análisis CAMTU registrado: ${camtuData.resultUFC} UFC/m3`, request.id);
+            }, 'REGISTRAR_RESULTADO', `Análisis CAMTU registrado: ${camtuData.resultUFC} UFC/m3`);
             alert("Reporte CAMTU guardado exitosamente.");
         } catch (error) {
             console.error("Error saving CAMTU:", error);
@@ -310,14 +400,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
 
     const handleSaveNMP = async (nmpData) => {
-        if (!db || !request?.id) return;
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 nmpResult: nmpData,
                 status: 'Pendiente Revisión'
-            });
-            await logAuditAction(db, user?.uid, 'REGISTRAR_RESULTADO', `Análisis NMP registrado: ${nmpData.resultNMP} NMP/100mL`, request.id);
+            }, 'REGISTRAR_RESULTADO', `Análisis NMP registrado: ${nmpData.resultNMP} NMP/100mL`);
             alert("Análisis NMP guardado exitosamente.");
         } catch (error) {
             console.error("Error saving NMP:", error);
@@ -325,19 +412,65 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
         }
     };
 
-    const handleReleaseResults = async () => {
-        if (!db) return;
+    const handleReleaseResults = async (microType = 'director') => {
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
             const updatedResults = request.analyzerResults?.map(r => ({...r, status: 'released'})) || [];
-            await updateDoc(reqRef, {
+            const name = microType === 'director' 
+                ? (labInfo?.directorName || 'Dr. Roldán Ajún Chaverri')
+                : (labInfo?.professional2Name || 'Dr. José Guillermo Ajún Jiménez');
+            const code = microType === 'director'
+                ? (labInfo?.directorCode || '802')
+                : (labInfo?.professional2Code || 'Reg. Trámite');
+
+            const isAlreadyCompleted = request.status === 'Completado';
+            let newVersion = request.reportVersion || 1;
+            let amendments = request.amendmentHistory || [];
+            let amendmentNote = request.amendmentNote || '';
+
+            if (isAlreadyCompleted) {
+                const reason = window.prompt("Esta orden ya fue liberada previamente.\n\nIndique el motivo de la ENMIENDA / CORRECCIÓN DEL INFORME (ISO 15189):", "Corrección de parámetro por verificación analítica");
+                if (reason === null) return; // Cancelado por el usuario
+                newVersion += 1;
+                amendments.push({
+                    version: newVersion,
+                    timestamp: new Date().toISOString(),
+                    reason: reason || 'Enmienda de resultados',
+                    authorizedBy: name,
+                    code: code
+                });
+                amendmentNote = reason || 'Informe enmendado';
+            }
+
+            const payload = {
                 analyzerResults: updatedResults,
-                status: 'Completado'
-            });
-            alert("Resultados liberados exitosamente.");
+                status: 'Completado',
+                signedByName: name,
+                signedByCode: code,
+                validatedAt: new Date().toISOString(),
+                reportVersion: newVersion,
+                isAmended: isAlreadyCompleted,
+                amendmentHistory: amendments,
+                amendmentNote: amendmentNote
+            };
+
+            await updateRequestOfflineOrOnline(
+                payload, 
+                isAlreadyCompleted ? 'ENMIENDA_INFORME' : 'LIBERAR_RESULTADOS', 
+                `Resultados ${isAlreadyCompleted ? `enmendados a v${newVersion}` : 'liberados y firmados'} por: ${name} (${code})`
+            );
+
+            // Descuento automático de inventario
+            const invResult = await deductInventoryForRequest(db, request, user);
+            if (invResult.success && invResult.deductedItems?.length > 0) {
+                console.log(`📦 Inventario actualizado: se descontaron ${invResult.deductedItems.length} reactivo(s).`);
+            }
+            
+            alert(isAlreadyCompleted 
+                ? `Informe enmendado exitosamente (Versión ${newVersion}). Quedó registrado el motivo de corrección.`
+                : "Resultados firmados y liberados exitosamente.");
         } catch(e) {
             console.error(e);
-            alert("Error al liberar resultados.");
+            alert("Error al liberar resultados: " + e.message);
         }
     };
 
@@ -367,10 +500,18 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
             });
 
             let text = "";
-            if (alerts.length === 0) {
-                text = "Basado en la evaluación de los resultados numéricos actuales y considerando los rangos de referencia metodológicos, no se observan alteraciones biológicas significativas. Los parámetros se encuentran dentro de la normalidad clínica esperada. Se sugiere continuar con los controles habituales.";
+            if (isIndustrial) {
+                if (alerts.length === 0) {
+                    text = "Basado en el análisis de las muestras y considerando los límites microbiológicos establecidos, no se detecta presencia de microorganismos patógenos ni recuentos fuera del rango de aceptación. Los parámetros analizados cumplen con los criterios de inocuidad establecidos en la normativa vigente.";
+                } else {
+                    text = `ALERTA MICROBIOLÓGICA: Se han detectado recuentos fuera de límite en los siguientes parámetros: ${alerts.join(', ')}. \n\nSe recomienda revisar de inmediato los puntos críticos de control en planta, verificar las condiciones higiénico-sanitarias en el proceso, llevar a cabo una limpieza y desinfección exhaustiva y programar un muestreo de verificación.`;
+                }
             } else {
-                text = `ATENCIÓN CLÍNICA: Se han detectado alteraciones en los siguientes parámetros: ${alerts.join(', ')}. \n\nBasado en la literatura científica reciente, estos valores pueden ser sugestivos de procesos patológicos subyacentes u homeostasis alterada. Es estrictamente necesaria la correlación clínica directa por parte del médico tratante para descartar riesgos inmediatos y determinar el abordaje terapéutico correspondiente.`;
+                if (alerts.length === 0) {
+                    text = "Basado en la evaluación de los resultados numéricos actuales y considerando los rangos de referencia metodológicos, no se observan alteraciones biológicas significativas. Los parámetros se encuentran dentro de la normalidad clínica esperada. Se sugiere continuar con los controles habituales.";
+                } else {
+                    text = `ATENCIÓN CLÍNICA: Se han detectado alteraciones en los siguientes parámetros: ${alerts.join(', ')}. \n\nEstos valores fuera de rango de referencia requieren correlación con el cuadro clínico del paciente por parte del médico tratante para descartar procesos patológicos y determinar el abordaje diagnóstico/terapéutico correspondiente.`;
+                }
             }
 
             setInterpretationText(text);
@@ -379,10 +520,8 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     };
 
     const saveInterpretation = async () => {
-        if (!db) return;
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
-            await updateDoc(reqRef, { clinicalInterpretation: interpretationText });
+            await updateRequestOfflineOrOnline({ clinicalInterpretation: interpretationText });
             alert("Interpretación clínica guardada.");
         } catch(e) {
             console.error("Error saving interpretation", e);
@@ -391,7 +530,8 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
     const handleTransferCustody = async (e) => {
         e.preventDefault();
-        if (!db || !request?.id) return;
+        const isOffline = user?.uid === 'offline-user';
+        if (!db && !isOffline) return;
         if (!senderPin || senderPin.length !== 4 || isNaN(senderPin)) {
             alert("El PIN del entregador debe ser de 4 dígitos numéricos.");
             return;
@@ -411,18 +551,13 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
         setIsSavingTransfer(true);
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, request.id);
             const sender = request.currentCustodian || 'Recepción (Ingreso)';
+            const detailText = `Muestra transferida físicamente de [${sender}] a [${recipientCustodian}] en [${recipientLocation}]. Motivo: ${transferReason}. Firmado digitalmente con PINs electrónicos de conformidad.`;
             
-            // Actualizar campos de custodia en la solicitud
-            await updateDoc(reqRef, {
+            await updateRequestOfflineOrOnline({
                 currentCustodian: recipientCustodian,
                 currentLocation: recipientLocation
-            });
-
-            // Registrar acción de auditoría con tipo especial
-            const detailText = `Muestra transferida físicamente de [${sender}] a [${recipientCustodian}] en [${recipientLocation}]. Motivo: ${transferReason}. Firmado digitalmente con PINs electrónicos de conformidad.`;
-            await logAuditAction(db, user?.uid || 'anon', 'TRANSFERENCIA_CUSTODIA', detailText, request.id);
+            }, 'TRANSFERENCIA_CUSTODIA', detailText);
 
             alert("Transferencia de custodia registrada exitosamente.");
             setShowTransferForm(false);
@@ -443,13 +578,16 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                     <ArrowLeft size={18} className="mr-2" /> Volver a Solicitudes
                 </button>
                 <div className="flex gap-2">
-                    <button onClick={handleDeleteRequest} className="flex items-center text-red-500 bg-white border border-red-200 hover:bg-red-50 px-4 py-2 rounded-lg transition-colors font-medium shadow-sm" title="Eliminar Orden">
-                        <Trash2 size={18} className="mr-2" /> Eliminar
+                    <button onClick={handleDeleteRequest} className="flex items-center text-red-500 bg-white border border-red-200 hover:bg-red-50 px-3.5 py-2 rounded-lg transition-colors font-medium shadow-sm cursor-pointer" title="Eliminar Orden">
+                        <Trash2 size={16} className="mr-1.5" /> Eliminar
                     </button>
-                    <button onClick={() => navigateTo('pre_report', request.id)} className="flex items-center text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg transition-colors font-medium shadow-sm">
-                        <FileText size={18} className="mr-2" /> Hoja de Trabajo
+                    <button onClick={() => navigateTo('pre_report', request.id)} className="flex items-center text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 px-3.5 py-2 rounded-lg transition-colors font-medium shadow-sm cursor-pointer">
+                        <FileText size={16} className="mr-1.5 text-slate-500" /> Hoja de Trabajo
                     </button>
-                    <button onClick={() => navigateTo('final_report', request.id)} className="flex items-center text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors font-medium shadow-sm">
+                    <button onClick={() => setIsShareModalOpen(true)} className="flex items-center text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 rounded-lg transition-colors font-bold shadow-sm cursor-pointer text-xs gap-1.5" title="Enviar por WhatsApp o Email">
+                        <Share2 size={16} /> WhatsApp
+                    </button>
+                    <button onClick={() => navigateTo('final_report', request.id)} className="flex items-center text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors font-medium shadow-sm cursor-pointer">
                         <ShieldCheck size={18} className="mr-2" /> Reporte Final (QR)
                     </button>
                 </div>
@@ -463,6 +601,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Muestra #{request.id.substring(0, 8).toUpperCase()}</span>
                             <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-0.5 rounded-full font-bold">{request.sampleType || request.clientType || 'Clínica'}</span>
                             <StatusBadge status={request.status} />
+                            {request.reportVersion && request.reportVersion > 1 && (
+                                <span className="text-xs bg-purple-50 text-purple-700 border border-purple-200 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" title={request.amendmentNote || 'Informe corregido'}>
+                                    📋 Enmienda v{request.reportVersion}
+                                </span>
+                            )}
                         </div>
                         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{request.clientName}</h2>
                         <p className="text-slate-500 text-xs font-medium">Registrado: {reqDate.toLocaleString()}</p>
@@ -645,6 +788,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                         </div>
                     </div>
                 )}
+            </div>
+
+            {/* RUTA DE TRAZABILIDAD EN TIEMPO REAL */}
+            <div className="mb-6">
+                <SampleTraceabilityRoute request={request} onNavigateAction={navigateTo} />
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -881,7 +1029,9 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
                     {auditLogs.map((log, index) => {
                         const isEven = index % 2 === 0;
-                        const dateObj = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : new Date();
+                        const dateObj = log.timestamp?.seconds 
+                            ? new Date(log.timestamp.seconds * 1000) 
+                            : (typeof log.timestamp === 'string' ? new Date(log.timestamp) : new Date());
                         const isTransfer = log.action === 'TRANSFERENCIA_CUSTODIA';
                         return (
                             <div key={log.id} className={`relative flex items-center justify-between md:justify-center ${isEven ? 'md:flex-row-reverse' : 'md:flex-row'} group md:mb-12`}>
@@ -926,9 +1076,27 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                             </button>
                                         )}
                                         {request.status === 'Pendiente Revisión' && (
-                                            <button onClick={handleReleaseResults} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all shadow-sm">
-                                                <CheckCircle2 size={18} /> Firmar y Liberar Resultados
-                                            </button>
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200 p-2 rounded-xl shadow-xs">
+                                                <div className="flex flex-col text-left">
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider pl-1 mb-0.5">Microbiólogo Firmante</span>
+                                                    <select
+                                                        value={selectedMicrobiologist}
+                                                        onChange={(e) => setSelectedMicrobiologist(e.target.value)}
+                                                        className="px-2 py-1 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 w-56 cursor-pointer"
+                                                    >
+                                                        <option value="director">{labInfo?.directorName || 'Dr. Roldán Ajún Chaverri'} (Reg. {labInfo?.directorCode || '802'})</option>
+                                                        {labInfo?.professional2Name && (
+                                                            <option value="professional2">{labInfo.professional2Name} ({labInfo.professional2Code || 'Reg. Trámite'})</option>
+                                                        )}
+                                                    </select>
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleReleaseResults(selectedMicrobiologist)} 
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-sm self-end h-[34px]"
+                                                >
+                                                    <CheckCircle2 size={18} /> Firmar y Liberar
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -1094,9 +1262,11 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                             <tbody className="divide-y divide-slate-100">
                                                 {request.analyzerResults.map((res, i) => {
                                                     let isAlert = false;
-                                                    if (availableAnalyses) {
-                                                        const a = availableAnalyses.find(x => x.code === res.testCode);
-                                                        if (a && a.minRange && a.maxRange) {
+                                                    const panic = evaluateCriticalPanicValue(res.testCode, res.value);
+                                                    const delta = res.previousValue ? calculateDeltaCheck(res.value, res.previousValue) : { isDeltaAlert: false };
+                                                    const a = availableAnalyses?.find(x => x.code === res.testCode);
+                                                    if (a) {
+                                                        if (a.minRange && a.maxRange) {
                                                             const v = parseFloat(res.value);
                                                             if (!isNaN(v) && (v < parseFloat(a.minRange) || v > parseFloat(a.maxRange))) {
                                                                 isAlert = true;
@@ -1104,16 +1274,31 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                                         }
                                                     }
                                                     return (
-                                                    <tr key={i} className={`hover:bg-slate-50 ${isAlert ? 'bg-red-50/30' : ''}`}>
+                                                    <tr key={i} className={`hover:bg-slate-50 ${panic.isPanic ? 'bg-red-100/50' : isAlert ? 'bg-red-50/30' : ''}`}>
                                                         <td className="p-4 font-bold text-slate-800">
-                                                            {res.testCode}
-                                                            {isAlert && <span className="ml-2 bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded uppercase font-bold">Fuera de Rango</span>}
+                                                            <span>{a?.name || res.testCode}</span>
+                                                            {panic.isPanic ? (
+                                                                <span className="ml-2 bg-red-600 text-white text-[10px] px-2.5 py-0.5 rounded-full uppercase font-black animate-pulse inline-flex items-center gap-1 shadow-xs" title={panic.message}>
+                                                                    🚨 Valor de Pánico ({panic.type === 'CRITICAL_LOW' ? 'Bajo' : 'Alto'})
+                                                                </span>
+                                                            ) : isAlert ? (
+                                                                <span className="ml-2 bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded uppercase font-bold">
+                                                                    Fuera de Rango
+                                                                </span>
+                                                            ) : null}
+                                                            {delta.isDeltaAlert && (
+                                                                <span className="ml-2 bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded uppercase font-bold" title={delta.message}>
+                                                                    ⚠️ Delta ({delta.deltaPercent}%)
+                                                                </span>
+                                                            )}
                                                         </td>
                                                         <td className="p-4">
                                                             {!res.value ? (
                                                                 <span className="text-slate-400 italic font-medium">Pendiente</span>
                                                             ) : (
-                                                                <span className={`font-mono text-lg font-black ${isAlert ? 'text-red-600' : 'text-blue-700'}`}>{res.value}</span>
+                                                                <span className={`font-mono text-lg font-black ${panic.isPanic ? 'text-red-700' : isAlert ? 'text-red-600' : 'text-blue-700'}`}>
+                                                                    {res.value}
+                                                                </span>
                                                             )}
                                                         </td>
                                                         <td className="p-4">
@@ -1267,7 +1452,7 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                             className="w-full h-32 p-4 rounded-xl border border-indigo-200 bg-white/80 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all resize-none text-slate-700 leading-relaxed placeholder:text-slate-400"
                                         ></textarea>
                                         
-                                        {interpretationText !== (request.clinicalInterpretation || '') && (
+                                        {interpretationText !== (request.clinicalInterpretation || defaultInterpretation) && (
                                             <div className="absolute bottom-4 right-4 animate-fade-in">
                                                 <button 
                                                     onClick={saveInterpretation}
@@ -1287,6 +1472,15 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                     )}
                 </div>
             </div>
+
+            {/* Modal para enviar resultados por WhatsApp / Email */}
+            <ShareReportModal 
+                isOpen={isShareModalOpen} 
+                onClose={() => setIsShareModalOpen(false)} 
+                request={request} 
+                labInfo={labInfo} 
+                reportLang="es" 
+            />
         </div>
     );
 };

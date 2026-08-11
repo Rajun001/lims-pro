@@ -25,3 +25,19 @@ dist-ssr
 
 # Temporary analysis PDFs
 temp_pdfs/
+
+# Environment and secrets
+.env
+.env*.local
+
+# SQLite and Backups
+*.db-shm
+*.db-wal
+api/prisma/backups/
+api/prisma/dev.db-shm
+api/prisma/dev.db-wal
+
+# Firebase and Cloudflare binaries
+.firebase/
+cloudflared.exe
+

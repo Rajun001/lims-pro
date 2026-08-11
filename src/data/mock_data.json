@@ -1,0 +1,138 @@
+{
+  "requests": [
+    {
+      "id": "MC-2026-0001",
+      "clientName": "Juan Pérez",
+      "clientId": "client-1",
+      "clientType": "Clínica",
+      "sampleType": "Cultivo Microbiológico",
+      "sampleDescription": "Hisopo de herida",
+      "sampleLot": "",
+      "sampleOther": "Toma rápida",
+      "requestDate": "2026-05-24T17:50:18.685Z",
+      "analysisRequested": "Cultivo Microbiológico",
+      "analysisCode": "CULT",
+      "methodCode": "M1",
+      "status": "Pendiente",
+      "patientName": "Juan Pérez",
+      "patientDOB": "1985-05-24",
+      "patientGender": "Masculino",
+      "patientPhone": "8888-8888",
+      "patientAddress": "San José, Costa Rica",
+      "requesterName": "Dr. Carlos Alfaro",
+      "collectionDate": "2026-05-24T10:00:00.000Z",
+      "collectionLocation": "Sede Central",
+      "clinicalInfo": "Paciente sospechoso de infección bacteriana",
+      "createdAt": { "seconds": 1779645018 },
+      "createdBy": "admin-1"
+    },
+    {
+      "id": "MC-2026-0002",
+      "clientName": "Lácteos del Norte",
+      "clientId": "client-2",
+      "clientType": "Industria",
+      "sampleType": "Alimentos",
+      "sampleDescription": "Queso fresco",
+      "sampleLot": "LOTE-2026-A5",
+      "sampleOther": "Mantener refrigerado",
+      "requestDate": "2026-05-25T08:30:00.000Z",
+      "analysisRequested": "Recuento Total Aeróbico",
+      "analysisCode": "RTA",
+      "methodCode": "M1",
+      "status": "En Proceso",
+      "createdAt": { "seconds": 1779697800 },
+      "createdBy": "admin-1"
+    },
+    {
+      "id": "MC-2026-0003",
+      "clientName": "Alimentos CQC",
+      "clientId": "client-3",
+      "clientType": "Industria",
+      "sampleType": "Agua / Hielo",
+      "sampleDescription": "Agua potable de pozo",
+      "sampleLot": "POZO-3",
+      "sampleOther": "Muestra del grifo principal",
+      "requestDate": "2026-05-26T11:00:00.000Z",
+      "analysisRequested": "Coliformes Totales",
+      "analysisCode": "CT",
+      "methodCode": "M3",
+      "status": "Completado",
+      "results": {
+        "CT": "Ausencia de Coliformes"
+      },
+      "createdAt": { "seconds": 1779793200 },
+      "createdBy": "admin-1"
+    }
+  ],
+  "clients": [
+    {
+      "id": "client-1",
+      "name": "Juan Pérez",
+      "type": "Paciente (Clínico)",
+      "email": "juan.perez@correo.com",
+      "birthDate": "1985-05-24",
+      "gender": "Masculino",
+      "document": "1-1234-5678",
+      "status": "Activo",
+      "contacts": [
+        {
+          "name": "Juan Pérez",
+          "role": "Paciente",
+          "email": "juan.perez@correo.com",
+          "phone": "8888-8888"
+        }
+      ]
+    },
+    {
+      "id": "client-2",
+      "name": "Lácteos del Norte",
+      "type": "Industria",
+      "email": "calidad@lacteosnorte.com",
+      "status": "Activo",
+      "contacts": [
+        {
+          "name": "Ing. María Solís",
+          "role": "Reportes",
+          "email": "calidad@lacteosnorte.com",
+          "phone": "2222-3333"
+        }
+      ]
+    },
+    {
+      "id": "client-3",
+      "name": "Alimentos CQC",
+      "type": "Industria",
+      "email": "laboratorio@alimentoscqc.com",
+      "status": "Activo",
+      "contacts": [
+        {
+          "name": "Dr. Fernando Mora",
+          "role": "Reportes",
+          "email": "laboratorio@alimentoscqc.com",
+          "phone": "2255-7788"
+        }
+      ]
+    }
+  ],
+  "analyses": [
+    { "id": "an-1", "code": "RTA", "name": "Recuento Total Aeróbico", "category": "Microbiología (Alimentos y Aguas)" },
+    { "id": "an-2", "code": "CT", "name": "Coliformes Totales", "category": "Microbiología (Alimentos y Aguas)" },
+    { "id": "an-3", "code": "CF", "name": "Coliformes Fecales", "category": "Microbiología (Alimentos y Aguas)" },
+    { "id": "an-4", "code": "EC", "name": "Escherichia coli", "category": "Microbiología (Alimentos y Aguas)" },
+    { "id": "an-5", "code": "STA", "name": "Staphylococcus aureus", "category": "Microbiología (Alimentos y Aguas)" }
+  ],
+  "labInfo": {
+    "name": "Laboratorio Microlabs",
+    "logoUrl": "/logo.png",
+    "telephones": "22348837, 22345862, 22246541",
+    "whatsapp": "71382750",
+    "email": "laboratorio@microlabscr.com",
+    "emailReports": "reportes@microlabscr.com",
+    "emailBilling": "fe@microlabscr.com",
+    "address": "Guadalupe, del correo 75 mts Norte. Zip: 10801",
+    "directorName": "Dr. Roldán Ajún Chaverri",
+    "directorCode": "802",
+    "professional2Name": "Dr. José Guillermo Ajún Jiménez",
+    "professional2Code": "Reg. Trámite"
+  }
+}

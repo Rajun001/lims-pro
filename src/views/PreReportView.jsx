@@ -21,10 +21,14 @@ export const PreReportView = ({ request, navigateTo, labInfo }) => {
             <div className="bg-white p-8 sm:p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0">
                 <div className="flex justify-between items-start border-b-2 border-slate-800 pb-6 mb-6">
                     <div className="flex items-center gap-4">
-                        <Logo url={labInfo?.logoUrl} className="h-16 w-16" />
+                        <div className="h-16 w-40 flex-shrink-0 flex items-center justify-center bg-transparent">
+                            <img src={labInfo?.logoUrl || "/logo.png"} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
+                        </div>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{labInfo?.name || 'Sistema LIMS'}</h1>
-                            <p className="text-slate-600 font-medium">Hoja de Trabajo Analítico (Prereporte)</p>
+                            <p className="text-slate-650 font-bold uppercase tracking-wider text-xs">Hoja de Trabajo Analítico (Prereporte)</p>
+                            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                                🏥 {request.branchName || 'Sede Central Guadalupe'} {request.branchCode ? `(${request.branchCode})` : ''}
+                            </p>
                         </div>
                     </div>
                     <div className="text-right">

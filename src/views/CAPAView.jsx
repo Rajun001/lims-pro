@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldAlert, PlusCircle, Search, Edit, Trash2, Calendar, FileText, CheckCircle, AlertOctagon, Activity } from 'lucide-react';
+import { ShieldAlert, PlusCircle, Search, Edit, Trash2, Calendar, FileText, CheckCircle, AlertOctagon, Activity, Sparkles, Brain } from 'lucide-react';
 import { collection, query, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
+import { formatToCRDate } from '../utils/dateFormatter.js';
+import { getApiUrl } from '../utils/api.js';
 import { useNotification } from '../contexts/NotificationContext';
+import { generateCAPAAISuggestion } from '../services/aiService';
+
+const API_URL = getApiUrl();
 
 export const CAPAView = ({ db, user }) => {
     const [capaList, setCapaList] = useState([]);
@@ -26,6 +31,44 @@ export const CAPAView = ({ db, user }) => {
     const [dueDate, setDueDate] = useState('');
 
     useEffect(() => {
+        if (user?.uid === 'offline-user') {
+            const loadLocalCapas = async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/capa`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const mapped = data.map(x => ({
+                            id: x.id,
+                            title: x.title,
+                            description: x.description,
+                            origin: x.origin,
+                            status: x.status,
+                            assignedTo: x.assignedTo,
+                            createdAt: { seconds: Math.floor(new Date(x.createdAt).getTime() / 1000) }
+                        }));
+                        setCapaList(mapped);
+                    } else {
+                        throw new Error();
+                    }
+                } catch {
+                    let localCapas = localStorage.getItem('lims_local_capas');
+                    if (!localCapas) {
+                        const defaultCapas = [
+                            { id: 'capa-1', title: 'Falla de calibración en analizador químico Fuji', type: 'No Conformidad', origin: 'Equipos', severity: 'Alta', status: 'Abierta', description: 'El analizador reportó lecturas erróneas fuera de control para el lote QC-BATCH-001.', rootCause: 'Falta de mantenimiento preventivo mensual.', actionsTaken: 'Se llamó al soporte técnico de Sysmex/Fuji para calibración urgente.', assignedTo: 'Lic. Ana Blanco', dueDate: '2026-06-05', createdAt: { seconds: Math.floor(Date.now()/1000 - 43200) } }
+                        ];
+                        localStorage.setItem('lims_local_capas', JSON.stringify(defaultCapas));
+                        localCapas = JSON.stringify(defaultCapas);
+                    }
+                    const data = JSON.parse(localCapas);
+                    data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    setCapaList(data);
+                }
+            };
+            loadLocalCapas();
+            window.addEventListener('lims_local_data_updated', loadLocalCapas);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalCapas);
+        }
+
         if (!db) return;
         const q = query(collection(db, `artifacts/${LIMSSystemId}/public/data/capa`), orderBy('createdAt', 'desc'));
         const unsub = onSnapshot(q, (snapshot) => {
@@ -39,7 +82,7 @@ export const CAPAView = ({ db, user }) => {
             addNotification("Error al cargar la lista de No Conformidades.", "error");
         });
         return () => unsub();
-    }, [db, addNotification]);
+    }, [db, user, addNotification]);
 
     const filteredCapa = capaList.filter(c => 
         (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -69,17 +112,62 @@ export const CAPAView = ({ db, user }) => {
                 dueDate,
             };
 
-            if (editingCapaId) {
-                const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/capa`, editingCapaId);
-                await updateDoc(docRef, { ...payload, updatedAt: serverTimestamp() });
-                await logAuditAction(db, user?.uid, 'EDITAR_CAPA', `Editó CAPA/NC: ${title}`, editingCapaId);
-                addNotification("Registro actualizado exitosamente.", "success");
+            if (user?.uid === 'offline-user') {
+                try {
+                    const res = await fetch(`${API_URL}/api/capa`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: editingCapaId,
+                            title: payload.title,
+                            description: payload.description,
+                            origin: payload.origin,
+                            status: payload.status,
+                            assignedTo: payload.assignedTo
+                        })
+                    });
+                    if (!res.ok) throw new Error();
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_CAPA', `Registró/Editó CAPA (API local): ${title}`, editingCapaId || 'new-api');
+                    addNotification("Registro guardado exitosamente en BD local.", "success");
+                } catch {
+                    const localCapas = JSON.parse(localStorage.getItem('lims_local_capas') || '[]');
+                    if (editingCapaId) {
+                        const idx = localCapas.findIndex(c => c.id === editingCapaId);
+                        if (idx > -1) {
+                            localCapas[idx] = { ...localCapas[idx], ...payload, updatedAt: new Date().toISOString() };
+                        }
+                        localStorage.setItem('lims_local_capas', JSON.stringify(localCapas));
+                        await logAuditAction(db, user?.uid, 'EDITAR_CAPA', `Editó CAPA/NC (Offline): ${title}`, editingCapaId);
+                        addNotification("Registro actualizado exitosamente (localstorage).", "success");
+                    } else {
+                        const newId = 'capa-' + Date.now();
+                        const newRecord = {
+                            id: newId,
+                            ...payload,
+                            createdAt: { seconds: Math.floor(Date.now()/1000) },
+                            createdBy: user?.uid || 'Sistema'
+                        };
+                        localCapas.push(newRecord);
+                        localStorage.setItem('lims_local_capas', JSON.stringify(localCapas));
+                        await logAuditAction(db, user?.uid, 'REGISTRAR_CAPA', `Registró nueva CAPA/NC (Offline): ${title}`, newId);
+                        addNotification("Registro creado exitosamente (localstorage).", "success");
+                    }
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                }
             } else {
-                payload.createdAt = serverTimestamp();
-                payload.createdBy = user?.uid || 'Sistema';
-                const newDocRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/capa`), payload);
-                await logAuditAction(db, user?.uid, 'REGISTRAR_CAPA', `Registró nueva CAPA/NC: ${title}`, newDocRef.id);
-                addNotification("Registro creado exitosamente.", "success");
+                if (editingCapaId) {
+                    const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/capa`, editingCapaId);
+                    await updateDoc(docRef, { ...payload, updatedAt: serverTimestamp() });
+                    await logAuditAction(db, user?.uid, 'EDITAR_CAPA', `Editó CAPA/NC: ${title}`, editingCapaId);
+                    addNotification("Registro actualizado exitosamente.", "success");
+                } else {
+                    payload.createdAt = serverTimestamp();
+                    payload.createdBy = user?.uid || 'Sistema';
+                    const newDocRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/capa`), payload);
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_CAPA', `Registró nueva CAPA/NC: ${title}`, newDocRef.id);
+                    addNotification("Registro creado exitosamente.", "success");
+                }
             }
             closeModal();
         } catch (error) {
@@ -93,9 +181,34 @@ export const CAPAView = ({ db, user }) => {
     const handleDelete = async (id, capaTitle) => {
         if (!window.confirm(`¿Está seguro de eliminar permanentemente este registro CAPA: "${capaTitle}"? Esta acción borrará la incidencia del historial de calidad de forma irreversible.`)) return;
         try {
-            await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/capa`, id));
-            await logAuditAction(db, user?.uid, 'ELIMINAR_CAPA', `Eliminó CAPA/NC: ${capaTitle}`, id);
-            addNotification("Registro eliminado exitosamente.", "success");
+            if (user?.uid === 'offline-user') {
+                try {
+                    const isNumericId = !isNaN(parseInt(id)) && !id.toString().startsWith('capa-');
+                    if (isNumericId) {
+                        const res = await fetch(`${API_URL}/api/capa/${id}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error();
+                    } else {
+                        const localCapas = JSON.parse(localStorage.getItem('lims_local_capas') || '[]');
+                        const filtered = localCapas.filter(c => c.id !== id);
+                        localStorage.setItem('lims_local_capas', JSON.stringify(filtered));
+                    }
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_CAPA', `Eliminó CAPA/NC: ${capaTitle}`, id);
+                    addNotification("Registro eliminado exitosamente.", "success");
+                } catch {
+                    const localCapas = JSON.parse(localStorage.getItem('lims_local_capas') || '[]');
+                    const filtered = localCapas.filter(c => c.id !== id);
+                    localStorage.setItem('lims_local_capas', JSON.stringify(filtered));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_CAPA', `Eliminó CAPA/NC (Offline): ${capaTitle}`, id);
+                    addNotification("Registro eliminado del localstorage.", "success");
+                }
+            } else {
+                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/capa`, id));
+                await logAuditAction(db, user?.uid, 'ELIMINAR_CAPA', `Eliminó CAPA/NC: ${capaTitle}`, id);
+                addNotification("Registro eliminado exitosamente.", "success");
+            }
         } catch (error) {
             console.error("Error eliminando CAPA:", error);
             addNotification("Error al eliminar el registro.", "error");
@@ -130,6 +243,36 @@ export const CAPAView = ({ db, user }) => {
         setAssignedTo('');
         setDueDate('');
         setShowModal(false);
+    };
+
+    const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
+
+    const handleRunAICAPA = async () => {
+        if (!description.trim() && !title.trim()) {
+            alert("Por favor ingrese al menos el título y la descripción del problema para analizar.");
+            return;
+        }
+        setIsAnalyzingAI(true);
+        try {
+            const suggestion = await generateCAPAAISuggestion({
+                title: title || 'No conformidad en proceso de laboratorio',
+                description,
+                category: origin,
+                severity
+            });
+            if (suggestion.rootCauseAnalysis) {
+                setRootCause(suggestion.rootCauseAnalysis);
+            }
+            if (suggestion.correctiveAction || suggestion.immediateAction) {
+                setActionsTaken(`[Acción Inmediata]: ${suggestion.immediateAction || ''}\n[Acción Correctiva]: ${suggestion.correctiveAction || ''}\n[Acción Preventiva]: ${suggestion.preventiveAction || ''}\n[Método de Verificación]: ${suggestion.verificationMethod || ''}`);
+            }
+            addNotification("✨ Causa raíz y plan de acción generados con IA (ISO 17025).", "success");
+        } catch (err) {
+            console.error("Error AI CAPA:", err);
+            addNotification("No se pudo generar la propuesta con IA.", "error");
+        } finally {
+            setIsAnalyzingAI(false);
+        }
     };
 
     const getSeverityBadge = (sev) => {
@@ -210,7 +353,7 @@ export const CAPAView = ({ db, user }) => {
                                                 {capa.description}
                                             </div>
                                             <div className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">
-                                                ID: {capa.id.substring(0, 8).toUpperCase()} | {new Date(capa.createdAt?.seconds * 1000).toLocaleDateString()}
+                                                ID: {(capa.id || '').toString().substring(0, 8).toUpperCase()} | {formatToCRDate(capa.createdAt)}
                                             </div>
                                         </td>
                                         <td className="p-4">
@@ -234,7 +377,7 @@ export const CAPAView = ({ db, user }) => {
                                             <div className="text-sm text-slate-700">{capa.assignedTo || 'Sin asignar'}</div>
                                             {capa.dueDate && (
                                                 <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                                    <Calendar size={12} /> Límite: {new Date(capa.dueDate).toLocaleDateString()}
+                                                    <Calendar size={12} /> Límite: {formatToCRDate(capa.dueDate)}
                                                 </div>
                                             )}
                                         </td>
@@ -308,13 +451,24 @@ export const CAPAView = ({ db, user }) => {
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">Descripción Detallada *</label>
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Descripción Detallada *</label>
+                                        <button
+                                            type="button"
+                                            onClick={handleRunAICAPA}
+                                            disabled={isAnalyzingAI}
+                                            className="px-3 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                                        >
+                                            <Sparkles size={13} className={isAnalyzingAI ? "animate-pulse" : ""} />
+                                            {isAnalyzingAI ? 'Analizando con IA...' : '✨ Sugerir Causa Raíz & Plan de Acción con IA'}
+                                        </button>
+                                    </div>
                                     <textarea required value={description} onChange={e => setDescription(e.target.value)} rows="3" className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 resize-y" placeholder="Describa el problema, lugar y contexto..."></textarea>
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">Análisis de Causa Raíz (Opcional)</label>
-                                    <textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows="2" className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 resize-y" placeholder="¿Por qué ocurrió el problema?"></textarea>
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Análisis de Causa Raíz (5 Porqués / Ishikawa)</label>
+                                    <textarea value={rootCause} onChange={e => setRootCause(e.target.value)} rows="3" className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 resize-y text-xs font-medium" placeholder="¿Por qué ocurrió el problema?"></textarea>
                                 </div>
 
                                 <div className="space-y-1">

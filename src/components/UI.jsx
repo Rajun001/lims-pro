@@ -40,15 +40,81 @@ export class ErrorBoundary extends React.Component {
     }
 }
 
-export const Logo = ({ url, className = "h-10 w-10" }) => (
-    <div className={`${className} flex-shrink-0 flex items-center justify-center ${url ? 'bg-transparent' : 'bg-indigo-600 rounded-lg shadow-md'}`}>
-        {url ? (
-            <img src={url} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.target.style.display = 'none'; }} />
-        ) : (
-            <Microscope className="text-white w-2/3 h-2/3" />
-        )}
-    </div>
-);
+export const Logo = ({ url, className = "h-10 w-10", variant = "icon" }) => {
+    // If a custom URL is provided and it is NOT the default microlabs one, render the image.
+    const isDefaultLogo = !url || url.includes('microlabscr.com') || url.includes('logo.jpg') || url.includes('logo.png');
+    
+    if (!isDefaultLogo) {
+        return (
+            <div className={`${className} flex-shrink-0 flex items-center justify-center bg-transparent`}>
+                <img src={url} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" onError={(e) => { e.target.style.display = 'none'; }} />
+            </div>
+        );
+    }
+
+    // Microlabs SVG Logo rendering
+    if (variant === "full") {
+        return (
+            <div className={`${className} flex flex-col items-center select-none`}>
+                <div className="flex items-center gap-3">
+                    <div className="shrink-0">
+                        {/* Blue circle emblem with orbits */}
+                        <svg width="40" height="40" viewBox="0 0 100 100" className="drop-shadow-sm">
+                            <circle cx="50" cy="50" r="46" fill="#1e40af" />
+                            <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(30 50 50)" />
+                            <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(90 50 50)" />
+                            <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(150 50 50)" />
+                            <circle cx="50" cy="50" r="6.5" fill="white" />
+                        </svg>
+                    </div>
+                    <div className="flex flex-col items-start leading-none select-none">
+                        <div className="flex items-baseline">
+                            <span className="text-[26px] font-black tracking-tight text-sky-500" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>MICRO</span>
+                            <span className="text-[26px] font-black tracking-tight text-blue-900 ml-0.5" style={{ fontFamily: "'Outfit', 'Inter', sans-serif" }}>LABS</span>
+                        </div>
+                        <span className="text-[7.5px] font-bold tracking-[0.28em] text-slate-500 uppercase mt-1">LABORATORIO CLÍNICO</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (variant === "horizontal") {
+        return (
+            <div className={`${className} flex items-center select-none gap-2.5`}>
+                <div className="shrink-0">
+                    <svg width="28" height="28" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="46" fill="#2563eb" />
+                        <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(30 50 50)" />
+                        <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(90 50 50)" />
+                        <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(150 50 50)" />
+                        <circle cx="50" cy="50" r="6.5" fill="white" />
+                    </svg>
+                </div>
+                <div className="flex flex-col items-start leading-none">
+                    <div className="flex items-baseline">
+                        <span className="text-[12px] font-sans font-black tracking-wider text-sky-400 uppercase">MICRO</span>
+                        <span className="text-[12px] font-sans font-black tracking-wider text-white uppercase ml-0.5">LABS</span>
+                    </div>
+                    <span className="text-[4.5px] font-bold tracking-[0.2em] text-slate-400 uppercase mt-0.5">LABORATORIO CLÍNICO</span>
+                </div>
+            </div>
+        );
+    }
+
+    // Default: 'icon'
+    return (
+        <div className={`${className} flex items-center justify-center shrink-0`}>
+            <svg width="24" height="24" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="46" fill="#2563eb" />
+                <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(30 50 50)" />
+                <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(90 50 50)" />
+                <ellipse cx="50" cy="50" rx="30" ry="10" fill="none" stroke="white" strokeWidth="5.5" transform="rotate(150 50 50)" />
+                <circle cx="50" cy="50" r="6.5" fill="white" />
+            </svg>
+        </div>
+    );
+};
 
 export const LoadingSpinner = () => {
     const [showText, setShowText] = useState(true);

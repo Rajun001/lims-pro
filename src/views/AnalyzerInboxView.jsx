@@ -6,8 +6,10 @@ import HardwareLink from '../services/HardwareLink';
 
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
+import { runClinicalCalculations } from '../utils/clinicalCalcs';
 
-export const AnalyzerInboxView = ({ db }) => {
+
+export const AnalyzerInboxView = ({ db, user }) => {
     const [isPolling, setIsPolling] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [showImporter, setShowImporter] = useState(false);
@@ -53,62 +55,133 @@ export const AnalyzerInboxView = ({ db }) => {
         if (!res) return;
 
         try {
-            // Attempt to update the request document with these results
-            const requestRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, res.barcode);
-            
-            // Fetch existing results to prevent data overwrites
-            const requestSnap = await getDoc(requestRef);
-            let currentResults = [];
-            if (requestSnap.exists()) {
-                currentResults = requestSnap.data().analyzerResults || [];
-            }
+            if (user?.uid === 'offline-user') {
+                const localReqs = localStorage.getItem('lims_local_requests')
+                    ? JSON.parse(localStorage.getItem('lims_local_requests'))
+                    : [];
 
-            if (res.equipment === 'IUL Flash & Go') {
-                const limit = requestSnap.exists() && requestSnap.data().foodUFCResult?.limit ? requestSnap.data().foodUFCResult.limit : '10000';
-                const count = res.rawData['Count'] || 0;
-                const resultUfc = res.rawData['UFC'] || 0;
-                const isRejected = resultUfc > parseFloat(limit);
-                
-                await updateDoc(requestRef, {
-                    foodUFCResult: {
-                        testName: 'Recuento Automatizado (Flash&Go)',
-                        platingMethod: 'Siembra Automatizada',
-                        colonies: count.toString(),
-                        dilution: res.rawData['Dilution'] || '0',
-                        volume: '1',
-                        limit: limit,
-                        resultUFC: resultUfc,
-                        isRejected: isRejected
-                    },
-                    hasAutomatedResults: true,
-                    status: 'Pendiente Revisión'
-                });
+                const reqIndex = localReqs.findIndex(r => r.id === res.barcode);
+                if (reqIndex === -1) {
+                    throw new Error("Solicitud no encontrada en base de datos local.");
+                }
+
+                const requestData = localReqs[reqIndex];
+                let currentResults = requestData.analyzerResults || [];
+
+                if (res.equipment === 'IUL Flash & Go') {
+                    const limit = requestData.foodUFCResult?.limit || '10000';
+                    const count = res.rawData['Count'] || 0;
+                    const resultUfc = res.rawData['UFC'] || 0;
+                    const isRejected = resultUfc > parseFloat(limit);
+                    
+                    localReqs[reqIndex] = {
+                        ...requestData,
+                        foodUFCResult: {
+                            testName: 'Recuento Automatizado (Flash&Go)',
+                            platingMethod: 'Siembra Automatizada',
+                            colonies: count.toString(),
+                            dilution: res.rawData['Dilution'] || '0',
+                            volume: '1',
+                            limit: limit,
+                            resultUFC: resultUfc,
+                            isRejected: isRejected
+                        },
+                        hasAutomatedResults: true,
+                        status: 'Pendiente Revisión'
+                    };
+                } else {
+                    const mappedResults = Object.keys(res.rawData).map(testCode => ({
+                        testCode,
+                        value: res.rawData[testCode].toString(),
+                        origin: `Automatizado (${res.equipment})`,
+                        timestamp: new Date().toISOString(),
+                        status: 'pending_review'
+                    }));
+
+                    let updatedResults = [...currentResults];
+                    mappedResults.forEach(newRes => {
+                        const idx = updatedResults.findIndex(r => r.testCode === newRes.testCode);
+                        if (idx > -1) {
+                            updatedResults[idx] = newRes;
+                        } else {
+                            updatedResults.push(newRes);
+                        }
+                    });
+
+                    updatedResults = runClinicalCalculations(updatedResults);
+
+
+                    localReqs[reqIndex] = {
+                        ...requestData,
+                        analyzerResults: updatedResults,
+                        hasAutomatedResults: true,
+                        status: 'Pendiente Revisión'
+                    };
+                }
+
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
             } else {
-                // Format the results to append to the request
-                const mappedResults = Object.keys(res.rawData).map(testCode => ({
-                    testCode,
-                    value: res.rawData[testCode].toString(),
-                    origin: `Automatizado (${res.equipment})`,
-                    timestamp: new Date().toISOString(),
-                    status: 'pending_review' // Needs review before final release
-                }));
+                // Attempt to update the request document with these results
+                const requestRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, res.barcode);
+                
+                // Fetch existing results to prevent data overwrites
+                const requestSnap = await getDoc(requestRef);
+                let currentResults = [];
+                if (requestSnap.exists()) {
+                    currentResults = requestSnap.data().analyzerResults || [];
+                }
 
-                // Merge results: if a testCode already exists, update it; otherwise append
-                let updatedResults = [...currentResults];
-                mappedResults.forEach(newRes => {
-                    const idx = updatedResults.findIndex(r => r.testCode === newRes.testCode);
-                    if (idx > -1) {
-                        updatedResults[idx] = newRes;
-                    } else {
-                        updatedResults.push(newRes);
-                    }
-                });
+                if (res.equipment === 'IUL Flash & Go') {
+                    const limit = requestSnap.exists() && requestSnap.data().foodUFCResult?.limit ? requestSnap.data().foodUFCResult.limit : '10000';
+                    const count = res.rawData['Count'] || 0;
+                    const resultUfc = res.rawData['UFC'] || 0;
+                    const isRejected = resultUfc > parseFloat(limit);
+                    
+                    await updateDoc(requestRef, {
+                        foodUFCResult: {
+                            testName: 'Recuento Automatizado (Flash&Go)',
+                            platingMethod: 'Siembra Automatizada',
+                            colonies: count.toString(),
+                            dilution: res.rawData['Dilution'] || '0',
+                            volume: '1',
+                            limit: limit,
+                            resultUFC: resultUfc,
+                            isRejected: isRejected
+                        },
+                        hasAutomatedResults: true,
+                        status: 'Pendiente Revisión'
+                    });
+                } else {
+                    // Format the results to append to the request
+                    const mappedResults = Object.keys(res.rawData).map(testCode => ({
+                        testCode,
+                        value: res.rawData[testCode].toString(),
+                        origin: `Automatizado (${res.equipment})`,
+                        timestamp: new Date().toISOString(),
+                        status: 'pending_review' // Needs review before final release
+                    }));
 
-                await updateDoc(requestRef, {
-                    analyzerResults: updatedResults,
-                    hasAutomatedResults: true,
-                    status: 'Pendiente Revisión' // Auto move to review state
-                });
+                    // Merge results: if a testCode already exists, update it; otherwise append
+                    let updatedResults = [...currentResults];
+                    mappedResults.forEach(newRes => {
+                        const idx = updatedResults.findIndex(r => r.testCode === newRes.testCode);
+                        if (idx > -1) {
+                            updatedResults[idx] = newRes;
+                        } else {
+                            updatedResults.push(newRes);
+                        }
+                    });
+
+                    updatedResults = runClinicalCalculations(updatedResults);
+
+
+                    await updateDoc(requestRef, {
+                        analyzerResults: updatedResults,
+                        hasAutomatedResults: true,
+                        status: 'Pendiente Revisión' // Auto move to review state
+                    });
+                }
             }
 
             setIncomingResults(prev => prev.map(r => r.id === id ? { ...r, status: 'matched' } : r));

@@ -3,6 +3,7 @@ import { Microscope, PlusCircle, Search, Edit, Trash2, Calendar, AlertTriangle, 
 import { collection, query, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
+import { formatToCRDate } from '../utils/dateFormatter.js';
 import { useNotification } from '../contexts/NotificationContext';
 
 export const EquipmentView = ({ db, user }) => {
@@ -25,6 +26,25 @@ export const EquipmentView = ({ db, user }) => {
     const [calibrationDate, setCalibrationDate] = useState('');
 
     useEffect(() => {
+        if (user?.uid === 'offline-user') {
+            const loadLocalEquipment = () => {
+                let localEq = localStorage.getItem('lims_local_equipment');
+                if (!localEq) {
+                    const defaultEquipment = [
+                        { id: 'eq-1', name: 'Analizador Químico Fuji NX6000', brand: 'Fujifilm', model: 'NX6000', serialNumber: 'FNX-7762', status: 'Activo', location: 'Hematología y Química', lastMaintenance: '2026-02-15', nextMaintenance: '2026-08-15', calibrationDate: '2026-02-15' },
+                        { id: 'eq-2', name: 'Snibe Maglumi 800', brand: 'Snibe', model: '800', serialNumber: 'MAG-8812', status: 'Activo', location: 'Inmunología', lastMaintenance: '2026-03-01', nextMaintenance: '2026-09-01', calibrationDate: '2026-03-01' },
+                        { id: 'eq-3', name: 'Incubadora Microbiológica Memmert', brand: 'Memmert', model: 'IN30', serialNumber: 'MEM-0091', status: 'Activo', location: 'Microbiología', lastMaintenance: '2025-11-10', nextMaintenance: '2026-05-10', calibrationDate: '2025-11-10' }
+                    ];
+                    localStorage.setItem('lims_local_equipment', JSON.stringify(defaultEquipment));
+                    localEq = JSON.stringify(defaultEquipment);
+                }
+                setEquipmentList(JSON.parse(localEq));
+            };
+            loadLocalEquipment();
+            window.addEventListener('lims_local_data_updated', loadLocalEquipment);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalEquipment);
+        }
+
         if (!db) return;
         const q = query(collection(db, `artifacts/${LIMSSystemId}/public/data/equipment`));
         const unsub = onSnapshot(q, (snapshot) => {
@@ -38,7 +58,7 @@ export const EquipmentView = ({ db, user }) => {
             addNotification("Error al cargar la lista de equipos.", "error");
         });
         return () => unsub();
-    }, [db, addNotification]);
+    }, [db, user, addNotification]);
 
     const filteredEquipment = equipmentList.filter(eq => 
         (eq.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -67,16 +87,36 @@ export const EquipmentView = ({ db, user }) => {
                 calibrationDate,
             };
 
-            if (editingEquipmentId) {
-                const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/equipment`, editingEquipmentId);
-                await updateDoc(docRef, { ...payload, updatedAt: serverTimestamp() });
-                await logAuditAction(db, user?.uid, 'EDITAR_EQUIPO', `Editó equipo: ${name} (${serialNumber})`, editingEquipmentId);
-                addNotification("Equipo actualizado exitosamente.", "success");
+            if (user?.uid === 'offline-user') {
+                const localEq = JSON.parse(localStorage.getItem('lims_local_equipment') || '[]');
+                if (editingEquipmentId) {
+                    const idx = localEq.findIndex(eq => eq.id === editingEquipmentId);
+                    if (idx > -1) {
+                        localEq[idx] = { ...localEq[idx], ...payload, updatedAt: new Date().toISOString() };
+                    }
+                    localStorage.setItem('lims_local_equipment', JSON.stringify(localEq));
+                    await logAuditAction(db, user?.uid, 'EDITAR_EQUIPO', `Editó equipo: ${name} (${serialNumber})`, editingEquipmentId);
+                    addNotification("Equipo actualizado exitosamente.", "success");
+                } else {
+                    const newId = 'eq-' + Date.now();
+                    localEq.push({ id: newId, ...payload, createdAt: new Date().toISOString() });
+                    localStorage.setItem('lims_local_equipment', JSON.stringify(localEq));
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_EQUIPO', `Registró nuevo equipo: ${name} (${serialNumber})`, newId);
+                    addNotification("Equipo registrado exitosamente.", "success");
+                }
+                window.dispatchEvent(new Event('lims_local_data_updated'));
             } else {
-                payload.createdAt = serverTimestamp();
-                const newDocRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/equipment`), payload);
-                await logAuditAction(db, user?.uid, 'REGISTRAR_EQUIPO', `Registró nuevo equipo: ${name} (${serialNumber})`, newDocRef.id);
-                addNotification("Equipo registrado exitosamente.", "success");
+                if (editingEquipmentId) {
+                    const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/equipment`, editingEquipmentId);
+                    await updateDoc(docRef, { ...payload, updatedAt: serverTimestamp() });
+                    await logAuditAction(db, user?.uid, 'EDITAR_EQUIPO', `Editó equipo: ${name} (${serialNumber})`, editingEquipmentId);
+                    addNotification("Equipo actualizado exitosamente.", "success");
+                } else {
+                    payload.createdAt = serverTimestamp();
+                    const newDocRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/equipment`), payload);
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_EQUIPO', `Registró nuevo equipo: ${name} (${serialNumber})`, newDocRef.id);
+                    addNotification("Equipo registrado exitosamente.", "success");
+                }
             }
             closeModal();
         } catch (error) {
@@ -90,9 +130,19 @@ export const EquipmentView = ({ db, user }) => {
     const handleDelete = async (id, eqName) => {
         if (!window.confirm(`¿Está seguro de eliminar permanentemente el equipo "${eqName}"? Esta acción no se puede deshacer y borrará todo el historial asociado.`)) return;
         try {
-            await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/equipment`, id));
-            await logAuditAction(db, user?.uid, 'ELIMINAR_EQUIPO', `Eliminó equipo: ${eqName}`, id);
-            addNotification("Equipo eliminado exitosamente.", "success");
+            if (user?.uid === 'offline-user') {
+                const localEq = JSON.parse(localStorage.getItem('lims_local_equipment') || '[]');
+                const filtered = localEq.filter(eq => eq.id !== id);
+                localStorage.setItem('lims_local_equipment', JSON.stringify(filtered));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                
+                await logAuditAction(db, user?.uid, 'ELIMINAR_EQUIPO', `Eliminó equipo: ${eqName}`, id);
+                addNotification("Equipo eliminado exitosamente.", "success");
+            } else {
+                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/equipment`, id));
+                await logAuditAction(db, user?.uid, 'ELIMINAR_EQUIPO', `Eliminó equipo: ${eqName}`, id);
+                addNotification("Equipo eliminado exitosamente.", "success");
+            }
         } catch (error) {
             console.error("Error eliminando equipo:", error);
             addNotification("Error al eliminar el equipo.", "error");
@@ -215,13 +265,13 @@ export const EquipmentView = ({ db, user }) => {
                                                     {eq.status}
                                                 </span>
                                             </td>
-                                            <td className="p-4">
+                                             <td className="p-4">
                                                 <div className={`flex items-center gap-2 text-sm ${needsMaint ? 'text-red-600 font-bold' : 'text-slate-600'}`}>
                                                     <Calendar size={14} />
-                                                    {eq.nextMaintenance ? new Date(eq.nextMaintenance).toLocaleDateString() : 'No definido'}
+                                                    {eq.nextMaintenance ? formatToCRDate(eq.nextMaintenance) : 'No definido'}
                                                     {needsMaint && <AlertTriangle size={14} className="text-red-500" title="Mantenimiento próximo o vencido" />}
                                                 </div>
-                                            </td>
+                                             </td>
                                             <td className="p-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     <button onClick={() => openEditModal(eq)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Editar Equipo">

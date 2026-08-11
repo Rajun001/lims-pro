@@ -1,9 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { UserCheck, PlusCircle, Search, Clock, Mail, PhoneCall, Calendar, History, ArrowUpRight, Users, X, Trash2, Plus, Building, User, HeartPulse, Edit2, FileText, Beaker } from 'lucide-react';
+import { UserCheck, PlusCircle, Search, Clock, Mail, PhoneCall, Calendar, History, ArrowUpRight, Users, X, Trash2, Plus, Building, User, HeartPulse, Edit2, FileText, Beaker, FileSpreadsheet, Upload, Activity, Download, Settings } from 'lucide-react';
 import { collection, addDoc, updateDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { lookupCivilRegistry } from '../utils/civilRegistry';
 import { db as firestoreDb, LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
+
+import { getApiUrl } from '../utils/api.js';
+
+const API_URL = getApiUrl();
 
 const CLIENT_TYPES = [
     'Paciente (Clínico)',
@@ -30,10 +35,26 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
     const { addNotification } = useNotification();
     const [editingClientId, setEditingClientId] = useState(null);
 
+    // QuickBooks Import States
+    const [showQbImportModal, setShowQbImportModal] = useState(false);
+    const [qbParsedClients, setQbParsedClients] = useState([]);
+    const [qbImportType, setQbImportType] = useState(CLIENT_TYPES[2]); // Default: Empresa de Alimentos
+    const [isImporting, setIsImporting] = useState(false);
+
+    // QuickBooks Web Connector Sync States
+    const [showQbSyncModal, setShowQbSyncModal] = useState(false);
+    const [qbSyncSettings, setQbSyncSettings] = useState({ username: 'microlabs_sync', hasPassword: false, lastSyncLog: null });
+    const [qbSyncPassword, setQbSyncPassword] = useState('');
+    const [qbSyncedClients, setQbSyncedClients] = useState([]);
+    const [isImportingQbWeb, setIsImportingQbWeb] = useState(false);
+    const [isSavingQbSettings, setIsSavingQbSettings] = useState(false);
+
     // Form states
     const [newClientType, setNewClientType] = useState(CLIENT_TYPES[2]);
     const [profileName, setProfileName] = useState('');
     const [profileDocument, setProfileDocument] = useState('');
+    const [profileDocumentType, setProfileDocumentType] = useState('Cédula Física');
+    const [profileActivityCode, setProfileActivityCode] = useState('');
     const [extraInfo, setExtraInfo] = useState('');
     const [birthDate, setBirthDate] = useState('');
     const [gender, setGender] = useState('Masculino');
@@ -49,6 +70,7 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
     ]);
 
     const [isSaving, setIsSaving] = useState(false);
+    const [isSearchingRegistry, setIsSearchingRegistry] = useState(false);
 
     // Filter combined clients based on search query
     const filteredClients = useMemo(() => {
@@ -138,6 +160,300 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
         }
     };
 
+    // Parse QuickBooks CSV files
+    const parseQbCsv = (text) => {
+        const parseCSVLine = (line) => {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        };
+
+        const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+        if (lines.length <= 1) {
+            addNotification("El archivo está vacío o no contiene filas.", "warning");
+            return;
+        }
+
+        const headers = parseCSVLine(lines[0]);
+        
+        // Find indices of columns based on standard QuickBooks headers
+        const findColIndex = (names) => {
+            return headers.findIndex(h => 
+                names.some(name => h.toLowerCase().replace(/[\s_-]/g, '').includes(name.toLowerCase()))
+            );
+        };
+
+        const nameIdx = findColIndex(['customer', 'nombre', 'name', 'razonsocial']);
+        const companyIdx = findColIndex(['company', 'compañia', 'compania', 'empresa']);
+        const emailIdx = findColIndex(['email', 'mail', 'correo', 'e-mail']);
+        const phoneIdx = findColIndex(['phone', 'telefono', 'tel', 'mobile', 'celular']);
+        const docIdx = findColIndex(['taxid', 'identificacion', 'cedula', 'rut', 'nit', 'rfc']);
+        const docTypeIdx = findColIndex(['tipoidentificacion', 'tipo_id', 'tipodocumento', 'doc_type', 'tipocedula']);
+        const activityIdx = findColIndex(['actividad', 'codigoactividad', 'codigo_actividad', 'activitycode', 'economicactivity']);
+        const addressIdx = findColIndex(['billingstreet', 'billto', 'address', 'direccion', 'notes', 'nota']);
+
+        const detectIsCompany = (name, company) => {
+            if (company && company.trim().length > 0) return true;
+            const companySuffixes = [
+                's.a.', 's.a', 's.r.l.', 's.r.l', 'ltda.', 'ltda', 'limitada', 
+                'corp.', 'corp', 'corporation', 'inc.', 'inc', 'incorporated', 
+                'co.', 'co', 'company', 'lab.', 'lab', 'laboratorio', 'clinica', 
+                'clínica', 'hospital', 'servicios', 'inversiones', 'asociacion', 
+                'asociación', 'cooperativa', 'coop', 'distribuidora', 'comercializadora'
+            ];
+            const lowerName = name.toLowerCase();
+            return companySuffixes.some(suffix => {
+                return lowerName.includes(' ' + suffix) || lowerName.endsWith(' ' + suffix) || lowerName.startsWith(suffix + ' ');
+            });
+        };
+
+        const parsed = lines.slice(1).map(line => {
+            const values = parseCSVLine(line);
+            
+            let nameVal = '';
+            if (nameIdx !== -1) nameVal = values[nameIdx];
+            else nameVal = values[0];
+            
+            if (!nameVal) return null;
+
+            nameVal = nameVal.replace(/^"|"$/g, '').trim();
+
+            const companyVal = companyIdx !== -1 ? (values[companyIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const emailVal = emailIdx !== -1 ? (values[emailIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const phoneVal = phoneIdx !== -1 ? (values[phoneIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const docVal = docIdx !== -1 ? (values[docIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const docTypeVal = docTypeIdx !== -1 ? (values[docTypeIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const activityVal = activityIdx !== -1 ? (values[activityIdx] || '').replace(/^"|"$/g, '').trim() : '';
+            const addressVal = addressIdx !== -1 ? (values[addressIdx] || '').replace(/^"|"$/g, '').trim() : '';
+
+            // Auto-diferenciación de tipo de cliente
+            const isCompany = detectIsCompany(nameVal, companyVal);
+            const detectedType = isCompany ? qbImportType : 'Paciente (Clínico)';
+
+            // Auto-diferenciación del tipo de cédula
+            const cleanDni = docVal.replace(/\D/g, '');
+            let detectedDocType = 'Cédula Física';
+            if (docTypeVal) {
+                if (docTypeVal.toLowerCase().includes('jurid') || docTypeVal.toLowerCase().includes('juríd')) {
+                    detectedDocType = 'Cédula Jurídica';
+                } else if (docTypeVal.toLowerCase().includes('dimex')) {
+                    detectedDocType = 'DIMEX';
+                } else if (docTypeVal.toLowerCase().includes('nite') || docTypeVal.toLowerCase().includes('pasaporte')) {
+                    detectedDocType = 'NITE';
+                } else {
+                    detectedDocType = docTypeVal;
+                }
+            } else if (cleanDni) {
+                if (cleanDni.length === 10) {
+                    detectedDocType = 'Cédula Jurídica';
+                } else if (cleanDni.length === 11 || cleanDni.length === 12) {
+                    detectedDocType = 'DIMEX';
+                }
+            }
+
+            return {
+                name: nameVal,
+                company: companyVal,
+                document: docVal,
+                documentType: detectedDocType,
+                activityCode: activityVal,
+                email: emailVal,
+                phone: phoneVal,
+                extraInfo: addressVal,
+                type: detectedType
+            };
+        }).filter(Boolean);
+
+        setQbParsedClients(parsed);
+    };
+
+    // Import parsed clients to database
+    const handleImportQbClients = async () => {
+        if (qbParsedClients.length === 0) return;
+        setIsImporting(true);
+        const isOffline = user?.uid === 'offline-user';
+        let successCount = 0;
+
+        try {
+            const localClients = isOffline ? JSON.parse(localStorage.getItem('lims_local_clients') || '[]') : [];
+
+            for (const client of qbParsedClients) {
+                const exists = clients.some(c => c.name.toLowerCase() === client.name.toLowerCase()) || 
+                               (isOffline && localClients.some(c => c.name.toLowerCase() === client.name.toLowerCase()));
+                if (exists) {
+                    continue; // Skip duplicate names to prevent overwriting
+                }
+
+                const clientPayload = {
+                    name: client.name,
+                    document: client.document,
+                    documentType: client.documentType || 'Cédula Física',
+                    activityCode: client.activityCode || '',
+                    type: client.type, // Usar el tipo detectado/editado por cada fila
+                    extraInfo: client.extraInfo,
+                    birthDate: '',
+                    gender: '',
+                    contacts: [
+                        {
+                            name: client.name,
+                            email: client.email,
+                            phone: client.phone,
+                            department: 'Principal',
+                            role: 'General'
+                        }
+                    ],
+                    status: 'Activo',
+                    ltv: 0,
+                    lastContact: 'Importado de QuickBooks',
+                };
+
+                if (isOffline) {
+                    const newId = 'client-' + Date.now() + Math.random().toString(36).substring(2, 5);
+                    localClients.push({ id: newId, ...clientPayload, createdAt: new Date().toISOString() });
+                } else {
+                    clientPayload.createdAt = serverTimestamp();
+                    await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/clients`), clientPayload);
+                }
+                successCount++;
+            }
+
+            if (isOffline) {
+                localStorage.setItem('lims_local_clients', JSON.stringify(localClients));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            }
+
+            await logAuditAction(db, user?.uid, 'IMPORTAR_CLIENTES_QUICKBOOKS', `Importación QuickBooks: ${successCount} clientes importados.`, 'qb-import');
+            addNotification(`Importación completada: ${successCount} clientes importados, ${qbParsedClients.length - successCount} duplicados omitidos.`, "success");
+            setShowQbImportModal(false);
+            setQbParsedClients([]);
+        } catch (error) {
+            console.error("Error al importar clientes:", error);
+            addNotification("Ocurrió un error al importar los clientes.", "error");
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
+    const loadQbSyncSettings = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/qbwc/settings`);
+            if (res.ok) {
+                const data = await res.json();
+                setQbSyncSettings(data);
+            }
+        } catch (err) {
+            console.error("Error loading QBWC settings:", err);
+        }
+    };
+
+    const loadQbSyncedClients = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/qbwc/clients`);
+            if (res.ok) {
+                const data = await res.json();
+                setQbSyncedClients(data);
+            }
+        } catch (err) {
+            console.error("Error loading QBWC clients:", err);
+        }
+    };
+
+    const saveQbSyncPassword = async (e) => {
+        e.preventDefault();
+        if (!qbSyncPassword.trim()) return;
+        setIsSavingQbSettings(true);
+        try {
+            const res = await fetch(`${API_URL}/api/qbwc/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: qbSyncPassword })
+            });
+            if (res.ok) {
+                addNotification("Contraseña de sincronización actualizada con éxito.", "success");
+                setQbSyncPassword('');
+                loadQbSyncSettings();
+            } else {
+                addNotification("Error al guardar la contraseña.", "error");
+            }
+        } catch (err) {
+            console.error("Error saving QBWC password:", err);
+            addNotification("No se pudo conectar al servidor local del LIMS.", "error");
+        } finally {
+            setIsSavingQbSettings(false);
+        }
+    };
+
+    const importQbWebClients = async () => {
+        if (qbSyncedClients.length === 0) return;
+        setIsImportingQbWeb(true);
+        const isOffline = user?.uid === 'offline-user';
+        let successCount = 0;
+        try {
+            const localClients = isOffline ? JSON.parse(localStorage.getItem('lims_local_clients') || '[]') : [];
+            for (const client of qbSyncedClients) {
+                const exists = clients.some(c => c.name.toLowerCase() === client.name.toLowerCase()) || 
+                               (isOffline && localClients.some(c => c.name.toLowerCase() === client.name.toLowerCase()));
+                if (exists) continue; // Skip existing client names
+                
+                const clientPayload = {
+                    name: client.name,
+                    document: client.document || '',
+                    documentType: client.documentType || 'Cédula Física',
+                    activityCode: client.activityCode || '',
+                    type: client.companyName ? 'Empresa de Alimentos' : 'Paciente (Clínico)',
+                    extraInfo: client.billingAddr || '',
+                    birthDate: '',
+                    gender: '',
+                    contacts: client.email || client.phone ? [{
+                        name: client.name,
+                        email: client.email || '',
+                        phone: client.phone || '',
+                        role: 'Principal',
+                        department: 'General'
+                    }] : [],
+                    status: 'Activo',
+                    createdAt: isOffline ? { seconds: Math.floor(Date.now() / 1000) } : serverTimestamp()
+                };
+
+                if (isOffline) {
+                    clientPayload.id = `client-local-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+                    localClients.unshift(clientPayload);
+                    localStorage.setItem('lims_local_clients', JSON.stringify(localClients));
+                } else {
+                    await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/clients`), clientPayload);
+                }
+                successCount++;
+            }
+            
+            if (isOffline) {
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            }
+            
+            addNotification(`Sincronización completa: ${successCount} nuevos clientes importados al CRM.`, "success");
+            setQbSyncedClients([]);
+            setShowQbSyncModal(false);
+        } catch (err) {
+            console.error("Error importing synced clients:", err);
+            addNotification("Error al importar los clientes.", "error");
+        } finally {
+            setIsImportingQbWeb(false);
+        }
+    };
+
+
     const handleEditClient = () => {
         if (!selectedClient) return;
         setEditingClientId(selectedClient.id);
@@ -150,6 +466,8 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
         setNewClientType(normalizedType);
         setProfileName(selectedClient.name || '');
         setProfileDocument(selectedClient.document || '');
+        setProfileDocumentType(selectedClient.documentType || 'Cédula Física');
+        setProfileActivityCode(selectedClient.activityCode || '');
         setExtraInfo(selectedClient.extraInfo || '');
         setBirthDate(selectedClient.birthDate || '');
         setGender(selectedClient.gender || 'Masculino');
@@ -187,11 +505,24 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
 
         if (window.confirm(`¿Está seguro de eliminar a ${client.name}? Esta acción no se puede deshacer y el perfil desaparecerá del directorio.`)) {
             try {
-                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/clients`, client.id));
-                await logAuditAction(db, user?.uid, 'ELIMINAR_CLIENTE_CRM', `Perfil eliminado: ${client.name}`, client.id);
-                addNotification("Perfil eliminado exitosamente.", "success");
-                if (selectedClient?.id === client.id) {
-                    setSelectedClient(null);
+                if (user?.uid === 'offline-user') {
+                    const localClients = JSON.parse(localStorage.getItem('lims_local_clients') || '[]');
+                    const filtered = localClients.filter(c => c.id !== client.id);
+                    localStorage.setItem('lims_local_clients', JSON.stringify(filtered));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_CLIENTE_CRM', `Perfil eliminado: ${client.name}`, client.id);
+                    addNotification("Perfil eliminado exitosamente.", "success");
+                    if (selectedClient?.id === client.id) {
+                        setSelectedClient(null);
+                    }
+                } else {
+                    await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/clients`, client.id));
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_CLIENTE_CRM', `Perfil eliminado: ${client.name}`, client.id);
+                    addNotification("Perfil eliminado exitosamente.", "success");
+                    if (selectedClient?.id === client.id) {
+                        setSelectedClient(null);
+                    }
                 }
             } catch (error) {
                 console.error("Error al eliminar cliente:", error);
@@ -200,9 +531,30 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
         }
     };
 
+    const handleRegistryLookup = async () => {
+        if (!profileDocument.trim()) {
+            addNotification("Por favor ingrese una cédula o identificación para consultar.", "warning");
+            return;
+        }
+        setIsSearchingRegistry(true);
+        try {
+            const result = await lookupCivilRegistry(profileDocument);
+            setProfileName(result.name);
+            setBirthDate(result.birthDate);
+            setGender(result.gender);
+            setProfileDocument(result.document);
+            addNotification(`Cédula consultada con éxito: ${result.name}`, "success");
+        } catch (error) {
+            addNotification("Error de consulta: " + error.message, "error");
+        } finally {
+            setIsSearchingRegistry(false);
+        }
+    };
+
     const handleSaveClient = async (e) => {
         e.preventDefault();
-        if (!db) {
+        const isOffline = user?.uid === 'offline-user';
+        if (!db && !isOffline) {
             addNotification("Base de datos no disponible.", "error");
             return;
         }
@@ -285,6 +637,8 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
             const clientPayload = {
                 name,
                 document: profileDocument.trim(),
+                documentType: profileDocumentType,
+                activityCode: profileActivityCode.trim(),
                 type: newClientType,
                 extraInfo: extraInfo.trim(),
                 birthDate: (newClientType === 'Paciente (Clínico)') ? birthDate : '',
@@ -295,23 +649,46 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                 lastContact: 'Justo ahora',
             };
 
-            if (editingClientId) {
-                const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/clients`, editingClientId);
-                await updateDoc(docRef, { ...clientPayload, updatedAt: serverTimestamp() });
-                await logAuditAction(db, user?.uid, 'EDITAR_CLIENTE_CRM', `Perfil editado: ${name}`, editingClientId);
-                addNotification("Perfil actualizado exitosamente.", "success");
-
-                setSelectedClient(prev => ({ ...prev, ...clientPayload, id: editingClientId }));
+            if (isOffline) {
+                const localClients = JSON.parse(localStorage.getItem('lims_local_clients') || '[]');
+                if (editingClientId) {
+                    const idx = localClients.findIndex(c => c.id === editingClientId);
+                    if (idx > -1) {
+                        localClients[idx] = { ...localClients[idx], ...clientPayload, updatedAt: new Date().toISOString() };
+                    }
+                    localStorage.setItem('lims_local_clients', JSON.stringify(localClients));
+                    await logAuditAction(db, user?.uid, 'EDITAR_CLIENTE_CRM', `Perfil editado: ${name}`, editingClientId);
+                    addNotification("Perfil actualizado exitosamente.", "success");
+                    setSelectedClient(prev => ({ ...prev, ...clientPayload, id: editingClientId }));
+                } else {
+                    const newId = 'client-' + Date.now();
+                    localClients.push({ id: newId, ...clientPayload, createdAt: new Date().toISOString() });
+                    localStorage.setItem('lims_local_clients', JSON.stringify(localClients));
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_CLIENTE_CRM', `Perfil creado: ${name} (${newClientType}) con ${cleanContacts.length} contactos.`, newId);
+                    addNotification("Perfil registrado exitosamente.", "success");
+                }
+                window.dispatchEvent(new Event('lims_local_data_updated'));
             } else {
-                clientPayload.createdAt = serverTimestamp();
-                const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/clients`), clientPayload);
-                await logAuditAction(db, user?.uid, 'REGISTRAR_CLIENTE_CRM', `Perfil creado: ${name} (${newClientType}) con ${cleanContacts.length} contactos.`, docRef.id);
-                addNotification("Perfil registrado exitosamente.", "success");
+                if (editingClientId) {
+                    const docRef = doc(db, `artifacts/${LIMSSystemId}/public/data/clients`, editingClientId);
+                    await updateDoc(docRef, { ...clientPayload, updatedAt: serverTimestamp() });
+                    await logAuditAction(db, user?.uid, 'EDITAR_CLIENTE_CRM', `Perfil editado: ${name}`, editingClientId);
+                    addNotification("Perfil actualizado exitosamente.", "success");
+
+                    setSelectedClient(prev => ({ ...prev, ...clientPayload, id: editingClientId }));
+                } else {
+                    clientPayload.createdAt = serverTimestamp();
+                    const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/clients`), clientPayload);
+                    await logAuditAction(db, user?.uid, 'REGISTRAR_CLIENTE_CRM', `Perfil creado: ${name} (${newClientType}) con ${cleanContacts.length} contactos.`, docRef.id);
+                    addNotification("Perfil registrado exitosamente.", "success");
+                }
             }
 
             // Clean form states
             setProfileName('');
             setProfileDocument('');
+            setProfileDocumentType('Cédula Física');
+            setProfileActivityCode('');
             setExtraInfo('');
             setBirthDate('');
             setGender('Masculino');
@@ -431,24 +808,45 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                     <button onClick={() => { setActiveCrmTab('Empresas'); setSelectedClient(null); }} className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${activeCrmTab === 'Empresas' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>🏭 Empresas</button>
                 </div>
 
-                <button
-                    onClick={() => {
-                        setEditingClientId(null);
-                        setProfileName('');
-                        setProfileDocument('');
-                        setExtraInfo('');
-                        setBirthDate('');
-                        setGender('Masculino');
-                        setSimpleEmail('');
-                        setPatientPhones([{ id: Date.now(), number: '', type: 'Celular' }]);
-                        setNewClientType(activeCrmTab === 'Pacientes' ? CLIENT_TYPES[0] : CLIENT_TYPES[2]); 
-                        setContacts([{ id: Date.now(), name: '', email: '', phone: '', department: '', role: 'Facturación' }]);
-                        setShowNewClientModal(true);
-                    }}
-                    className={`text-white px-4 py-2 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer ${activeCrmTab === 'Pacientes' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-800 hover:bg-slate-900'}`}
-                >
-                    <PlusCircle size={18} /> {activeCrmTab === 'Pacientes' ? 'Nuevo Paciente' : 'Nueva Empresa'}
-                </button>
+                <div className="flex gap-2 flex-wrap w-full sm:w-auto">
+                    <button
+                        onClick={() => {
+                            loadQbSyncSettings();
+                            loadQbSyncedClients();
+                            setShowQbSyncModal(true);
+                        }}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer text-sm"
+                    >
+                        <Activity size={18} /> QuickBooks Web Connector
+                    </button>
+                    <button
+                        onClick={() => {
+                            setQbParsedClients([]);
+                            setShowQbImportModal(true);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer text-sm"
+                    >
+                        <FileSpreadsheet size={18} /> Importar QuickBooks (CSV)
+                    </button>
+                    <button
+                        onClick={() => {
+                            setEditingClientId(null);
+                            setProfileName('');
+                            setProfileDocument('');
+                            setExtraInfo('');
+                            setBirthDate('');
+                            setGender('Masculino');
+                            setSimpleEmail('');
+                            setPatientPhones([{ id: Date.now(), number: '', type: 'Celular' }]);
+                            setNewClientType(activeCrmTab === 'Pacientes' ? CLIENT_TYPES[0] : CLIENT_TYPES[2]); 
+                            setContacts([{ id: Date.now(), name: '', email: '', phone: '', department: '', role: 'Facturación' }]);
+                            setShowNewClientModal(true);
+                        }}
+                        className={`text-white px-4 py-2 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer text-sm ${activeCrmTab === 'Pacientes' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-800 hover:bg-slate-900'}`}
+                    >
+                        <PlusCircle size={18} /> {activeCrmTab === 'Pacientes' ? 'Nuevo Paciente' : 'Nueva Empresa'}
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
@@ -508,7 +906,16 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2 mb-2">
                                         <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">{selectedClient.type}</span>
-                                        {selectedClient.document && <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">ID: {selectedClient.document}</span>}
+                                        {selectedClient.document && (
+                                            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                                                ID: {selectedClient.document} ({selectedClient.documentType || 'Cédula Física'})
+                                            </span>
+                                        )}
+                                        {selectedClient.activityCode && (
+                                            <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md font-mono">
+                                                Cód. Actividad: {selectedClient.activityCode}
+                                            </span>
+                                        )}
                                         {selectedClient.birthDate && <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">Nac: {selectedClient.birthDate.split('-').reverse().join('/')}</span>}
                                         {selectedClient.gender && <span className="text-xs text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">Sexo: {selectedClient.gender}</span>}
                                     </div>
@@ -720,8 +1127,63 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                                             </select>
                                         </div>
                                         <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-1">Tipo de Identificación (Hacienda)</label>
+                                            <select
+                                                value={profileDocumentType}
+                                                onChange={e => setProfileDocumentType(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700 cursor-pointer"
+                                            >
+                                                <option value="Cédula Física">Cédula Física (Costa Rica)</option>
+                                                <option value="Cédula Jurídica">Cédula Jurídica (Costa Rica)</option>
+                                                <option value="DIMEX">DIMEX (Extranjeros CR)</option>
+                                                <option value="NITE">NITE / Pasaporte</option>
+                                            </select>
+                                        </div>
+                                        <div>
                                             <label className="block text-sm font-bold text-slate-700 mb-1">NIT / Cédula / Identificación</label>
-                                            <input type="text" value={profileDocument} onChange={e => setProfileDocument(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700" placeholder="Ej. 1-1234-5678" />
+                                            {newClientType === 'Paciente (Clínico)' ? (
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={profileDocument} 
+                                                        onChange={e => setProfileDocument(e.target.value)} 
+                                                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700" 
+                                                        placeholder="Ej. 1-1234-5678" 
+                                                    />
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={handleRegistryLookup}
+                                                        disabled={isSearchingRegistry}
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all disabled:opacity-50 border-0 cursor-pointer"
+                                                    >
+                                                        {isSearchingRegistry ? (
+                                                            <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                        ) : (
+                                                            <Search size={14} />
+                                                        )}
+                                                        <span>Consultar</span>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <input 
+                                                    type="text" 
+                                                    value={profileDocument} 
+                                                    onChange={e => setProfileDocument(e.target.value)} 
+                                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700" 
+                                                    placeholder="Ej. 1-1234-5678" 
+                                                />
+                                            )}
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-1">Código de Actividad Económica (Hacienda)</label>
+                                            <input 
+                                                type="text" 
+                                                maxLength="6"
+                                                value={profileActivityCode} 
+                                                onChange={e => setProfileActivityCode(e.target.value.replace(/\D/g, ''))} 
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700 font-mono" 
+                                                placeholder="Ej. 851901" 
+                                            />
                                         </div>
 
                                         {(newClientType === 'Paciente (Clínico)' || newClientType === 'Médico / Clínica') && (
@@ -927,6 +1389,323 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {showQbImportModal && (
+                <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden animate-fade-in flex flex-col">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                                    <FileSpreadsheet size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800">Importar Clientes desde QuickBooks</h3>
+                                    <p className="text-xs text-slate-500">Cargue un archivo CSV exportado de su QuickBooks.</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setShowQbImportModal(false); setQbParsedClients([]); }} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={24} /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm text-slate-600 space-y-2">
+                                <h5 className="font-bold text-slate-700">💡 Instrucciones de exportación en QuickBooks:</h5>
+                                <ol className="list-decimal pl-5 space-y-1">
+                                    <li>En QuickBooks, vaya al menú <strong>Ventas</strong> &gt; <strong>Clientes</strong> (o Customer Center).</li>
+                                    <li>Haga clic en el botón de exportar/Excel y elija <strong>Exportar lista de clientes</strong>.</li>
+                                    <li>Guarde el archivo con formato <strong>CSV (separado por comas)</strong>.</li>
+                                </ol>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Categoría / Sector para la Importación</label>
+                                    <select
+                                        value={qbImportType}
+                                        onChange={(e) => setQbImportType(e.target.value)}
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700 cursor-pointer"
+                                    >
+                                        {CLIENT_TYPES.map(type => (
+                                            <option key={type} value={type}>{type}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[11px] text-slate-400 mt-1">Todos los clientes importados en este lote serán asignados a esta categoría.</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">Seleccionar Archivo CSV</label>
+                                    <div className="relative">
+                                        <input
+                                            type="file"
+                                            accept=".csv"
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = (event) => {
+                                                    parseQbCsv(event.target.result);
+                                                };
+                                                reader.readAsText(file);
+                                            }}
+                                            className="hidden"
+                                            id="qb-csv-file"
+                                        />
+                                        <label
+                                            htmlFor="qb-csv-file"
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 border border-dashed border-indigo-300 rounded-xl cursor-pointer hover:bg-indigo-100/50 text-indigo-700 font-bold transition-all text-sm"
+                                        >
+                                            <Upload size={16} /> Subir archivo CSV
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {qbParsedClients.length > 0 && (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-bold text-slate-700 flex justify-between items-center text-sm">
+                                        <span>Clientes detectados ({qbParsedClients.length})</span>
+                                        <span className="text-xs text-slate-500 font-normal">Se omitirán registros con nombres duplicados</span>
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                                                <tr>
+                                                    <th className="p-3">Nombre</th>
+                                                    <th className="p-3">Categoría / Tipo</th>
+                                                    <th className="p-3">Identificación (Tipo)</th>
+                                                    <th className="p-3">Actividad</th>
+                                                    <th className="p-3">Email</th>
+                                                    <th className="p-3">Teléfono</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {qbParsedClients.slice(0, 50).map((c, i) => (
+                                                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                                        <td className="p-3 font-semibold text-slate-800">{c.name}</td>
+                                                        <td className="p-3">
+                                                            <select
+                                                                value={c.type}
+                                                                onChange={(e) => {
+                                                                    const updated = [...qbParsedClients];
+                                                                    updated[i].type = e.target.value;
+                                                                    setQbParsedClients(updated);
+                                                                }}
+                                                                className="px-2 py-1 bg-white border border-slate-300 rounded outline-none text-xs font-semibold text-slate-700 cursor-pointer focus:ring-1 focus:ring-indigo-500"
+                                                            >
+                                                                {CLIENT_TYPES.map(type => (
+                                                                    <option key={type} value={type}>{type}</option>
+                                                                ))}
+                                                            </select>
+                                                        </td>
+                                                        <td className="p-3 text-slate-600">
+                                                            <div>{c.document || '---'}</div>
+                                                            <div className="text-[10px] text-slate-400 font-bold uppercase">{c.documentType}</div>
+                                                        </td>
+                                                        <td className="p-3 text-slate-600 font-mono">{c.activityCode || '---'}</td>
+                                                        <td className="p-3 text-slate-500">{c.email || '---'}</td>
+                                                        <td className="p-3 text-slate-500">{c.phone || '---'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {qbParsedClients.length > 50 && (
+                                            <div className="p-3 bg-slate-50 text-center text-xs text-slate-500 border-t border-slate-100 font-medium">
+                                                Mostrando los primeros 50 de {qbParsedClients.length} clientes.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-4 border-t border-slate-100 flex justify-end gap-3 bg-white shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowQbImportModal(false);
+                                    setQbParsedClients([]);
+                                }}
+                                className="px-6 py-2 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleImportQbClients}
+                                disabled={isImporting || qbParsedClients.length === 0}
+                                className="px-6 py-2 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm cursor-pointer disabled:opacity-50 transition-colors flex items-center gap-2 text-sm"
+                            >
+                                {isImporting ? 'Importando...' : `Confirmar e Importar (${qbParsedClients.length})`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showQbSyncModal && (
+                <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-fade-in flex flex-col">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center animate-pulse">
+                                    <Activity size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-800">QuickBooks Web Connector</h3>
+                                    <p className="text-xs text-slate-500">Sincronización automática de clientes desde la PC dellmicrolabs</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setShowQbSyncModal(false); setQbSyncedClients([]); }} className="text-slate-400 hover:text-slate-600 cursor-pointer border-0 bg-transparent"><X size={24} /></button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Columna Izquierda: Configuración del Web Connector */}
+                                <div className="space-y-4 border-r border-slate-100 pr-0 md:pr-6">
+                                    <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wide border-b border-slate-100 pb-2">
+                                        <Settings size={16} /> 1. Configurar Conexión Local
+                                    </h4>
+                                    
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Usuario del Web Connector</label>
+                                            <input 
+                                                type="text" 
+                                                value="microlabs_sync" 
+                                                disabled 
+                                                className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-xl font-medium text-slate-500 cursor-not-allowed text-sm" 
+                                            />
+                                        </div>
+                                        
+                                        <form onSubmit={saveQbSyncPassword} className="space-y-2">
+                                            <label className="block text-xs font-bold text-slate-500 mb-1">Contraseña de Sincronización</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="password" 
+                                                    placeholder={qbSyncSettings.hasPassword ? "•••••••• (Guardada)" : "Escribe una contraseña"}
+                                                    value={qbSyncPassword} 
+                                                    onChange={e => setQbSyncPassword(e.target.value)} 
+                                                    className="flex-1 px-4 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500 transition-all font-medium text-slate-700 text-sm" 
+                                                />
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={isSavingQbSettings || !qbSyncPassword.trim()}
+                                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all disabled:opacity-50 border-0 cursor-pointer"
+                                                >
+                                                    {isSavingQbSettings ? 'Guardando...' : 'Guardar'}
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400">Esta contraseña se ingresa en el programa Web Connector en Windows.</p>
+                                        </form>
+                                    </div>
+                                    
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                        <h5 className="font-bold text-slate-700 text-xs">Instalar Archivo de Configuración (.QWC)</h5>
+                                        <p className="text-xs text-slate-500 leading-relaxed">
+                                            Descarga este archivo de configuración y ábrelo en el programa Web Connector de tu PC para enlazar automáticamente el sistema.
+                                        </p>
+                                        <a 
+                                            href={`${API_URL}/api/qbwc/qwc`} 
+                                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 rounded-xl transition-all text-xs no-underline"
+                                        >
+                                            <Download size={14} /> Descargar archivo QWC
+                                        </a>
+                                    </div>
+                                </div>
+                                
+                                {/* Columna Derecha: Estado de Sincronización e Importación */}
+                                <div className="space-y-4">
+                                    <h4 className="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wide border-b border-slate-100 pb-2">
+                                        <Clock size={16} /> 2. Estado de Sincronización
+                                    </h4>
+                                    
+                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2.5">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-500">Última Sincronización:</span>
+                                            {qbSyncSettings.lastSyncLog ? (
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                    qbSyncSettings.lastSyncLog.status === 'Éxito' ? 'bg-emerald-100 text-emerald-800' :
+                                                    qbSyncSettings.lastSyncLog.status === 'Error' ? 'bg-rose-100 text-rose-800' :
+                                                    'bg-indigo-100 text-indigo-800'
+                                                }`}>
+                                                    {qbSyncSettings.lastSyncLog.status}
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-slate-400 font-medium">Nunca sincronizado</span>
+                                            )}
+                                        </div>
+                                        
+                                        {qbSyncSettings.lastSyncLog && (
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-slate-700 font-semibold leading-relaxed">
+                                                    {qbSyncSettings.lastSyncLog.details}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400">
+                                                    {new Date(qbSyncSettings.lastSyncLog.time).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            <button 
+                                                type="button" 
+                                                onClick={loadQbSyncedClients}
+                                                className="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-bold px-4 py-2.5 rounded-xl border border-slate-200 shadow-sm transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                                            >
+                                                <History size={14} /> Cargar Clientes Sincronizados
+                                            </button>
+                                        </div>
+                                        
+                                        {qbSyncedClients.length > 0 && (
+                                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                                                <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 font-bold text-slate-700 flex justify-between items-center text-xs">
+                                                    <span>Nuevos Clientes de QuickBooks ({qbSyncedClients.length})</span>
+                                                </div>
+                                                <div className="max-h-40 overflow-y-auto">
+                                                    <table className="w-full text-left text-[11px]">
+                                                        <tbody>
+                                                            {qbSyncedClients.slice(0, 20).map((c, i) => (
+                                                                <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                                                    <td className="p-2 font-semibold text-slate-800">{c.name}</td>
+                                                                    <td className="p-2 text-slate-500 font-mono">{c.document || '---'}</td>
+                                                                    <td className="p-2 text-slate-400">{c.email || '---'}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div className="p-2 border-t border-slate-200 bg-white">
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={importQbWebClients}
+                                                        disabled={isImportingQbWeb}
+                                                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                                    >
+                                                        <PlusCircle size={14} /> 
+                                                        {isImportingQbWeb ? 'Importando...' : `Importar Nuevos al LIMS CRM (${qbSyncedClients.length})`}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="p-4 border-t border-slate-100 flex justify-end bg-white shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowQbSyncModal(false);
+                                    setQbSyncedClients([]);
+                                }}
+                                className="px-6 py-2 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors text-sm"
+                            >
+                                Cerrar Ventana
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

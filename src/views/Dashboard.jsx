@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { FileSpreadsheet, Printer, PlusCircle, Search, ChevronRight, ScanBarcode, Trash2 } from 'lucide-react';
 import { StatusBadge } from '../components/UI';
+import { SampleTraceabilityRoute } from '../components/SampleTraceabilityRoute';
 import { doc, deleteDoc } from 'firebase/firestore';
 import { db, LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
@@ -14,7 +15,8 @@ export const Dashboard = ({ requests, navigateTo, clients }) => {
 
     const handleDeleteRequest = async (e, req) => {
         e.stopPropagation();
-        if (window.confirm(`¿Está seguro de eliminar esta Orden de Laboratorio (${req.id.substring(0, 8).toUpperCase()})? Se perderán todos los resultados y el historial asociado a esta muestra. Esta acción es irreversible.`)) {
+        const shortId = (req.id || '').toString().substring(0, 8).toUpperCase();
+        if (window.confirm(`¿Está seguro de eliminar esta Orden de Laboratorio (${shortId})? Se perderán todos los resultados y el historial asociado a esta muestra. Esta acción es irreversible.`)) {
             try {
                 await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, req.id));
                 await logAuditAction(db, null, 'ELIMINAR_ORDEN', `Orden eliminada: ${req.id}`, req.id);
@@ -57,42 +59,46 @@ export const Dashboard = ({ requests, navigateTo, clients }) => {
             const term = searchTerm.toLowerCase();
             const clientName = getClientName(req).toLowerCase();
             const id = (req.id || '').toLowerCase();
-            return clientName.includes(term) || id.includes(term);
+            const analysis = (req.analysisRequested || '').toLowerCase();
+            return clientName.includes(term) || id.includes(term) || analysis.includes(term);
         });
-    }, [requests, searchTerm, getClientName, activeTab]);
+    }, [requests, activeTab, searchTerm, getClientName]);
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800">Recepción de Muestras</h2>
-                    <p className="text-slate-500 text-sm">Gestione las solicitudes entrantes y su estado.</p>
+                    <h1 className="text-2xl font-bold text-slate-800">Listado de Órdenes & Muestras</h1>
+                    <p className="text-slate-500 text-sm">Monitoreo de estado y trazabilidad en tiempo real.</p>
                 </div>
-                <div className="flex gap-2 flex-wrap justify-end">
-                    <button onClick={() => navigateTo('bulk_upload')} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-all font-medium shadow-sm">
-                        <FileSpreadsheet size={18} /> Carga Masiva CSV
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => navigateTo('new_request', null, { mode: 'clinical' })} className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <PlusCircle size={15} /> + Paciente Clínico
                     </button>
-                    <button onClick={() => navigateTo('manual_form')} className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-all font-medium shadow-sm">
-                        <Printer size={18} /> Formulario Vacío
-                    </button>
-                    <button onClick={() => navigateTo('new_request', null, { mode: 'clinical' })} className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-all font-medium shadow-sm">
-                        <PlusCircle size={18} /> Paciente
-                    </button>
-                    <button onClick={() => navigateTo('new_request', null, { mode: 'industrial' })} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-900 transition-all font-medium shadow-sm">
-                        <PlusCircle size={18} /> Industria
+                    <button onClick={() => navigateTo('new_request', null, { mode: 'industrial' })} className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
+                        <PlusCircle size={15} /> + Muestra Industrial
                     </button>
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex bg-slate-200/60 p-1 rounded-xl w-max">
-                    <button onClick={() => setActiveTab('Todas')} className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'Todas' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Todas</button>
-                    <button onClick={() => setActiveTab('Clínicas')} className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'Clínicas' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>🏥 Clínicas</button>
-                    <button onClick={() => setActiveTab('Industriales')} className={`px-5 py-2 text-sm font-bold rounded-lg transition-all ${activeTab === 'Industriales' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>🏭 Industriales</button>
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 border-b border-slate-200 pb-2">
+                <div className="flex gap-2">
+                    {['Todas', 'Clínicas', 'Industriales'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${
+                                activeTab === tab 
+                                    ? 'bg-slate-900 text-white' 
+                                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                            }`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
                 </div>
                 
-                {/* Lector de Código de Barras */}
-                <form onSubmit={handleBarcodeSubmit} className="relative w-full sm:w-auto">
+                <form onSubmit={handleBarcodeSubmit} className="relative">
                     <ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500" size={18} />
                     <input
                         type="text"
@@ -123,6 +129,7 @@ export const Dashboard = ({ requests, navigateTo, clients }) => {
                             <tr>
                                 <th className="px-6 py-4">ID Sistema</th>
                                 <th className="px-6 py-4">{activeTab === 'Clínicas' ? 'Paciente / Médico' : activeTab === 'Industriales' ? 'Empresa' : 'Cliente / Paciente'}</th>
+                                <th className="px-6 py-4">Ruta / Trazabilidad</th>
                                 <th className="px-6 py-4">Fecha</th>
                                 <th className="px-6 py-4">Estado</th>
                                 <th className="px-6 py-4 text-right">Gestión</th>
@@ -131,10 +138,13 @@ export const Dashboard = ({ requests, navigateTo, clients }) => {
                         <tbody className="divide-y divide-slate-100">
                             {filteredRequests.length > 0 ? filteredRequests.map(req => (
                                 <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4 font-mono text-sm text-slate-600 font-medium">{req.id.substring(0, 8).toUpperCase()}</td>
+                                    <td className="px-6 py-4 font-mono text-sm text-slate-600 font-medium">{(req.id || '').toString().substring(0, 8).toUpperCase()}</td>
                                     <td className="px-6 py-4">
                                         <p className="font-semibold text-slate-900">{getClientName(req)}</p>
-                                        <p className="text-xs text-slate-500 capitalize">{req.clientType}</p>
+                                        <p className="text-xs text-slate-500 capitalize">{req.clientType} • {req.analysisRequested || 'Análisis'}</p>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <SampleTraceabilityRoute request={req} compact={true} />
                                     </td>
                                     <td className="px-6 py-4 text-sm text-slate-600">
                                         {req.requestDate?.toDate 
@@ -156,7 +166,7 @@ export const Dashboard = ({ requests, navigateTo, clients }) => {
                                     </td>
                                 </tr>
                             )) : (
-                                <tr><td colSpan="5" className="text-center py-12 text-slate-400 italic">No hay solicitudes activas.</td></tr>
+                                <tr><td colSpan="6" className="text-center py-12 text-slate-400 italic">No hay solicitudes activas.</td></tr>
                             )}
                         </tbody>
                     </table>

@@ -35,7 +35,7 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
     return (
         <header className="bg-white border-b h-16 flex items-center justify-between px-6 z-10 shrink-0 print:hidden relative">
             <div className="md:hidden flex items-center gap-2 cursor-pointer" onClick={() => navigateTo('home')}>
-                <Logo url={labInfo?.logoUrl} className="h-8 w-8" />
+                <Logo url={labInfo?.logoUrl} variant="icon" className="h-8 w-8" />
                 <h1 className="font-bold text-slate-800">LIMS</h1>
             </div>
             <div className="hidden md:block"></div> {/* Spacer for desktop */}

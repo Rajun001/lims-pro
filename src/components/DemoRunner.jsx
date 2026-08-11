@@ -170,88 +170,112 @@ const STEPS = [
             ctx.log('Módulo CRM: Cargando directorio de relaciones...');
             await ctx.sleep(1500);
             
-            const newProfileBtn = ctx.findBtn('Nuevo Perfil');
+            // Asegurar que estamos en la pestaña Pacientes
+            const pacientesTab = ctx.findBtn('Pacientes');
+            if (pacientesTab) {
+                ctx.highlight(pacientesTab);
+                pacientesTab.click();
+                await ctx.sleep(800);
+            }
+
+            const newProfileBtn = ctx.findBtn('Nuevo Paciente') || ctx.findBtn('Nuevo Perfil');
             if (newProfileBtn) {
                 ctx.highlight(newProfileBtn);
                 newProfileBtn.click();
                 ctx.log('Módulo CRM: Abriendo modal de nuevo perfil...', 'info');
                 await ctx.sleep(1000);
                 
-                const patientBtn = ctx.findBtn('Paciente');
-                if (patientBtn) {
-                    ctx.highlight(patientBtn);
-                    patientBtn.click();
+                // Intentar seleccionar la categoría en el select o buscar botón
+                const selectEl = document.querySelector('select');
+                if (selectEl) {
+                    ctx.highlight(selectEl);
+                    selectEl.value = 'Paciente (Clínico)';
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
                     await ctx.sleep(800);
+                }
+
+                const nameInput = document.querySelector('input[placeholder*="Juan Pérez"]') || document.querySelector('input[placeholder*="Nombre"]');
+                const dniInput = document.querySelector('input[placeholder*="1-1234"]') || document.querySelector('input[placeholder*="Identificación"]');
+                const telInput = document.querySelector('input[placeholder*="8888"]') || document.querySelector('input[placeholder*="Teléfono"]');
+                
+                if (nameInput && dniInput && telInput) {
+                    ctx.highlight(nameInput);
+                    ctx.typeVal(nameInput, 'Paciente Simulado E2E');
+                    await ctx.sleep(500);
                     
-                    const nameInput = document.querySelector('input[placeholder*="Juan Pérez Gómez"]');
-                    const dniInput = document.querySelector('input[placeholder*="123456789"]');
-                    const telInput = document.querySelector('input[placeholder*="2233-4455"]');
+                    ctx.highlight(dniInput);
+                    ctx.typeVal(dniInput, '1-9999-9999');
+                    await ctx.sleep(500);
                     
-                    if (nameInput && dniInput && telInput) {
-                        ctx.typeVal(nameInput, 'Paciente Simulado E2E');
-                        await ctx.sleep(500);
-                        ctx.typeVal(dniInput, 'DNI-E2E-2026');
-                        await ctx.sleep(500);
-                        ctx.typeVal(telInput, '9999-9999');
-                        await ctx.sleep(1000);
-                        
-                        const saveProfileBtn = ctx.findBtn('Guardar Perfil');
-                        if (saveProfileBtn) {
-                            ctx.highlight(saveProfileBtn);
-                            saveProfileBtn.click();
-                            ctx.log('Módulo CRM: Guardando nuevo perfil de paciente...', 'info');
-                            await ctx.sleep(1500);
-                            ctx.log('Módulo CRM: Perfil guardado con éxito. Registro en auditoría completado.', 'success');
-                        } else {
-                            throw new Error('Botón "Guardar Perfil" no encontrado.');
-                        }
+                    ctx.highlight(telInput);
+                    ctx.typeVal(telInput, '8888-8888');
+                    await ctx.sleep(1000);
+                    
+                    const saveProfileBtn = ctx.findBtn('Guardar Expediente') || ctx.findBtn('Guardar Perfil') || ctx.findBtn('Guardar');
+                    if (saveProfileBtn) {
+                        ctx.highlight(saveProfileBtn);
+                        saveProfileBtn.click();
+                        ctx.log('Módulo CRM: Guardando nuevo perfil de paciente...', 'info');
+                        await ctx.sleep(1500);
+                        ctx.log('Módulo CRM: Perfil guardado con éxito. Registro en auditoría completado.', 'success');
                     } else {
-                        throw new Error('Campos de formulario de paciente no encontrados.');
+                        throw new Error('Botón "Guardar Expediente" no encontrado.');
                     }
                 } else {
-                    throw new Error('Opción de tipo "Paciente" en el modal no encontrada.');
+                    throw new Error('Campos de formulario de paciente no encontrados.');
                 }
             } else {
-                throw new Error('Botón "Nuevo Perfil" no encontrado.');
+                throw new Error('Botón "Nuevo Paciente" no encontrado.');
             }
             
-            ctx.nextStep('/client_settings');
+            ctx.nextStep('/crm');
         }
     },
     {
         name: 'Configuración Clientes',
-        route: '/client_settings',
+        route: '/crm',
         action: async (ctx) => {
-            ctx.log('Módulo Ajustes de Clientes: Cargando directorio general...');
+            ctx.log('Módulo CRM (Empresas): Cargando directorio de empresas corporativas...');
             await ctx.sleep(1500);
             
-            const newBtn = ctx.findBtn('Nuevo');
+            const empresasTab = ctx.findBtn('Empresas');
+            if (empresasTab) {
+                ctx.highlight(empresasTab);
+                empresasTab.click();
+                ctx.log('Módulo CRM: Cambiando a pestaña de Empresas...', 'info');
+                await ctx.sleep(1000);
+            } else {
+                throw new Error('Pestaña "Empresas" no encontrada.');
+            }
+
+            const newBtn = ctx.findBtn('Nueva Empresa') || ctx.findBtn('Nuevo');
             if (newBtn) {
                 ctx.highlight(newBtn);
                 newBtn.click();
-                ctx.log('Módulo Ajustes de Clientes: Modal de creación abierto.', 'info');
+                ctx.log('Módulo CRM: Modal de creación de empresa abierto.', 'info');
                 await ctx.sleep(1000);
                 
                 const nameInput = document.querySelector('input[placeholder*="Juan Pérez"]');
                 if (nameInput) {
-                    ctx.typeVal(nameInput, 'Cliente Demo E2E');
+                    ctx.highlight(nameInput);
+                    ctx.typeVal(nameInput, 'Empresa Alimenticia Demo E2E');
                     await ctx.sleep(1000);
                     
-                    const saveBtn = ctx.findBtn('Guardar');
+                    const saveBtn = ctx.findBtn('Guardar Expediente') || ctx.findBtn('Guardar');
                     if (saveBtn) {
                         ctx.highlight(saveBtn);
                         saveBtn.click();
-                        ctx.log('Módulo Ajustes de Clientes: Guardando cliente...', 'info');
+                        ctx.log('Módulo CRM: Guardando nueva empresa...', 'info');
                         await ctx.sleep(1500);
-                        ctx.log('Módulo Ajustes de Clientes: Cliente registrado con éxito.', 'success');
+                        ctx.log('Módulo CRM: Empresa registrada con éxito.', 'success');
                     } else {
-                        throw new Error('Botón de guardar no encontrado.');
+                        throw new Error('Botón de guardar empresa no encontrado.');
                     }
                 } else {
-                    throw new Error('Campo de nombre no encontrado.');
+                    throw new Error('Campo de nombre de empresa no encontrado.');
                 }
             } else {
-                throw new Error('Botón "Nuevo" no encontrado.');
+                throw new Error('Botón "Nueva Empresa" no encontrado.');
             }
             
             ctx.nextStep('/analysis_settings');

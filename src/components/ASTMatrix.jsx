@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, Trash2, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Trash2, AlertTriangle, Sparkles, Brain, CheckCircle2 } from 'lucide-react';
 import { FormInput } from './UI';
+import { generateMicrobiologyAIInterpretation } from '../services/aiService';
 
 // Diccionario Mock básico CLSI (Halo en mm)
 const CLSI_RULES = {
@@ -41,6 +42,8 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
     const [antibiotics, setAntibiotics] = useState(initialAntibiotics);
     const [newAbx, setNewAbx] = useState('');
     const [newHalo, setNewHalo] = useState('');
+    const [aiInterpretation, setAiInterpretation] = useState(savedResults?.aiInterpretation || '');
+    const [isInterpreting, setIsInterpreting] = useState(false);
 
     // Sincronizar estados cuando cambian los resultados guardados
     useEffect(() => {
@@ -48,6 +51,7 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
             /* eslint-disable react-hooks/set-state-in-effect */
             setPathogen(savedResults.pathogen || savedResults.bacteriaIdentified || '');
             setConcentration(savedResults.concentration || '');
+            if (savedResults.aiInterpretation) setAiInterpretation(savedResults.aiInterpretation);
             if (savedResults.antibiotics) {
                 setAntibiotics(savedResults.antibiotics);
             } else if (savedResults.jsonResults) {
@@ -75,16 +79,40 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
         return '-';
     };
 
-    const triggerChange = (updatedPathogen, updatedConcentration, updatedAntibiotics) => {
+    const triggerChange = (updatedPathogen, updatedConcentration, updatedAntibiotics, updatedAiInterp = aiInterpretation) => {
         const payload = {
             pathogen: updatedPathogen,
             bacteriaIdentified: updatedPathogen,
             concentration: updatedConcentration,
             antibiotics: updatedAntibiotics,
-            jsonResults: JSON.stringify(updatedAntibiotics)
+            jsonResults: JSON.stringify(updatedAntibiotics),
+            aiInterpretation: updatedAiInterp
         };
         if (onChange) onChange(payload);
         if (onSave) onSave(payload);
+    };
+
+    const handleRunAIInterpretation = async () => {
+        if (!pathogen && antibiotics.length === 0) {
+            alert("Por favor ingrese el microorganismo aislado o al menos un antibiótico para interpretar.");
+            return;
+        }
+        setIsInterpreting(true);
+        try {
+            const result = await generateMicrobiologyAIInterpretation({
+                pathogen,
+                antibiogram: antibiotics.map(a => ({ antibiotic: a.name, result: a.sir, zone: a.halo })),
+                colonyCount: concentration,
+                sampleType: 'Cultivo Clínico / Muestra'
+            });
+            setAiInterpretation(result);
+            triggerChange(pathogen, concentration, antibiotics, result);
+        } catch (err) {
+            console.error("Error en interpretación de IA:", err);
+            alert("Ocurrió un error al contactar al motor de IA.");
+        } finally {
+            setIsInterpreting(false);
+        }
     };
 
     const addAntibiotic = () => {
@@ -214,6 +242,44 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
                             ))}
                         </tbody>
                     </table>
+                )}
+            </div>
+
+            {/* PANEL DE INTERPRETACIÓN INTELIGENTE CON IA (CLSI / EUCAST) */}
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-indigo-900/60 pb-3">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                            <Sparkles size={16} />
+                        </div>
+                        <div>
+                            <h4 className="font-extrabold text-sm text-white">Interpretación Microbiológica Experta con IA</h4>
+                            <p className="text-[11px] text-slate-300">Análisis automatizado de resistencia (BLEE, MRSA, VRE) y relevancia clínica.</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleRunAIInterpretation}
+                        disabled={isInterpreting}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-md shadow-indigo-500/20 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                        <Brain size={14} className={isInterpreting ? "animate-pulse" : ""} />
+                        {isInterpreting ? 'Analizando con IA...' : '✨ Generar Interpretación IA'}
+                    </button>
+                </div>
+
+                {aiInterpretation ? (
+                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10 text-xs text-slate-200 leading-relaxed space-y-2">
+                        <div className="flex items-center justify-between text-indigo-300 font-bold text-[11px] pb-1 border-b border-white/10">
+                            <span className="flex items-center gap-1.5"><CheckCircle2 size={13} className="text-emerald-400" /> Diagnóstico y Susceptibilidad:</span>
+                            <span className="text-[10px] bg-indigo-500/30 px-2 py-0.5 rounded text-indigo-200">CLSI M100 / EUCAST</span>
+                        </div>
+                        <p className="whitespace-pre-line text-slate-100">{aiInterpretation}</p>
+                    </div>
+                ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                        Presione "Generar Interpretación IA" para evaluar automáticamente el patógeno y el patrón de sensibilidad.
+                    </p>
                 )}
             </div>
 

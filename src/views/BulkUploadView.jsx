@@ -5,6 +5,7 @@ import { LIMSSystemId as appId } from '../services/firebase';
 import { generateAnalysisCode } from '../utils/generators';
 
 export const BulkUploadView = ({ db, user, navigateTo }) => {
+    const [uploadType, setUploadType] = useState('clinical'); // 'clinical' | 'industrial'
     const [parsedData, setParsedData] = useState([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [results, setResults] = useState(null);
@@ -31,8 +32,8 @@ export const BulkUploadView = ({ db, user, navigateTo }) => {
                 identificacion: values[1]?.trim() || '',
                 email: values[2]?.trim() || '',
                 telefono: values[3]?.trim() || '',
-                tipo_muestra: values[4]?.trim() || 'Clínica',
-                analisis: values[5]?.trim() || 'General'
+                tipo_muestra: values[4]?.trim() || (uploadType === 'clinical' ? 'Sangre Total' : 'Alimentos'),
+                analisis: values[5]?.trim() || (uploadType === 'clinical' ? 'Hemograma Completo' : 'Recuento Total Aeróbico')
             };
         });
         setParsedData(data.filter(d => d.nombre));
@@ -46,29 +47,73 @@ export const BulkUploadView = ({ db, user, navigateTo }) => {
 
         for (const item of parsedData) {
             try {
+                const isClinical = uploadType === 'clinical';
                 const analysisCode = generateAnalysisCode(item.analisis);
-                await addDoc(collection(db, `artifacts/${appId}/public/data/requests`), {
-                    clientName: item.nombre,
-                    clientType: item.tipo_muestra,
-                    sampleType: item.tipo_muestra,
-                    identificacion: item.identificacion,
-                    email: item.email,
-                    telefono: item.telefono,
-                    requestDate: serverTimestamp(),
-                    analysisRequested: item.analisis,
-                    analysisCode,
-                    deliveryMethod: 'Email',
-                    analysisIds: [],
-                    results: {},
-                    status: 'Pendiente',
-                    createdAt: serverTimestamp(),
-                    createdBy: user?.uid || 'anon'
-                });
+
+                if (user?.uid === 'offline-user') {
+                    const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                    const newReq = {
+                        id: `MC-BULK-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+                        clientName: item.nombre,
+                        clientType: isClinical ? 'Clínica' : 'Industria',
+                        sampleType: isClinical ? 'Clínica' : item.tipo_muestra,
+                        sampleDescription: item.tipo_muestra,
+                        identificacion: item.identificacion,
+                        email: item.email,
+                        telefono: item.telefono,
+                        ...(isClinical ? {
+                            patientName: item.nombre,
+                            patientDNI: item.identificacion,
+                            patientPhone: item.telefono,
+                            requesterName: 'Médico Tratante / Consulta Externa'
+                        } : {}),
+                        requestDate: new Date().toISOString(),
+                        analysisRequested: item.analisis,
+                        analysisCode,
+                        deliveryMethod: 'Email',
+                        analysisIds: [],
+                        results: {},
+                        status: 'Pendiente',
+                        createdAt: { seconds: Math.floor(Date.now() / 1000) },
+                        createdBy: 'offline-user'
+                    };
+                    localReqs.unshift(newReq);
+                    localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                } else {
+                    await addDoc(collection(db, `artifacts/${appId}/public/data/requests`), {
+                        clientName: item.nombre,
+                        clientType: isClinical ? 'Clínica' : 'Industria',
+                        sampleType: isClinical ? 'Clínica' : item.tipo_muestra,
+                        sampleDescription: item.tipo_muestra,
+                        identificacion: item.identificacion,
+                        email: item.email,
+                        telefono: item.telefono,
+                        ...(isClinical ? {
+                            patientName: item.nombre,
+                            patientDNI: item.identificacion,
+                            patientPhone: item.telefono,
+                            requesterName: 'Médico Tratante / Consulta Externa'
+                        } : {}),
+                        requestDate: serverTimestamp(),
+                        analysisRequested: item.analisis,
+                        analysisCode,
+                        deliveryMethod: 'Email',
+                        analysisIds: [],
+                        results: {},
+                        status: 'Pendiente',
+                        createdAt: serverTimestamp(),
+                        createdBy: user?.uid || 'anon'
+                    });
+                }
                 successCount++;
             } catch (e) {
                 console.error("Error creating request from batch:", e);
                 failCount++;
             }
+        }
+
+        if (user?.uid === 'offline-user') {
+            window.dispatchEvent(new Event('lims_local_data_updated'));
         }
 
         setIsProcessing(false);
@@ -82,13 +127,35 @@ export const BulkUploadView = ({ db, user, navigateTo }) => {
             </button>
 
             <div className="bg-white p-8 sm:p-10 rounded-2xl shadow-sm border border-slate-200">
-                <div className="mb-8 border-b border-slate-100 pb-6 flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                        <FileSpreadsheet size={24} />
+                <div className="mb-8 border-b border-slate-100 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                            <FileSpreadsheet size={24} />
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Carga Masiva de Solicitudes</h2>
+                            <p className="text-slate-500 text-sm mt-1">Sube un archivo CSV para generar múltiples órdenes en bloque.</p>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Carga Masiva de Solicitudes</h2>
-                        <p className="text-slate-500 text-sm mt-1">Sube un archivo CSV para generar múltiples solicitudes automáticamente.</p>
+
+                    {/* Selector de Tipo de Carga */}
+                    <div className="flex bg-slate-200 p-1 rounded-xl">
+                        <button 
+                            onClick={() => { setUploadType('clinical'); setParsedData([]); }} 
+                            className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${
+                                uploadType === 'clinical' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            🏥 Pacientes (Clínico)
+                        </button>
+                        <button 
+                            onClick={() => { setUploadType('industrial'); setParsedData([]); }} 
+                            className={`px-4 py-2 rounded-lg font-bold text-xs transition-all ${
+                                uploadType === 'industrial' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            🏭 Industria (Alimentos/Aguas)
+                        </button>
                     </div>
                 </div>
 
@@ -98,22 +165,34 @@ export const BulkUploadView = ({ db, user, navigateTo }) => {
                             <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" id="csv-upload" />
                             <label htmlFor="csv-upload" className="cursor-pointer flex flex-col items-center justify-center">
                                 <FileSpreadsheet size={40} className="text-slate-400 mb-4" />
-                                <span className="text-lg font-bold text-slate-700">Seleccionar Archivo CSV</span>
-                                <span className="text-sm text-slate-500 mt-2">Formato esperado (separado por comas):<br />Nombre, Identificación, Email, Teléfono, Tipo_Muestra, Análisis</span>
+                                <span className="text-lg font-bold text-slate-700">Seleccionar Archivo CSV ({uploadType === 'clinical' ? 'Pacientes' : 'Alimentos/Aguas'})</span>
+                                <span className="text-sm text-slate-500 mt-2">
+                                    Formato esperado (separado por comas):<br />
+                                    {uploadType === 'clinical' ? (
+                                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200 mt-1 inline-block">
+                                            Nombre Paciente, Cédula, Email, Teléfono, Tipo Muestra Biológica, Prueba Clínica
+                                        </span>
+                                    ) : (
+                                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200 mt-1 inline-block">
+                                            Nombre Empresa, Cédula Jurídica, Email, Teléfono, Tipo Muestra (Alimento/Agua), Análisis Requerido
+                                        </span>
+                                    )}
+                                </span>
                             </label>
                         </div>
 
                         {parsedData.length > 0 && (
                             <div className="border border-slate-200 rounded-xl overflow-hidden">
                                 <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 font-bold text-slate-700 flex justify-between items-center">
-                                    <span>Vista Previa ({parsedData.length} registros)</span>
+                                    <span>Vista Previa ({parsedData.length} registros - Modo {uploadType === 'clinical' ? 'Clínico' : 'Industrial'})</span>
                                 </div>
                                 <div className="max-h-64 overflow-y-auto">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
                                             <tr>
-                                                <th className="p-3">Nombre</th>
+                                                <th className="p-3">{uploadType === 'clinical' ? 'Paciente' : 'Empresa'}</th>
                                                 <th className="p-3">Identificación</th>
+                                                <th className="p-3">Tipo Muestra</th>
                                                 <th className="p-3">Análisis</th>
                                             </tr>
                                         </thead>
@@ -122,7 +201,8 @@ export const BulkUploadView = ({ db, user, navigateTo }) => {
                                                 <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                                                     <td className="p-3 font-medium">{d.nombre}</td>
                                                     <td className="p-3">{d.identificacion}</td>
-                                                    <td className="p-3 font-mono text-xs">{d.analisis}</td>
+                                                    <td className="p-3"><span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">{d.tipo_muestra}</span></td>
+                                                    <td className="p-3 font-mono text-xs text-indigo-700">{d.analisis}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

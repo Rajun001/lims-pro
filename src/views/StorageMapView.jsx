@@ -14,8 +14,32 @@ export const StorageMapView = ({ db, user, requests }) => {
     const [searchResult, setSearchResult] = useState(null);
     const { addNotification } = useNotification();
 
-    // Load from Firestore
+    // Load from Firestore or LocalStorage
     useEffect(() => {
+        if (user?.uid === 'offline-user') {
+            const loadLocalBiobank = () => {
+                const localBiobank = localStorage.getItem('lims_local_storage_biobank')
+                    ? JSON.parse(localStorage.getItem('lims_local_storage_biobank'))
+                    : {};
+                if (localBiobank[selectedBox]) {
+                    setPositions(localBiobank[selectedBox].positions || Array(25).fill(null));
+                } else {
+                    // Initial mock state if not exists
+                    const initial = Array(25).fill(null);
+                    if (requests && requests.length > 0) {
+                        initial[2] = { id: requests[0].id, type: requests[0].sampleType || 'Clínico' };
+                        if (requests.length > 1) {
+                            initial[5] = { id: requests[1].id, type: requests[1].sampleType || 'Agua' };
+                        }
+                    }
+                    setPositions(initial);
+                }
+            };
+            loadLocalBiobank();
+            window.addEventListener('lims_local_data_updated', loadLocalBiobank);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalBiobank);
+        }
+
         if (!db) return;
         const unsub = onSnapshot(doc(db, `artifacts/${LIMSSystemId}/public/data/biobank`, selectedBox), (docSnap) => {
             if (docSnap.exists()) {
@@ -33,7 +57,7 @@ export const StorageMapView = ({ db, user, requests }) => {
             }
         });
         return () => unsub();
-    }, [db, selectedBox, requests]);
+    }, [db, selectedBox, requests, user]);
 
     const handleAssign = (index) => {
         if (positions[index]) {
@@ -58,17 +82,33 @@ export const StorageMapView = ({ db, user, requests }) => {
     };
 
     const handleSave = async () => {
-        if (!db) return;
         setIsSaving(true);
         try {
-            await setDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/biobank`, selectedBox), {
-                positions,
-                name: boxName,
-                updatedAt: new Date()
-            }, { merge: true });
-            
-            await logAuditAction(db, user?.uid, 'GUARDAR_BIOBANCO', `Actualizó caja de biobanco: ${boxName}`);
-            addNotification("Mapa físico guardado exitosamente.", "success");
+            if (user?.uid === 'offline-user') {
+                const localBiobank = localStorage.getItem('lims_local_storage_biobank')
+                    ? JSON.parse(localStorage.getItem('lims_local_storage_biobank'))
+                    : {};
+                localBiobank[selectedBox] = {
+                    positions,
+                    name: boxName,
+                    updatedAt: new Date().toISOString()
+                };
+                localStorage.setItem('lims_local_storage_biobank', JSON.stringify(localBiobank));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                
+                await logAuditAction(db, user?.uid, 'GUARDAR_BIOBANCO', `Actualizó caja de biobanco: ${boxName}`);
+                addNotification("Mapa físico guardado exitosamente.", "success");
+            } else {
+                if (!db) return;
+                await setDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/biobank`, selectedBox), {
+                    positions,
+                    name: boxName,
+                    updatedAt: new Date()
+                }, { merge: true });
+                
+                await logAuditAction(db, user?.uid, 'GUARDAR_BIOBANCO', `Actualizó caja de biobanco: ${boxName}`);
+                addNotification("Mapa físico guardado exitosamente.", "success");
+            }
         } catch (error) {
             console.error("Error saving biobank:", error);
             addNotification("Error al guardar en el biobanco.", "error");

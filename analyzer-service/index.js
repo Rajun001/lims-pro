@@ -1,6 +1,10 @@
 const net = require('net');
+const path = require('path');
 const { parseHL7 } = require('./parsers/hl7');
 const { parseASTM } = require('./parsers/astm');
+
+// Load environment variables from the project root
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 // Configuration
 const PORT = process.env.ANALYZER_PORT || 9000;
@@ -26,6 +30,26 @@ const sendToAPI = async (parsedData) => {
 
 // Create a TCP server
 const server = net.createServer((socket) => {
+  const remoteIp = socket.remoteAddress;
+  const allowedIpsStr = process.env.ALLOWED_ANALYZER_IPS || '';
+
+  if (allowedIpsStr) {
+    const allowedIps = allowedIpsStr.split(',').map(ip => ip.trim());
+    // Normalize IPv4-mapped IPv6 address (e.g. ::ffff:127.0.0.1 -> 127.0.0.1)
+    const cleanIp = remoteIp.startsWith('::ffff:') ? remoteIp.substring(7) : remoteIp;
+    
+    const isAllowed = allowedIps.some(allowedIp => {
+      return cleanIp === allowedIp || remoteIp === allowedIp;
+    });
+
+    if (!isAllowed) {
+      console.warn(`[!] Connection blocked: Unauthorized IP ${remoteIp}`);
+      socket.write('ERROR: Access Denied\n');
+      socket.destroy();
+      return;
+    }
+  }
+
   console.log(`[+] New connection from ${socket.remoteAddress}:${socket.remotePort}`);
 
   socket.on('data', async (data) => {

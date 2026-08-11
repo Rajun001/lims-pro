@@ -5,6 +5,7 @@ import { LIMSSystemId } from '../services/firebase';
 import { useNotification } from '../contexts/NotificationContext';
 import { StatusBadge } from '../components/UI';
 import { WorkcardDetail } from '../components/WorkcardDetail';
+import { getApiUrl } from '../utils/api.js';
 
 const STAGES = [
     { id: 'siembra', title: 'Recepción y Siembra', icon: <PlayCircle size={18} className="text-blue-500" /> },
@@ -13,9 +14,9 @@ const STAGES = [
     { id: 'completado', title: 'Completado (AST)', icon: <CheckCircle size={18} className="text-emerald-500" /> }
 ];
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = getApiUrl();
 
-export const MicrobiologyWorkcards = ({ requests, db, navigateTo }) => {
+export const MicrobiologyWorkcards = ({ requests, db, user, navigateTo }) => {
     const { addNotification } = useNotification();
     const [draggedReq, setDraggedReq] = useState(null);
     const [selectedReq, setSelectedReq] = useState(null);
@@ -71,9 +72,20 @@ export const MicrobiologyWorkcards = ({ requests, db, navigateTo }) => {
         if (!draggedReq || draggedReq.microbiologyStatus === stageId) return;
 
         try {
-            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, draggedReq.id);
-            await updateDoc(reqRef, { microbiologyStatus: stageId });
-            addNotification(`Muestra ${draggedReq.id.substring(0, 6)} movida a ${stageId}.`, 'info');
+            if (user?.uid === 'offline-user') {
+                const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                const idx = localReqs.findIndex(r => r.id === draggedReq.id);
+                if (idx > -1) {
+                    localReqs[idx].microbiologyStatus = stageId;
+                }
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+                addNotification(`Muestra ${draggedReq.id.substring(0, 6)} movida a ${stageId}.`, 'info');
+            } else {
+                const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, draggedReq.id);
+                await updateDoc(reqRef, { microbiologyStatus: stageId });
+                addNotification(`Muestra ${draggedReq.id.substring(0, 6)} movida a ${stageId}.`, 'info');
+            }
         } catch (error) {
             console.error("Error updating micro status:", error);
             addNotification("Error al actualizar el estado.", "error");
@@ -168,6 +180,41 @@ export const MicrobiologyWorkcards = ({ requests, db, navigateTo }) => {
                 onClose={() => setSelectedReq(null)}
                 onSave={async (data) => {
                     console.log('Guardando datos de Workcard:', data);
+                    const updatePayload = {
+                        media: data.media,
+                        readDay1: data.readings?.day1 || '',
+                        readDay2: data.readings?.day2 || '',
+                        readDay3: data.readings?.day3 || '',
+                        antibiogram: data.antibiogram || {},
+                        microbiologyAST: data.antibiogram || {},
+                        microbiologyStatus: (data.antibiogram?.pathogen || (data.antibiogram?.antibiotics && data.antibiogram.antibiotics.length > 0)) 
+                            ? 'completado' 
+                            : (selectedReq.microbiologyStatus === 'siembra' ? 'incubacion' : selectedReq.microbiologyStatus || 'lectura')
+                    };
+
+                    let saved = false;
+
+                    // 1. Guardado en Firebase o LocalStorage
+                    try {
+                        if (user?.uid === 'offline-user') {
+                            const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+                            const idx = localReqs.findIndex(r => r.id === selectedReq.id);
+                            if (idx > -1) {
+                                localReqs[idx] = { ...localReqs[idx], ...updatePayload };
+                            }
+                            localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                            window.dispatchEvent(new Event('lims_local_data_updated'));
+                            saved = true;
+                        } else if (db) {
+                            const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, selectedReq.id);
+                            await updateDoc(reqRef, updatePayload);
+                            saved = true;
+                        }
+                    } catch (fsErr) {
+                        console.error("Error guardando workcard en Firestore:", fsErr);
+                    }
+
+                    // 2. Sincronización opcional con API Node.js local
                     try {
                         const res = await fetch(`${API_URL}/api/workcards/${selectedReq.id}`, {
                             method: 'PUT',
@@ -175,16 +222,18 @@ export const MicrobiologyWorkcards = ({ requests, db, navigateTo }) => {
                             body: JSON.stringify(data)
                         });
                         if (res.ok) {
-                            addNotification("Guardado en la base de datos local exitosamente", "success");
-                            // Recargar workcards para ver el cambio (muy basico)
+                            saved = true;
                             const refetch = await fetch(`${API_URL}/api/workcards`);
                             if (refetch.ok) setApiRequests(await refetch.json());
-                        } else {
-                            addNotification("Error al guardar en BD", "error");
                         }
-                    } catch (e) {
-                        console.error(e);
-                        addNotification("Sin conexión a la API", "error");
+                    } catch {
+                        // Fallback silencioso si la API Express local no está levantada
+                    }
+
+                    if (saved) {
+                        addNotification("Hoja de cultivo y antibiograma actualizados exitosamente.", "success");
+                    } else {
+                        addNotification("No se pudieron guardar los cambios en la hoja de trabajo.", "error");
                     }
                 }}
             />

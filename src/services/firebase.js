@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
@@ -17,18 +17,21 @@ export const LIMSSystemId = 'lims-final-v5';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
 
-// Enable offline persistence to protect against network drops and data loss
+// Inicializar Firestore con la configuración moderna de persistencia de caché.
+// Se envuelve en try-catch para evitar caídas del sistema en navegadores como
+// Edge/Safari cuando las políticas de cookies o el modo incógnito bloquean IndexedDB.
+let firestoreInstance;
 try {
-    enableMultiTabIndexedDbPersistence(db).catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn('Persistence failed: Multiple tabs open in older browser.');
-        } else if (err.code === 'unimplemented') {
-            console.warn('Persistence not supported by this browser.');
-        }
+    firestoreInstance = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+        })
     });
 } catch (e) {
-    console.error("Persistence setup error:", e);
+    console.warn("La persistencia de Firestore no es compatible con este navegador. Usando caché en memoria.", e);
+    firestoreInstance = getFirestore(app);
 }
+
+export const db = firestoreInstance;
+export const storage = getStorage(app);

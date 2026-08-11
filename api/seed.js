@@ -32,10 +32,16 @@ async function main() {
     where: { sampleId: sample.id }
   });
   if (!existingOrder) {
-    await prisma.order.create({
+    const order = await prisma.order.create({
       data: {
         sampleId: sample.id,
         status: "PENDING"
+      }
+    });
+    await prisma.test.create({
+      data: {
+        orderId: order.id,
+        testName: "Cultivo Microbiológico"
       }
     });
   }

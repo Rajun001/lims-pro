@@ -20,9 +20,19 @@ export const AnalysisSettings = ({ db, analyses, userRole, user, navigateTo }) =
     const handleDeleteAnalysis = async (id, name) => {
         if (window.confirm(`¿Está seguro de eliminar este Análisis (${name}) del catálogo? Las órdenes pasadas que lo contengan no se verán afectadas, pero no podrá volver a seleccionarse en nuevas órdenes.`)) {
             try {
-                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/analyses`, id));
-                await logAuditAction(db, user?.uid, 'ELIMINAR_ANALISIS', `Análisis eliminado del catálogo: ${name}`, id);
-                addNotification('Análisis eliminado exitosamente.', 'success');
+                if (user?.uid === 'offline-user') {
+                    const localAn = JSON.parse(localStorage.getItem('lims_local_analyses') || '[]');
+                    const filtered = localAn.filter(a => a.id !== id);
+                    localStorage.setItem('lims_local_analyses', JSON.stringify(filtered));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_ANALISIS', `Análisis eliminado del catálogo: ${name}`, id);
+                    addNotification('Análisis eliminado exitosamente.', 'success');
+                } else {
+                    await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/analyses`, id));
+                    await logAuditAction(db, user?.uid, 'ELIMINAR_ANALISIS', `Análisis eliminado del catálogo: ${name}`, id);
+                    addNotification('Análisis eliminado exitosamente.', 'success');
+                }
             } catch (error) {
                 console.error("Error al eliminar análisis:", error);
                 addNotification('Error al eliminar el análisis.', 'error');
@@ -50,11 +60,24 @@ export const AnalysisSettings = ({ db, analyses, userRole, user, navigateTo }) =
     const handleSave = async (e) => {
         e.preventDefault();
         try {
-            const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/analyses`), analysis);
-            await logAuditAction(db, user?.uid, 'CREAR_ANALISIS', `Análisis creado: ${analysis.name} (${analysis.code})`, docRef.id);
-            addNotification('Análisis registrado exitosamente.', 'success');
-            setIsEditing(false);
-            setAnalysis({ name: '', code: '', type: 'clinical', unit: '', equipmentMappings: [], minRange: '', maxRange: '' });
+            if (user?.uid === 'offline-user') {
+                const localAn = JSON.parse(localStorage.getItem('lims_local_analyses') || '[]');
+                const newId = 'an-' + Date.now();
+                localAn.push({ id: newId, ...analysis });
+                localStorage.setItem('lims_local_analyses', JSON.stringify(localAn));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+
+                await logAuditAction(db, user?.uid, 'CREAR_ANALISIS', `Análisis creado: ${analysis.name} (${analysis.code})`, newId);
+                addNotification('Análisis registrado exitosamente.', 'success');
+                setIsEditing(false);
+                setAnalysis({ name: '', code: '', type: 'clinical', unit: '', equipmentMappings: [], minRange: '', maxRange: '' });
+            } else {
+                const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/analyses`), analysis);
+                await logAuditAction(db, user?.uid, 'CREAR_ANALISIS', `Análisis creado: ${analysis.name} (${analysis.code})`, docRef.id);
+                addNotification('Análisis registrado exitosamente.', 'success');
+                setIsEditing(false);
+                setAnalysis({ name: '', code: '', type: 'clinical', unit: '', equipmentMappings: [], minRange: '', maxRange: '' });
+            }
         } catch (error) {
             console.error("Error al registrar análisis:", error);
             addNotification('Error al registrar el análisis. Inténtelo de nuevo.', 'error');

@@ -4,19 +4,41 @@ import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/fire
 import { LIMSSystemId } from '../services/firebase';
 import { RestrictedAccess } from '../components/UI';
 
-export const SystemDiagnosticsView = ({ db, requests, clients, userRole, navigateTo }) => {
+export const SystemDiagnosticsView = ({ db, user, requests, clients, userRole, navigateTo }) => {
     const [activeTab, setActiveTab] = useState('errores');
     const [errors, setErrors] = useState([]);
 
     useEffect(() => {
-        if (!db || userRole !== 'admin') return;
+        if (userRole !== 'admin') return;
+
+        if (user?.uid === 'offline-user') {
+            const loadLocalErrors = () => {
+                let localErr = localStorage.getItem('lims_local_system_errors');
+                if (!localErr) {
+                    const defaultErrors = [
+                        { id: 'err-1', errorMessage: 'TypeError: Cannot read properties of undefined (reading "requests")', status: 'Pendiente', timestamp: { seconds: Math.floor(Date.now()/1000 - 3600) }, componentStack: 'in HomeDashboard\nin Routes\nin App' },
+                        { id: 'err-2', errorMessage: 'FirebaseError: Missing or insufficient permissions', status: 'Resuelto', timestamp: { seconds: Math.floor(Date.now()/1000 - 86400) }, componentStack: 'in InventoryView\nin App' }
+                    ];
+                    localStorage.setItem('lims_local_system_errors', JSON.stringify(defaultErrors));
+                    localErr = JSON.stringify(defaultErrors);
+                }
+                const data = JSON.parse(localErr);
+                data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
+                setErrors(data);
+            };
+            loadLocalErrors();
+            window.addEventListener('lims_local_data_updated', loadLocalErrors);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalErrors);
+        }
+
+        if (!db) return;
         const unsub = onSnapshot(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_system_errors`), (snap) => {
             const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
             setErrors(data);
         });
         return () => unsub();
-    }, [db, userRole]);
+    }, [db, userRole, user]);
 
     if (userRole !== 'admin') {
         return <RestrictedAccess navigateTo={navigateTo} />;
@@ -24,9 +46,19 @@ export const SystemDiagnosticsView = ({ db, requests, clients, userRole, navigat
 
     const markAsResolved = async (errorId) => {
         try {
-            await updateDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/lab_system_errors`, errorId), {
-                status: 'Resuelto'
-            });
+            if (user?.uid === 'offline-user') {
+                const localErr = JSON.parse(localStorage.getItem('lims_local_system_errors') || '[]');
+                const idx = localErr.findIndex(err => err.id === errorId);
+                if (idx > -1) {
+                    localErr[idx].status = 'Resuelto';
+                }
+                localStorage.setItem('lims_local_system_errors', JSON.stringify(localErr));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            } else {
+                await updateDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/lab_system_errors`, errorId), {
+                    status: 'Resuelto'
+                });
+            }
         } catch (e) {
             console.error("Error al actualizar:", e);
         }
@@ -35,7 +67,14 @@ export const SystemDiagnosticsView = ({ db, requests, clients, userRole, navigat
     const deleteError = async (errorId) => {
         if (window.confirm('¿Eliminar este registro permanentemente?')) {
             try {
-                await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/lab_system_errors`, errorId));
+                if (user?.uid === 'offline-user') {
+                    const localErr = JSON.parse(localStorage.getItem('lims_local_system_errors') || '[]');
+                    const filtered = localErr.filter(err => err.id !== errorId);
+                    localStorage.setItem('lims_local_system_errors', JSON.stringify(filtered));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                } else {
+                    await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/lab_system_errors`, errorId));
+                }
             } catch (e) {
                 console.error("Error al eliminar:", e);
             }

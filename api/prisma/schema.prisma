@@ -20,6 +20,8 @@ model Patient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   samples   Sample[]
+
+  @@index([firstName, lastName])
 }
 
 model Sample {
@@ -37,6 +39,9 @@ model Sample {
   orders       Order[]
   workcards    Workcard[]
   antibiograms Antibiogram[]
+
+  @@index([patientId])
+  @@index([receivedAt])
 }
 
 model Order {
@@ -48,6 +53,10 @@ model Order {
   updatedAt DateTime @updatedAt
 
   tests     Test[]
+
+  @@index([sampleId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Test {
@@ -60,6 +69,9 @@ model Test {
   unit           String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([testName])
 }
 
 model Workcard {
@@ -73,6 +85,8 @@ model Workcard {
   notes           String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@index([sampleId])
 }
 
 model Antibiogram {
@@ -85,4 +99,79 @@ model Antibiogram {
   jsonResults        String     
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  @@index([sampleId])
 }
+
+model InventoryItem {
+  id             Int       @id @default(autoincrement())
+  name           String
+  lot            String?
+  expirationDate DateTime?
+  stock          Int       @default(0)
+  unit           String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([name])
+}
+
+model Equipment {
+  id              String    @id // e.g., EQ-001
+  name            String
+  lastCalibration DateTime?
+  nextCalibration DateTime?
+  status          String    @default("Operativo")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model Capa {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  origin      String   // e.g. "Auditoría Interna", "Queja de Cliente"
+  status      String   @default("Abierta")
+  assignedTo  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model QbSyncedClient {
+  id           Int      @id @default(autoincrement())
+  listId       String   @unique
+  name         String
+  companyName  String?
+  email        String?
+  phone        String?
+  document     String?
+  documentType String?
+  activityCode String?
+  billingAddr  String?
+  syncedAt     DateTime @default(now())
+}
+
+model QbSettings {
+  key   String @id
+  value String
+}
+
+model AccessLog {
+  id         Int      @id @default(autoincrement())
+  timestamp  DateTime @default(now())
+  ip         String
+  accessType String   // "LOCAL" o "EXTERNAL"
+  userId     String?
+  email      String?
+  role       String?
+  company    String?
+  action     String   // ej. "SESSION_START", "SESSION_END", "API_REQUEST"
+  details    String?  // Guarda el User-Agent (navegador/dispositivo) u otros detalles
+
+  @@index([timestamp])
+  @@index([ip])
+  @@index([userId])
+}
+

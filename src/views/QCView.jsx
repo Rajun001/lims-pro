@@ -6,6 +6,10 @@ import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
 import { exportToCSV } from '../utils/exportUtils';
+import { formatToCRDate } from '../utils/dateFormatter.js';
+import { getApiUrl } from '../utils/api.js';
+
+const API_URL = getApiUrl();
 
 export const QCView = ({ db, user }) => {
     const [activeTab, setActiveTab] = useState('equipos');
@@ -20,6 +24,49 @@ export const QCView = ({ db, user }) => {
     const { addNotification } = useNotification();
 
     useEffect(() => {
+        if (user?.uid === 'offline-user') {
+            const loadLocalQC = async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/equipment`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        setEquipments(data.map(x => ({ docId: x.id, ...x })));
+                    } else {
+                        throw new Error();
+                    }
+                } catch {
+                    let localEq = localStorage.getItem('lims_local_qc_equipment');
+                    if (!localEq) {
+                        const defaultQcEquipments = [
+                            { id: 'EQ-001', name: 'Autoclave vertical', lastCal: '2026-01-10', nextCal: '2026-07-10', status: 'Operativo' },
+                            { id: 'EQ-002', name: 'Incubadora 37C', lastCal: '2026-02-15', nextCal: '2026-08-15', status: 'Operativo' },
+                            { id: 'EQ-003', name: 'Centrífuga de Mesa', lastCal: '2025-12-05', nextCal: '2026-06-05', status: 'Operativo' }
+                        ];
+                        localStorage.setItem('lims_local_qc_equipment', JSON.stringify(defaultQcEquipments));
+                        localEq = JSON.stringify(defaultQcEquipments);
+                    }
+                    setEquipments(JSON.parse(localEq).map(x => ({ docId: x.id, ...x })));
+                }
+
+                let localQc = localStorage.getItem('lims_local_qc_samples');
+                if (!localQc) {
+                    const defaultQcSamples = [
+                        { id: 'QC-BATCH-001', type: 'Estándar', parameter: 'E. coli ATCC 25922', result: 'Crecimiento esperado', limit: 'Crecimiento típico', status: 'Aprobado', createdAt: { seconds: Math.floor(Date.now()/1000 - 86400) } },
+                        { id: 'QC-BATCH-002', type: 'Blanco', parameter: 'Agar Sangre Esterilidad', result: 'Estéril', limit: 'Sin crecimiento', status: 'Aprobado', createdAt: { seconds: Math.floor(Date.now()/1000 - 172800) } }
+                    ];
+                    localStorage.setItem('lims_local_qc_samples', JSON.stringify(defaultQcSamples));
+                    localQc = JSON.stringify(defaultQcSamples);
+                }
+                const qcData = JSON.parse(localQc);
+                qcData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                setQcSamples(qcData.map(x => ({ docId: x.id, ...x })));
+            };
+            loadLocalQC();
+            window.addEventListener('lims_local_data_updated', loadLocalQC);
+            return () => window.removeEventListener('lims_local_data_updated', loadLocalQC);
+        }
+
+        if (!db) return;
         const unsubEq = onSnapshot(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_equipment`), (snap) => {
             setEquipments(snap.docs.map(d => ({ docId: d.id, ...d.data() })));
         });
@@ -29,20 +76,57 @@ export const QCView = ({ db, user }) => {
             setQcSamples(data);
         });
         return () => { unsubEq(); unsubQc(); };
-    }, [db]);
+    }, [db, user]);
 
     const addEquipment = async (e) => {
         e.preventDefault();
         try {
-            const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_equipment`), {
-                ...newEq,
-                status: 'Operativo',
-                createdAt: serverTimestamp()
-            });
-            await logAuditAction(db, user?.uid, 'AGREGAR_EQUIPO', `Equipo registrado: ${newEq.name} (${newEq.id})`, docRef.id);
-            addNotification('Equipo registrado exitosamente.', 'success');
-            setNewEq({ id: '', name: '', lastCal: '', nextCal: '' });
-            setShowEqModal(false);
+            if (user?.uid === 'offline-user') {
+                try {
+                    const res = await fetch(`${API_URL}/api/equipment`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: newEq.id,
+                            name: newEq.name,
+                            lastCal: newEq.lastCal,
+                            nextCal: newEq.nextCal,
+                            status: 'Operativo'
+                        })
+                    });
+                    if (!res.ok) throw new Error();
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    await logAuditAction(db, user?.uid, 'AGREGAR_EQUIPO', `Equipo registrado (API local): ${newEq.name} (${newEq.id})`, newEq.id);
+                    addNotification('Equipo registrado exitosamente en BD local.', 'success');
+                    setNewEq({ id: '', name: '', lastCal: '', nextCal: '' });
+                    setShowEqModal(false);
+                } catch {
+                    const localEq = JSON.parse(localStorage.getItem('lims_local_qc_equipment') || '[]');
+                    const newRecord = {
+                        ...newEq,
+                        status: 'Operativo',
+                        createdAt: { seconds: Math.floor(Date.now()/1000) }
+                    };
+                    localEq.push(newRecord);
+                    localStorage.setItem('lims_local_qc_equipment', JSON.stringify(localEq));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                    
+                    await logAuditAction(db, user?.uid, 'AGREGAR_EQUIPO', `Equipo registrado (Offline): ${newEq.name} (${newEq.id})`, newEq.id);
+                    addNotification('Equipo registrado exitosamente en localstorage.', 'success');
+                    setNewEq({ id: '', name: '', lastCal: '', nextCal: '' });
+                    setShowEqModal(false);
+                }
+            } else {
+                const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_equipment`), {
+                    ...newEq,
+                    status: 'Operativo',
+                    createdAt: serverTimestamp()
+                });
+                await logAuditAction(db, user?.uid, 'AGREGAR_EQUIPO', `Equipo registrado: ${newEq.name} (${newEq.id})`, docRef.id);
+                addNotification('Equipo registrado exitosamente.', 'success');
+                setNewEq({ id: '', name: '', lastCal: '', nextCal: '' });
+                setShowEqModal(false);
+            }
         } catch (error) {
             console.error("Error adding equipment:", error);
             addNotification('Error al registrar el equipo.', 'error');
@@ -52,17 +136,33 @@ export const QCView = ({ db, user }) => {
     const addQcSample = async (e) => {
         e.preventDefault();
         try {
-            // Super basic OOS logic: if result includes "OOS" or is out of numeric range (naive approach for demo)
             const isOos = String(newQc.result || '').toUpperCase().includes('OOS');
-            const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_qc_samples`), {
-                ...newQc,
-                status: isOos ? 'OOS' : 'Aprobado',
-                createdAt: serverTimestamp()
-            });
-            await logAuditAction(db, user?.uid, 'REGISTRAR_QC', `Lectura de QC registrada para lote ${newQc.id} (${newQc.parameter}: ${newQc.result}). Veredicto: ${isOos ? 'OOS' : 'Aprobado'}`, docRef.id);
-            addNotification('Lectura de control de calidad registrada exitosamente.', 'success');
-            setNewQc({ id: '', type: 'Blanco', parameter: '', result: '', limit: '' });
-            setShowQcModal(false);
+            if (user?.uid === 'offline-user') {
+                const localQc = JSON.parse(localStorage.getItem('lims_local_qc_samples') || '[]');
+                const newRecord = {
+                    ...newQc,
+                    status: isOos ? 'OOS' : 'Aprobado',
+                    createdAt: { seconds: Math.floor(Date.now()/1000) }
+                };
+                localQc.push(newRecord);
+                localStorage.setItem('lims_local_qc_samples', JSON.stringify(localQc));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+
+                await logAuditAction(db, user?.uid, 'REGISTRAR_QC', `Lectura de QC registrada para lote ${newQc.id} (${newQc.parameter}: ${newQc.result}). Veredicto: ${isOos ? 'OOS' : 'Aprobado'}`, newQc.id);
+                addNotification('Lectura de control de calidad registrada exitosamente.', 'success');
+                setNewQc({ id: '', type: 'Blanco', parameter: '', result: '', limit: '' });
+                setShowQcModal(false);
+            } else {
+                const docRef = await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/lab_qc_samples`), {
+                    ...newQc,
+                    status: isOos ? 'OOS' : 'Aprobado',
+                    createdAt: serverTimestamp()
+                });
+                await logAuditAction(db, user?.uid, 'REGISTRAR_QC', `Lectura de QC registrada para lote ${newQc.id} (${newQc.parameter}: ${newQc.result}). Veredicto: ${isOos ? 'OOS' : 'Aprobado'}`, docRef.id);
+                addNotification('Lectura de control de calidad registrada exitosamente.', 'success');
+                setNewQc({ id: '', type: 'Blanco', parameter: '', result: '', limit: '' });
+                setShowQcModal(false);
+            }
         } catch (error) {
             console.error("Error registering QC sample:", error);
             addNotification('Error al registrar la lectura de QC.', 'error');
@@ -74,8 +174,8 @@ export const QCView = ({ db, user }) => {
         const exportData = equipments.map(eq => ({
             ID: eq.id,
             Nombre: eq.name,
-            UltimaCalibracion: eq.lastCal ? new Date(eq.lastCal).toLocaleDateString() : 'N/A',
-            ProximaCalibracion: eq.nextCal ? new Date(eq.nextCal).toLocaleDateString() : 'N/A',
+            UltimaCalibracion: eq.lastCal ? formatToCRDate(eq.lastCal) : 'N/A',
+            ProximaCalibracion: eq.nextCal ? formatToCRDate(eq.nextCal) : 'N/A',
             Estado: eq.status
         }));
         exportToCSV(exportData, `Equipos_LIMS_${new Date().toISOString().slice(0,10)}`);
@@ -145,8 +245,8 @@ export const QCView = ({ db, user }) => {
                                         <tr key={eq.docId} className="hover:bg-slate-50 transition-colors">
                                             <td className="p-4 font-mono font-bold text-indigo-600">{eq.id}</td>
                                             <td className="p-4 font-bold text-slate-800">{eq.name}</td>
-                                            <td className="p-4 text-slate-600 font-medium">{eq.lastCal ? new Date(eq.lastCal).toLocaleDateString() : 'N/A'}</td>
-                                            <td className="p-4 text-slate-600 font-medium">{eq.nextCal ? new Date(eq.nextCal).toLocaleDateString() : 'N/A'}</td>
+                                            <td className="p-4 text-slate-600 font-medium">{eq.lastCal ? formatToCRDate(eq.lastCal) : 'N/A'}</td>
+                                            <td className="p-4 text-slate-600 font-medium">{eq.nextCal ? formatToCRDate(eq.nextCal) : 'N/A'}</td>
                                             <td className="p-4">
                                                 <span className={`px-3 py-1 rounded-full text-xs font-bold border flex w-fit items-center gap-1 ${eq.status === 'Operativo' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>
                                                     <CheckCircle2 size={14} /> {eq.status}

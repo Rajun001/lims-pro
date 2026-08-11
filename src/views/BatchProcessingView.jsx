@@ -4,7 +4,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { useNotification } from '../contexts/NotificationContext';
 
-export const BatchProcessingView = ({ requests, db }) => {
+export const BatchProcessingView = ({ requests, db, user }) => {
     const { addNotification } = useNotification();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSamples, setSelectedSamples] = useState([]);
@@ -77,21 +77,49 @@ export const BatchProcessingView = ({ requests, db }) => {
                 requestsMap[s.requestId].push(s);
             });
 
-            for (const [reqId, samplesToUpdate] of Object.entries(requestsMap)) {
-                const originalRequest = requests.find(r => r.id === reqId);
-                if (!originalRequest) continue;
+            if (user?.uid === 'offline-user') {
+                const localReqs = localStorage.getItem('lims_local_requests')
+                    ? JSON.parse(localStorage.getItem('lims_local_requests'))
+                    : [...requests];
 
-                // Crear nueva matriz de muestras con el resultado actualizado
-                const updatedSamples = originalRequest.samples.map(origSample => {
-                    const isSelected = samplesToUpdate.find(s => s.id === origSample.id);
-                    if (isSelected) {
-                        return { ...origSample, result: batchResult };
-                    }
-                    return origSample;
-                });
+                for (const [reqId, samplesToUpdate] of Object.entries(requestsMap)) {
+                    const reqIndex = localReqs.findIndex(r => r.id === reqId);
+                    if (reqIndex === -1) continue;
 
-                const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, reqId);
-                await updateDoc(reqRef, { samples: updatedSamples });
+                    const originalRequest = localReqs[reqIndex];
+                    const updatedSamples = originalRequest.samples.map(origSample => {
+                        const isSelected = samplesToUpdate.find(s => s.id === origSample.id);
+                        if (isSelected) {
+                            return { ...origSample, result: batchResult };
+                        }
+                        return origSample;
+                    });
+
+                    localReqs[reqIndex] = {
+                        ...originalRequest,
+                        samples: updatedSamples
+                    };
+                }
+
+                localStorage.setItem('lims_local_requests', JSON.stringify(localReqs));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            } else {
+                for (const [reqId, samplesToUpdate] of Object.entries(requestsMap)) {
+                    const originalRequest = requests.find(r => r.id === reqId);
+                    if (!originalRequest) continue;
+
+                    // Crear nueva matriz de muestras con el resultado actualizado
+                    const updatedSamples = originalRequest.samples.map(origSample => {
+                        const isSelected = samplesToUpdate.find(s => s.id === origSample.id);
+                        if (isSelected) {
+                            return { ...origSample, result: batchResult };
+                        }
+                        return origSample;
+                    });
+
+                    const reqRef = doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, reqId);
+                    await updateDoc(reqRef, { samples: updatedSamples });
+                }
             }
 
             addNotification('success', `Resultados aplicados en lote a ${selectedSamples.length} muestras.`);

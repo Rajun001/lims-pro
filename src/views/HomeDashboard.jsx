@@ -11,7 +11,8 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
     
     const handleDeleteRequest = async (e, reqId) => {
         e.stopPropagation();
-        if (window.confirm(`¿Está seguro de eliminar esta Orden de Laboratorio (${reqId.substring(0, 8).toUpperCase()})? Se perderán todos los resultados y el historial asociado a esta muestra. Esta acción es irreversible.`)) {
+        const shortId = (reqId || '').toString().substring(0, 8).toUpperCase();
+        if (window.confirm(`¿Está seguro de eliminar esta Orden de Laboratorio (${shortId})? Se perderán todos los resultados y el historial asociado a esta muestra. Esta acción es irreversible.`)) {
             try {
                 await deleteDoc(doc(db, `artifacts/${LIMSSystemId}/public/data/requests`, reqId));
                 await logAuditAction(db, null, 'ELIMINAR_ORDEN', `Orden eliminada: ${reqId}`, reqId);
@@ -33,7 +34,7 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
 
     const { volumeData, typeData, recentSamples, avgTat, projectedRevenue, criticalSamples, inventoryAlerts } = React.useMemo(() => {
         if (!requests || requests.length === 0) {
-            return { volumeData: [], typeData: [], recentSamples: [], avgTat: '0h' };
+            return { volumeData: [], typeData: [], recentSamples: [], avgTat: '0h', projectedRevenue: 0, criticalSamples: 0, inventoryAlerts: 0 };
         }
 
         // Tipo de Muestras
@@ -151,10 +152,10 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
 
             {/* Dashboard Analytics (Recharts) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 lg:col-span-2 min-w-0">
                     <h3 className="text-lg font-bold text-slate-800 mb-4">Volumen de Muestras (Últimos 7 días)</h3>
                     <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="99%" height="100%">
                             <BarChart data={volumeData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} />
@@ -165,11 +166,11 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
                         </ResponsiveContainer>
                     </div>
                 </div>
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 min-w-0">
                     <h3 className="text-lg font-bold text-slate-800 mb-4">Distribución por Tipo</h3>
                     <div className="h-64 flex items-center justify-center">
                         {typeData.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="99%" height="100%">
                                 <PieChart>
                                     <Pie data={typeData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                                         {typeData.map((entry, index) => (
@@ -214,7 +215,7 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
                                         onClick={() => navigateTo('request_details', sample.id)}
                                         className="hover:bg-slate-50 cursor-pointer transition-colors group"
                                     >
-                                        <td className="p-4 font-mono text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{sample.id.substring(0,8).toUpperCase()}</td>
+                                        <td className="p-4 font-mono text-sm font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{(sample.id || '').toString().substring(0, 8).toUpperCase()}</td>
                                         <td className="p-4 text-sm text-slate-600 font-medium">{sample.clientName}</td>
                                         <td className="p-4 text-sm text-slate-600">{sample.analysisRequested}</td>
                                         <td className="p-4 text-sm text-slate-500">{dateObj.toLocaleDateString()}</td>

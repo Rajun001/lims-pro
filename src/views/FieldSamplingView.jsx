@@ -83,20 +83,38 @@ export const FieldSamplingView = ({ user }) => {
 
         setIsSaving(true);
         try {
-            const samplingData = {
-                ...formData,
-                location: location ? { lat: location.lat, lng: location.lng } : null,
-                hasPhoto: !!photoPreview,
-                status: 'collected',
-                timestamp: serverTimestamp(),
-                systemId: LIMSSystemId
-            };
+            if (user?.uid === 'offline-user') {
+                const localSamples = localStorage.getItem('lims_local_field_samples') 
+                    ? JSON.parse(localStorage.getItem('lims_local_field_samples')) 
+                    : [];
+                const samplingData = {
+                    id: 'FS-' + Date.now(),
+                    ...formData,
+                    location: location ? { lat: location.lat, lng: location.lng } : null,
+                    hasPhoto: !!photoPreview,
+                    status: 'collected',
+                    timestamp: new Date().toISOString(),
+                    systemId: LIMSSystemId
+                };
+                localSamples.push(samplingData);
+                localStorage.setItem('lims_local_field_samples', JSON.stringify(localSamples));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            } else {
+                const samplingData = {
+                    ...formData,
+                    location: location ? { lat: location.lat, lng: location.lng } : null,
+                    hasPhoto: !!photoPreview,
+                    status: 'collected',
+                    timestamp: serverTimestamp(),
+                    systemId: LIMSSystemId
+                };
 
-            // En un caso real, la foto iría a Firebase Storage. Aquí guardamos la bandera o base64 pequeño.
-            // Para evitar exceder límite de Firestore con Base64 grandes, solo registramos que hay foto.
+                // En un caso real, la foto iría a Firebase Storage. Aquí guardamos la bandera o base64 pequeño.
+                // Para evitar exceder límite de Firestore con Base64 grandes, solo registramos que hay foto.
 
-            const samplesRef = collection(db, 'field_samples');
-            await addDoc(samplesRef, samplingData);
+                const samplesRef = collection(db, 'field_samples');
+                await addDoc(samplesRef, samplingData);
+            }
 
             addNotification('success', 'Muestra registrada y sincronizada correctamente.');
             

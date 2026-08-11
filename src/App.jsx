@@ -5,8 +5,41 @@ import { signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { auth, db, LIMSSystemId as appId } from './services/firebase';
 import { useNotification } from './contexts/NotificationContext';
 import { FlaskConical } from 'lucide-react';
+import mockData from './data/mock_data.json';
 
 import { ErrorBoundary, LoadingSpinner } from './components/UI';
+import { getApiUrl } from './utils/api.js';
+
+const CALCULATED_CLINICAL_ANALYSES = [
+    // Lipids
+    { id: 'calc-vldl', code: 'VLDL', name: 'VLDL', category: 'Química Sanguínea', minRange: '10', maxRange: '50', unit: 'mg/dL' },
+    { id: 'calc-ldl', code: '1550', name: 'LDL-Colesterol', category: 'Química Sanguínea', minRange: '0', maxRange: '130', unit: 'mg/dL' },
+    { id: 'calc-ldl-hdl', code: 'LDL_HDL', name: 'LDL/HDL', category: 'Química Sanguínea', minRange: '0', maxRange: '3.5', unit: '' },
+    { id: 'calc-risk', code: 'FR_CT_HDL', name: 'FR- CT/HDL', category: 'Química Sanguínea', minRange: '0', maxRange: '4.5', unit: '' },
+    { id: 'calc-nohdl', code: 'COL_NO_HDL', name: 'Colesterol No-HDL', category: 'Química Sanguínea', minRange: '0', maxRange: '130', unit: 'mg/dL' },
+    // HOMA
+    { id: 'calc-homair', code: 'HOMA_IR', name: 'HOMA-IR', category: 'Química Sanguínea', minRange: '0', maxRange: '2.5', unit: '' },
+    { id: 'calc-homabeta', code: 'HOMA_BETA', name: 'HOMA-%B', category: 'Química Sanguínea', minRange: '0', maxRange: '100', unit: '%' },
+    { id: 'calc-homasens', code: 'HOMA_SENS', name: 'HOMA-%S', category: 'Química Sanguínea', minRange: '0', maxRange: '100', unit: '%' },
+    // RAC
+    { id: 'calc-rac', code: 'RAC', name: 'Relación Alb/Creat', category: 'Química Sanguínea', minRange: '0', maxRange: '30', unit: 'mg/g creat...' },
+    // PSA
+    { id: 'calc-psaratio', code: 'PSA_L_T', name: 'Relación PSA Libre/Total', category: 'Química Sanguínea', minRange: '25', maxRange: '100', unit: '%' },
+    // Perfil Renal & Electrólitos
+    { id: 'calc-nucrea', code: 'NU_CREA', name: 'Relación NU/CREA', category: 'Química Sanguínea', minRange: '10', maxRange: '20', unit: '' },
+    { id: 'calc-nak', code: 'NA_K', name: 'Na/K', category: 'Química Sanguínea', minRange: '28', maxRange: '35', unit: '' }
+];
+
+const mergeCalculatedAnalyses = (baseAnalyses) => {
+    const list = [...baseAnalyses];
+    CALCULATED_CLINICAL_ANALYSES.forEach(calc => {
+        if (!list.some(a => a.code === calc.code)) {
+            list.push(calc);
+        }
+    });
+    return list;
+};
+
 import { Sidebar } from './layouts/Sidebar';
 import { TopBar } from './layouts/TopBar';
 import { MobileNav } from './layouts/MobileNav';
@@ -15,6 +48,7 @@ import { DemoRunner } from './components/DemoRunner';
 // Lazy load views
 const LoginView = lazy(() => import('./views/LoginView').then(m => ({ default: m.LoginView })));
 const ClientPortal = lazy(() => import('./views/ClientPortal').then(m => ({ default: m.ClientPortal })));
+const PublicVerificationView = lazy(() => import('./views/PublicVerificationView').then(m => ({ default: m.PublicVerificationView })));
 const HomeDashboard = lazy(() => import('./views/HomeDashboard').then(m => ({ default: m.HomeDashboard })));
 const Dashboard = lazy(() => import('./views/Dashboard').then(m => ({ default: m.Dashboard })));
 const RequestForm = lazy(() => import('./views/RequestForm').then(m => ({ default: m.RequestForm })));
@@ -150,7 +184,17 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
 
 const AppContent = () => {
     const navigate = useNavigate();
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(() => {
+        const saved = sessionStorage.getItem('offlineUser');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch {
+                // Ignore parsing errors
+            }
+        }
+        return null;
+    });
     const [userRole, setUserRole] = useState(() => {
         return sessionStorage.getItem('userRole') || null;
     });
@@ -164,10 +208,96 @@ const AppContent = () => {
         }
     }, [userRole]);
 
+    useEffect(() => {
+        if (user && user.uid === 'offline-user') {
+            sessionStorage.setItem('offlineUser', JSON.stringify(user));
+        } else if (user === null) {
+            sessionStorage.removeItem('offlineUser');
+        }
+    }, [user]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const bypassRole = params.get('bypass');
+        if (bypassRole) {
+            let role = 'admin';
+            let email = 'admin-offline@microlabs.com';
+            
+            if (bypassRole === 'dt' || bypassRole === 'director') {
+                role = 'director_tecnico';
+                email = 'director-offline@microlabs.com';
+            } else if (bypassRole === 'analyst' || bypassRole === 'analista') {
+                role = 'analyst';
+                email = 'analista-offline@microlabs.com';
+            } else if (bypassRole === 'billing' || bypassRole === 'facturacion') {
+                role = 'billing_agent';
+                email = 'facturacion-offline@microlabs.com';
+            } else if (bypassRole === 'patient') {
+                role = 'client_patient';
+                email = 'paciente-offline@microlabs.com';
+            } else if (bypassRole === 'company') {
+                role = 'client_company';
+                email = 'empresa-offline@microlabs.com';
+            } else if (bypassRole === 'doctor') {
+                role = 'client_doctor';
+                email = 'medico-offline@microlabs.com';
+            }
+            
+            const offlineUser = { uid: 'offline-user', email: email };
+            Promise.resolve().then(() => {
+                setUser(offlineUser);
+                setUserRole(role);
+            });
+            sessionStorage.setItem('userRole', role);
+            sessionStorage.setItem('offlineUser', JSON.stringify(offlineUser));
+            
+            // Clean URL query parameters and redirect
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            if (role.startsWith('client_')) {
+                navigate('/client_portal');
+            } else {
+                navigate('/home');
+            }
+        }
+    }, [navigate]);
+
     const [requests, setRequests] = useState([]);
     const [analyses, setAnalyses] = useState([]);
     const [clients, setClients] = useState([]);
-    const [labInfo, setLabInfo] = useState({ name: 'Laboratorio Microlabs', logoUrl: 'https://www.microlabscr.com/s/misc/logo.jpg' });
+    const [referenceLabs, setReferenceLabs] = useState([]);
+    const [referenceLabTests, setReferenceLabTests] = useState([]);
+    const [labInfo, setLabInfo] = useState({
+        name: 'Laboratorio Microlabs',
+        logoUrl: '/logo.png',
+        telephones: '22348837, 22345862, 22246541',
+        whatsapp: '71382750',
+        email: 'laboratorio@microlabscr.com',
+        emailReports: 'reportes@microlabscr.com',
+        emailBilling: 'fe@microlabscr.com',
+        address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
+        directorName: 'Dr. Roldán Ajún Chaverri',
+        directorCode: '802',
+        professional2Name: 'Dr. José Guillermo Ajún Jiménez',
+        professional2Code: 'Reg. Trámite',
+        branches: [
+            {
+                id: 'suc-guadalupe',
+                code: 'GUA-01',
+                name: 'Sede Central Guadalupe',
+                type: 'Sede Matriz & Laboratorio Central',
+                isMain: true,
+                address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
+                telephones: '22348837, 22345862, 22246541',
+                whatsapp: '71382750',
+                email: 'laboratorio@microlabscr.com',
+                directorName: 'Dr. Roldán Ajún Chaverri',
+                directorCode: '802',
+                permitNumber: 'MINSA-01048',
+                active: true
+            }
+        ]
+    });
     const [loading, setLoading] = useState(true);
 
     const { addNotification } = useNotification();
@@ -184,10 +314,53 @@ const AppContent = () => {
     const navigateTo = async (viewName, id = null, state = null) => {
         if (viewName === 'login') {
             try {
+                if (user) {
+                    const API_URL = getApiUrl();
+                    const logData = {
+                        action: 'SESSION_END',
+                        userId: user.uid,
+                        email: user.email,
+                        role: userRole,
+                        company: userRole === 'client_company' 
+                            ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                            : null
+                    };
+
+                    try {
+                        await fetch(`${API_URL}/api/logs/access`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(logData)
+                        });
+                    } catch (err) {
+                        console.warn("No se pudo registrar logout en Express backend:", err.message);
+                    }
+
+                    if (user.uid === 'offline-user') {
+                        const localAccessLogs = localStorage.getItem('lims_local_access_logs')
+                            ? JSON.parse(localStorage.getItem('lims_local_access_logs'))
+                            : [];
+                        localAccessLogs.push({
+                            id: 'ACC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+                            timestamp: new Date().toISOString(),
+                            ip: '127.0.0.1 (Local)',
+                            accessType: 'LOCAL',
+                            userId: logData.userId,
+                            email: logData.email,
+                            role: logData.role,
+                            company: logData.company,
+                            action: logData.action,
+                            details: navigator.userAgent
+                        });
+                        localStorage.setItem('lims_local_access_logs', JSON.stringify(localAccessLogs));
+                        window.dispatchEvent(new Event('lims_local_data_updated'));
+                    }
+                }
                 await auth.signOut();
                 setUser(null);
                 setUserRole(null);
                 sessionStorage.removeItem('userRole');
+                sessionStorage.removeItem('offlineUser');
             } catch (err) {
                 console.error("Error signing out:", err);
             }
@@ -207,20 +380,35 @@ const AppContent = () => {
                 if (typeof window !== 'undefined' && window.__initial_auth_token) {
                     await signInWithCustomToken(auth, window.__initial_auth_token);
                 }
-                // Eliminamos signInAnonymously() para que no expida tokens automáticamente sin Login.
             } catch (error) {
                 console.error("Auth Error", error);
             }
         };
         initAuth();
-        const unsub = onAuthStateChanged(auth, (u) => {
+        const unsub = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 setUser(u);
                 setLoading(true);
+                if (u.uid !== 'offline-user') {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', u.uid));
+                        if (userDoc.exists()) {
+                            setUserRole(userDoc.data().role);
+                        } else {
+                            console.warn("Usuario sin rol asignado en la base de datos.");
+                            setUserRole(null);
+                        }
+                    } catch (e) {
+                        console.error("Error al cargar el rol del usuario:", e);
+                    }
+                }
             } else {
-                setUser(null);
-                setUserRole(null);
-                sessionStorage.removeItem('userRole');
+                const saved = sessionStorage.getItem('offlineUser');
+                if (!saved) {
+                    setUser(null);
+                    setUserRole(null);
+                    sessionStorage.removeItem('userRole');
+                }
                 setLoading(false);
             }
             setIsAuthReady(true);
@@ -228,38 +416,185 @@ const AppContent = () => {
         return () => unsub();
     }, []);
 
+    // Interceptor global de fetch para inyectar cabeceras de usuario en peticiones a la API
+    useEffect(() => {
+        if (!user) return;
+        const originalFetch = window.fetch;
+        window.fetch = async function(resource, config = {}) {
+            const urlStr = typeof resource === 'string' ? resource : (resource && resource.url);
+            
+            // Solo inyectar cabeceras para peticiones locales de nuestra API
+            if (urlStr && urlStr.includes('/api/') && !urlStr.includes('/api/logs/access')) {
+                // Ensure headers object exists
+                const headers = { ...(config.headers || {}) };
+                headers['x-user-id'] = user.uid;
+                headers['x-user-email'] = user.email || '';
+                headers['x-user-role'] = userRole || '';
+                headers['x-user-company'] = userRole === 'client_company' 
+                    ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                    : '';
+                config.headers = headers;
+            }
+            return originalFetch(resource, config);
+        };
+        return () => {
+            window.fetch = originalFetch;
+        };
+    }, [user, userRole]);
+
+    // Registrar inicio de sesión
+    useEffect(() => {
+        if (!isAuthReady || !user || !userRole) return;
+
+        const logSessionStart = async () => {
+            const API_URL = getApiUrl();
+            const logData = {
+                action: 'SESSION_START',
+                userId: user.uid,
+                email: user.email,
+                role: userRole,
+                company: userRole === 'client_company' 
+                    ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                    : null
+            };
+
+            try {
+                await fetch(`${API_URL}/api/logs/access`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(logData)
+                });
+            } catch (err) {
+                console.warn("No se pudo registrar sesión en Express backend:", err.message);
+            }
+
+            if (user.uid === 'offline-user') {
+                const localAccessLogs = localStorage.getItem('lims_local_access_logs')
+                    ? JSON.parse(localStorage.getItem('lims_local_access_logs'))
+                    : [];
+                
+                const lastLog = localAccessLogs[localAccessLogs.length - 1];
+                if (!lastLog || lastLog.action !== 'SESSION_START' || (Date.now() - new Date(lastLog.timestamp).getTime() > 10000)) {
+                    localAccessLogs.push({
+                        id: 'ACC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+                        timestamp: new Date().toISOString(),
+                        ip: '127.0.0.1 (Local)',
+                        accessType: 'LOCAL',
+                        userId: logData.userId,
+                        email: logData.email,
+                        role: logData.role,
+                        company: logData.company,
+                        action: logData.action,
+                        details: navigator.userAgent
+                    });
+                    localStorage.setItem('lims_local_access_logs', JSON.stringify(localAccessLogs));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                }
+            }
+        };
+
+        logSessionStart();
+    }, [user, userRole, isAuthReady]);
+
     useEffect(() => {
         if (!isAuthReady || !user) return;
 
-        try {
-            const reqQuery = query(collection(db, `artifacts/${appId}/public/data/requests`), orderBy('createdAt', 'desc'), limit(150));
-            const unsubRequests = onSnapshot(reqQuery, (s) => {
-                const d = s.docs.map(x => ({ id: x.id, ...x.data() }));
-                d.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-                setRequests(d);
-                setLoading(false);
-            }, (error) => {
-                console.error("Firestore Error (Requests):", error);
-                setLoading(false);
-            });
-            const unsubClients = onSnapshot(collection(db, `artifacts/${appId}/public/data/clients`), (s) => setClients(s.docs.map(x => ({ id: x.id, ...x.data() }))), (e) => console.error(e));
-            const unsubAnalyses = onSnapshot(collection(db, `artifacts/${appId}/public/data/analyses`), (s) => setAnalyses(s.docs.map(x => ({ id: x.id, ...x.data() }))), (e) => console.error(e));
-            const unsubLab = onSnapshot(doc(db, `artifacts/${appId}/public/data/lab_settings`, "main"), (d) => { if (d.exists()) setLabInfo(d.data()); }, (e) => console.error(e));
+        if (user.uid === 'offline-user') {
+            // --- MODO OFFLINE (LOCALSTORAGE & MOCK DATA) ---
+            const loadLocalData = () => {
+                let localRequests = localStorage.getItem('lims_local_requests');
+                if (!localRequests) {
+                    localRequests = JSON.stringify(mockData.requests);
+                    localStorage.setItem('lims_local_requests', localRequests);
+                }
+                setRequests(JSON.parse(localRequests));
 
-            const timer = setTimeout(() => {
-                setLoading(false);
-            }, 1000);
+                let localClients = localStorage.getItem('lims_local_clients');
+                if (!localClients) {
+                    localClients = JSON.stringify(mockData.clients);
+                    localStorage.setItem('lims_local_clients', localClients);
+                }
+                setClients(JSON.parse(localClients));
 
-            return () => { 
-                clearTimeout(timer);
-                unsubRequests(); 
-                unsubClients(); 
-                unsubAnalyses(); 
-                unsubLab(); 
+                let localAnalyses = localStorage.getItem('lims_local_analyses');
+                if (!localAnalyses) {
+                    localAnalyses = JSON.stringify(mockData.analyses);
+                    localStorage.setItem('lims_local_analyses', localAnalyses);
+                }
+                setAnalyses(mergeCalculatedAnalyses(JSON.parse(localAnalyses)));
+
+                let localRefLabs = localStorage.getItem('lims_local_reference_labs');
+                if (!localRefLabs) {
+                    localRefLabs = JSON.stringify([
+                        { id: 'ref-1', name: 'Laboratorio de Referencia Nacional', email: 'contacto@refnacional.com', phone: '2211-0099', status: 'Activo' },
+                        { id: 'ref-2', name: 'Lab. Microbiología Avanzada', email: 'info@microavanzada.com', phone: '2288-7766', status: 'Activo' }
+                    ]);
+                    localStorage.setItem('lims_local_reference_labs', localRefLabs);
+                }
+                setReferenceLabs(JSON.parse(localRefLabs));
+
+                let localRefLabTests = localStorage.getItem('lims_local_reference_lab_tests');
+                if (!localRefLabTests) {
+                    localRefLabTests = JSON.stringify([
+                        { id: 'reftest-1', labId: 'ref-1', testCode: '1020', testName: 'Acido Fólico', costPrice: 12000, patientPrice: 22000 },
+                        { id: 'reftest-2', labId: 'ref-1', testCode: '1030', testName: 'Acido úrico', costPrice: 5000, patientPrice: 8000 },
+                        { id: 'reftest-3', labId: 'ref-2', testCode: '2040', testName: 'ACTH', costPrice: 20000, patientPrice: 34000 }
+                    ]);
+                    localStorage.setItem('lims_local_reference_lab_tests', localRefLabTests);
+                }
+                setReferenceLabTests(JSON.parse(localRefLabTests));
+
+                let localLabInfo = localStorage.getItem('lims_local_labInfo');
+                if (!localLabInfo) {
+                    localLabInfo = JSON.stringify(mockData.labInfo);
+                    localStorage.setItem('lims_local_labInfo', localLabInfo);
+                }
+                setLabInfo(JSON.parse(localLabInfo));
+                setLoading(false);
             };
-        } catch (e) {
-            console.error("Firestore Init Error:", e);
-            Promise.resolve().then(() => setLoading(false));
+
+            loadLocalData();
+
+            window.addEventListener('lims_local_data_updated', loadLocalData);
+            return () => {
+                window.removeEventListener('lims_local_data_updated', loadLocalData);
+            };
+        } else {
+            // --- MODO ONLINE (FIREBASE FIRESTORE) ---
+            try {
+                const reqQuery = query(collection(db, `artifacts/${appId}/public/data/requests`), orderBy('createdAt', 'desc'), limit(150));
+                const unsubRequests = onSnapshot(reqQuery, (s) => {
+                    const d = s.docs.map(x => ({ id: x.id, ...x.data() }));
+                    d.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                    setRequests(d);
+                    setLoading(false);
+                                }, (error) => {
+                    console.error("Firestore Error (Requests):", error);
+                    setLoading(false);
+                });
+                const unsubClients = onSnapshot(collection(db, `artifacts/${appId}/public/data/clients`), (s) => setClients(s.docs.map(x => ({ id: x.id, ...x.data() }))), (e) => console.error(e));
+                const unsubAnalyses = onSnapshot(collection(db, `artifacts/${appId}/public/data/analyses`), (s) => setAnalyses(mergeCalculatedAnalyses(s.docs.map(x => ({ id: x.id, ...x.data() })))), (e) => console.error(e));
+                const unsubRefLabs = onSnapshot(collection(db, `artifacts/${appId}/public/data/reference_labs`), (s) => setReferenceLabs(s.docs.map(x => ({ id: x.id, ...x.data() }))), (e) => console.error(e));
+                const unsubRefLabTests = onSnapshot(collection(db, `artifacts/${appId}/public/data/reference_lab_tests`), (s) => setReferenceLabTests(s.docs.map(x => ({ id: x.id, ...x.data() }))), (e) => console.error(e));
+                const unsubLab = onSnapshot(doc(db, `artifacts/${appId}/public/data/lab_settings`, "main"), (d) => { if (d.exists()) setLabInfo(d.data()); }, (e) => console.error(e));
+
+                const timer = setTimeout(() => {
+                    setLoading(false);
+                }, 1000);
+
+                return () => { 
+                    clearTimeout(timer);
+                    unsubRequests(); 
+                    unsubClients(); 
+                    unsubAnalyses(); 
+                    unsubRefLabs();
+                    unsubRefLabTests();
+                    unsubLab(); 
+                };
+            } catch (e) {
+                console.error("Firestore Init Error:", e);
+                Promise.resolve().then(() => setLoading(false));
+            }
         }
     }, [isAuthReady, user]);
 
@@ -269,6 +604,16 @@ const AppContent = () => {
         <ErrorBoundary>
             <Routes>
                 {/* Auth & External Routes */}
+                <Route path="/verify/:id" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicVerificationView />
+                    </Suspense>
+                } />
+                <Route path="/verify" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicVerificationView />
+                    </Suspense>
+                } />
                 <Route path="/login" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <LoginView navigateTo={navigateTo} setUserRole={setUserRole} setUser={setUser} />
@@ -277,7 +622,7 @@ const AppContent = () => {
                 <Route path="/client_portal" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <ClientRoute user={user} userRole={userRole}>
-                            <ClientPortal navigateTo={navigateTo} userRole={userRole} />
+                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} />
                         </ClientRoute>
                     </Suspense>
                 } />
@@ -288,14 +633,14 @@ const AppContent = () => {
                 <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} /></LayoutWrapper>} />
                 <Route path="/dashboard" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><Dashboard requests={requests} navigateTo={navigateTo} clients={clients} /></LayoutWrapper>} />
                 
-                <Route path="/new_request" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestForm db={db} user={user} navigateTo={navigateTo} availableAnalyses={analyses} clients={clients} /></LayoutWrapper>} />
+                <Route path="/new_request" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestForm db={db} user={user} navigateTo={navigateTo} availableAnalyses={analyses} clients={clients} requests={requests} labInfo={labInfo} /></LayoutWrapper>} />
                 <Route path="/request_details/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={RequestDetails} /></LayoutWrapper>} />
                 
                 <Route path="/report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={ReportView} /></LayoutWrapper>} />
                 <Route path="/pre_report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={PreReportView} /></LayoutWrapper>} />
                 <Route path="/final_report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={FinalReportView} /></LayoutWrapper>} />
                 
-                <Route path="/audit" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AuditView db={db} userRole={userRole} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/audit" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AuditView db={db} userRole={userRole} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/inventory" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><InventoryView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/equipment" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><EquipmentView db={db} user={user} /></LayoutWrapper>} />
                 <Route path="/capa" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><CAPAView db={db} user={user} /></LayoutWrapper>} />
@@ -307,20 +652,20 @@ const AppContent = () => {
                 <Route path="/lab_settings" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><LabSettings db={db} labInfo={labInfo} userRole={userRole} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 
                 <Route path="/accounting" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AccountingView navigateTo={navigateTo} userRole={userRole} /></LayoutWrapper>} />
-                <Route path="/billing" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BillingView /></LayoutWrapper>} />
+                <Route path="/billing" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BillingView requests={requests} db={db} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} user={user} /></LayoutWrapper>} />
                 <Route path="/crm" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><CRMView db={db} clients={clients} user={user} requests={requests} /></LayoutWrapper>} />
-                <Route path="/quotes" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QuotesView navigateTo={navigateTo} /></LayoutWrapper>} />
-                <Route path="/analyzer_inbox" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AnalyzerInboxView db={db} navigateTo={navigateTo} /></LayoutWrapper>} />
-                <Route path="/results_review" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ResultsReviewView db={db} requests={requests} analyses={analyses} navigateTo={navigateTo} /></LayoutWrapper>} />
-                <Route path="/microbiology" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><MicrobiologyWorkcards db={db} requests={requests} navigateTo={navigateTo} /></LayoutWrapper>} />
-                <Route path="/referrals" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ExternalReferralsView db={db} requests={requests} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
-                <Route path="/diagnostics" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><SystemDiagnosticsView db={db} requests={requests} clients={clients} userRole={userRole} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/quotes" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QuotesView navigateTo={navigateTo} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} /></LayoutWrapper>} />
+                <Route path="/analyzer_inbox" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AnalyzerInboxView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/results_review" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ResultsReviewView db={db} user={user} requests={requests} analyses={analyses} labInfo={labInfo} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/microbiology" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><MicrobiologyWorkcards db={db} user={user} requests={requests} labInfo={labInfo} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/referrals" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ExternalReferralsView db={db} requests={requests} user={user} navigateTo={navigateTo} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} /></LayoutWrapper>} />
+                <Route path="/diagnostics" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><SystemDiagnosticsView db={db} user={user} requests={requests} clients={clients} userRole={userRole} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/help" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HelpView /></LayoutWrapper>} />
                 
                 <Route path="/bulk_upload" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BulkUploadView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/manual_form" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ManualFormView navigateTo={navigateTo} labInfo={labInfo} /></LayoutWrapper>} />
                 <Route path="/field-sampling" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><FieldSamplingView user={user} /></LayoutWrapper>} />
-                <Route path="/batch" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BatchProcessingView db={db} requests={requests} /></LayoutWrapper>} />
+                <Route path="/batch" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BatchProcessingView db={db} user={user} requests={requests} /></LayoutWrapper>} />
 
                 {/* Catch-all */}
                 <Route path="*" element={<Navigate to="/home" replace />} />
