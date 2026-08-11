@@ -2,9 +2,31 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+import fs from 'fs'
+
+const versionPlugin = () => ({
+  name: 'auto-version-generator',
+  buildStart() {
+    const versionData = {
+      version: Date.now(),
+      builtAt: new Date().toISOString()
+    };
+    try {
+      if (!fs.existsSync('./public')) fs.mkdirSync('./public', { recursive: true });
+      fs.writeFileSync('./public/version.json', JSON.stringify(versionData, null, 2));
+    } catch (e) {
+      console.warn('Could not write version.json:', e.message);
+    }
+  }
+});
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString())
+  },
   plugins: [
+    versionPlugin(),
     react(),
     tailwindcss(),
   ],

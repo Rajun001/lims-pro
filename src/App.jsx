@@ -44,6 +44,7 @@ import { Sidebar } from './layouts/Sidebar';
 import { TopBar } from './layouts/TopBar';
 import { MobileNav } from './layouts/MobileNav';
 import { DemoRunner } from './components/DemoRunner';
+import { VersionUpdateNotifier } from './components/VersionUpdateNotifier';
 
 // Lazy load views
 const LoginView = lazy(() => import('./views/LoginView').then(m => ({ default: m.LoginView })));
@@ -671,6 +672,7 @@ const AppContent = () => {
                 <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
             <DemoRunner />
+            <VersionUpdateNotifier />
         </ErrorBoundary>
     );
 };
