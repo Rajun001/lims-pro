@@ -6,9 +6,9 @@ import { db, LIMSSystemId } from '../services/firebase';
 export class ErrorBoundary extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { hasError: false };
+        this.state = { hasError: false, error: null };
     }
-    static getDerivedStateFromError() { return { hasError: true }; }
+    static getDerivedStateFromError(error) { return { hasError: true, error }; }
     componentDidCatch(error, errorInfo) { 
         console.error("UI Error:", error, errorInfo); 
         

@@ -323,7 +323,7 @@ const AppContent = () => {
                         email: user.email,
                         role: userRole,
                         company: userRole === 'client_company' 
-                            ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                            ? (user?.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : (user?.email ? user.email.split('@')[0] : 'Empresa')) 
                             : null
                     };
 
@@ -432,7 +432,7 @@ const AppContent = () => {
                 headers['x-user-email'] = user.email || '';
                 headers['x-user-role'] = userRole || '';
                 headers['x-user-company'] = userRole === 'client_company' 
-                    ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                    ? (user?.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : (user?.email ? user.email.split('@')[0] : 'Empresa')) 
                     : '';
                 config.headers = headers;
             }
@@ -455,7 +455,7 @@ const AppContent = () => {
                 email: user.email,
                 role: userRole,
                 company: userRole === 'client_company' 
-                    ? (user.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : user.email.split('@')[0]) 
+                    ? (user?.email === 'empresa-offline@microlabs.com' ? 'Distribuidora Alimenticia S.A.' : (user?.email ? user.email.split('@')[0] : 'Empresa')) 
                     : null
             };
 
