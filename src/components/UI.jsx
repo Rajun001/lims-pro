@@ -28,11 +28,28 @@ export class ErrorBoundary extends React.Component {
     render() {
         if (this.state.hasError) {
             return (
-                <div className="p-8 text-center text-red-600 bg-red-50 rounded-lg m-4 border border-red-200">
-                    <AlertTriangle className="mx-auto mb-2" size={48} />
-                    <h2 className="text-xl font-bold">Algo salió mal en la interfaz.</h2>
-                    <p>Por favor, recarga la página.</p>
-                    <button onClick={() => window.location.reload()} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Recargar</button>
+                <div className="p-8 text-center text-slate-800 bg-white rounded-2xl m-6 border border-slate-200 shadow-xl max-w-lg mx-auto animate-fade-in">
+                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertTriangle size={32} />
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900 mb-2">Recuperación de Interfaz</h2>
+                    <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                        Se detectó una discrepancia de estado en la sesión. Puedes reiniciar la vista para continuar sin problemas.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button 
+                            onClick={() => { this.setState({ hasError: false }); window.location.href = '/'; }} 
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-colors shadow-sm cursor-pointer border-0"
+                        >
+                            Volver al Inicio
+                        </button>
+                        <button 
+                            onClick={() => { localStorage.clear(); window.location.href = '/login'; }} 
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-5 py-2.5 rounded-xl text-xs transition-colors cursor-pointer border-0"
+                        >
+                            Reiniciar Sesión
+                        </button>
+                    </div>
                 </div>
             );
         }

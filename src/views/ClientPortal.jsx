@@ -439,7 +439,8 @@ const ResultsInterpreter = ({ report, language }) => {
     if (!report || report.status !== 'Aprobado') return null;
 
     const isEn = language === 'en';
-    const isIndustrial = report.analysis.toLowerCase().includes('agua') || report.analysis.toLowerCase().includes('alimento') || report.analysis.toLowerCase().includes('water') || report.analysis.toLowerCase().includes('food');
+    const analysisStr = (report?.analysis || '').toLowerCase();
+    const isIndustrial = analysisStr.includes('agua') || analysisStr.includes('alimento') || analysisStr.includes('water') || analysisStr.includes('food') || report.sampleType === 'Alimentos' || report.sampleType === 'Agua / Hielo' || report.sampleType === 'Superficie' || report.sampleType === 'Agua Residual';
 
     if (isIndustrial) {
         const params = parseIndustrialDetails(report.details);
@@ -834,9 +835,10 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
     const [isPaying, setIsPaying] = useState(false);
     const [paidSuccess, setPaidSuccess] = useState(false);
 
-    const getSamplePrice = (analysisName) => {
-        if (analysisName.includes('Bioquímico') || analysisName.includes('Biochemical')) return 25000;
-        if (analysisName.includes('Cultivo') || analysisName.includes('Culture')) return 35000;
+    const getSamplePrice = (analysisName = '') => {
+        const name = String(analysisName || '');
+        if (name.includes('Bioquímico') || name.includes('Biochemical')) return 25000;
+        if (name.includes('Cultivo') || name.includes('Culture')) return 35000;
         return 15000;
     };
 
@@ -1104,14 +1106,15 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
 
     const downloadPDF = (req) => {
         const element = document.createElement('div');
-        const isApproved = req.status === 'Aprobado';
+        const isApproved = req?.status === 'Aprobado';
         const analysisName = isEn 
-            ? (req.analysis === 'Perfil Bioquímico' ? 'Biochemical Profile' : req.analysis) 
-            : req.analysis;
+            ? (req?.analysis === 'Perfil Bioquímico' ? 'Biochemical Profile' : req?.analysis || 'Analysis') 
+            : req?.analysis || 'Análisis';
             
+        const rawDetails = String(req?.details || '');
         const detailsText = isEn 
-            ? req.details.replace('Colesterol', 'Cholesterol').replace('Glucosa', 'Glucose').replace('Procesando en placa de Petri', 'Processing in Petri dish')
-            : req.details;
+            ? rawDetails.replace('Colesterol', 'Cholesterol').replace('Glucosa', 'Glucose').replace('Procesando en placa de Petri', 'Processing in Petri dish')
+            : rawDetails;
 
         const statusTextPDF = isApproved 
             ? (isEn ? 'Approved & Validated' : 'Aprobado y Validado')
@@ -1447,7 +1450,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">{t.detail}</label>
                                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 font-mono text-sm text-slate-700 whitespace-pre-wrap">
                                                         {isEn 
-                                                            ? (resultsList.find(r => r.id === previewId)?.details.replace('Colesterol', 'Cholesterol').replace('Glucosa', 'Glucose').replace('Procesando en placa de Petri', 'Processing in Petri dish') || 'N/A')
+                                                            ? (String(resultsList.find(r => r.id === previewId)?.details || '').replace('Colesterol', 'Cholesterol').replace('Glucosa', 'Glucose').replace('Procesando en placa de Petri', 'Processing in Petri dish') || 'N/A')
                                                             : (resultsList.find(r => r.id === previewId)?.details || 'N/A')
                                                         }
                                                     </div>
