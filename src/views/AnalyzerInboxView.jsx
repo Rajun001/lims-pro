@@ -264,7 +264,24 @@ export const AnalyzerInboxView = ({ db, user }) => {
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">Resultados Entrantes en Cola</h3>
+                    <div>
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2">Resultados Entrantes en Cola</h3>
+                        <p className="text-xs text-slate-500">Tramas ASTM/HL7 procesadas desde analizadores conectados.</p>
+                    </div>
+                    <button 
+                        onClick={() => {
+                            const pending = incomingResults.filter(r => r.status === 'pending');
+                            if (pending.length === 0) {
+                                alert("No hay resultados pendientes en la cola.");
+                                return;
+                            }
+                            pending.forEach(r => processResult(r.id));
+                            alert(`Auto-mapeo ejecutado para ${pending.length} resultados de analizador.`);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                        <CheckCircle2 size={16} /> Auto-Mapear Todo ({incomingResults.filter(r => r.status === 'pending').length})
+                    </button>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">

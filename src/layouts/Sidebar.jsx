@@ -7,6 +7,7 @@ import {
     FileCheck2, SlidersHorizontal, Home
 } from 'lucide-react';
 import { Logo } from '../components/UI';
+import versionData from '../version.json';
 
 const NavItem = ({ view, currentView, navigateTo, icon: Icon, label, badge, onClickOverride }) => (
     Icon && (
@@ -149,6 +150,14 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => (
             <button onClick={() => navigateTo('login')} className="w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-red-400 transition-colors cursor-pointer">
                 <Lock size={16} /> <span className="font-medium text-xs">Cerrar Sesión</span>
             </button>
+            <div className="pt-2 px-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                <span className="truncate" title={`Compilado el: ${versionData?.builtAt || 'N/A'}`}>
+                    {versionData?.fullVersion || 'v2.5.0'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-slate-800 text-indigo-400 border border-slate-700/60 font-bold shrink-0">
+                    #{versionData?.gitCommit || 'dev'}
+                </span>
+            </div>
         </div>
     </div>
 );

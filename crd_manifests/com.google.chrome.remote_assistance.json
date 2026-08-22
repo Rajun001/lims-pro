@@ -1,0 +1,13 @@
+﻿{
+    "path":  "C:\\Program Files (x86)\\Google\\Chrome Remote Desktop\\152.0.7977.9\\remote_assistance_host.exe",
+    "description":  "Remote Assistance Host for Chrome Remote Desktop",
+    "name":  "com.google.chrome.remote_assistance",
+    "allowed_origins":  [
+                            "chrome-extension://inomeogfingihgjfjlpeplalcfajhgai/",
+                            "chrome-extension://inmgicbfkbbpflfbdbbgcaicapuackqn/",
+                            "chrome-extension://inmoidikbeidagbbabajjmoapddbdcid/",
+                            "chrome-extension://djjmngfglakhkhmgcfdmjalogilepkhd/",
+                            "https://remotedesktop.google.com/"
+                        ],
+    "type":  "stdio"
+}

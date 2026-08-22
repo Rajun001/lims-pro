@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Calculator, Percent, Plus, Trash2, FileText, Download, Truck } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import catalogData from '../data/cmqccr_catalog.json';
+import versionData from '../version.json';
 
 export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests = [] }) => {
     const [clients] = useState([
@@ -42,6 +43,95 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
     const totalCost = quoteItems.reduce((sum, item) => sum + (item.isReferred ? item.cost : 0), 0);
     const netProfit = finalPrice - totalCost;
     const profitMarginPct = finalPrice > 0 ? (netProfit / finalPrice) * 100 : 0;
+
+    // Presets de Alcance Industrial Regulado
+    const handleAddIndustrialScopePreset = (presetType) => {
+        if (presetType === 'SHELF_LIFE_RTCA') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-STAB',
+                    name: 'Estudio de Vida Útil RTCA (5 Puntos: Días 0, 30, 60, 90, 180 - Fisicoquímico + Microbiológico)',
+                    price: 250000,
+                    cost: 45000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        } else if (presetType === 'CHALLENGE_USP51') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-CHALLENGE',
+                    name: 'Challenge Test USP <51> (5 Cepas ATCC: E. coli, S. aureus, P. aeruginosa, C. albicans, A. brasiliensis - Días 7, 14, 28)',
+                    price: 320000,
+                    cost: 60000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        } else if (presetType === 'DISINFECTANT_555') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-DESINF-555',
+                    name: 'Prueba de Eficacia Desinfectante 5,5,5 (EN 1276 / EN 1650 - 5 Cepas, 5 min, Reducción 5 log)',
+                    price: 185000,
+                    cost: 35000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        } else if (presetType === 'AOAC_96009') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-AOAC-96009',
+                    name: 'Prueba Acción Germicida AOAC Official Method 960.09 (Sanitizantes - Reducción 99.999% en 30s)',
+                    price: 160000,
+                    cost: 30000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        } else if (presetType === 'STERILITY_USP71') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-STERIL-USP71',
+                    name: 'Prueba de Esterilidad Comercial (USP <71> / FDA BAM - 14 Días Incubación Medios FTM y TSB)',
+                    price: 210000,
+                    cost: 40000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        } else if (presetType === 'BIOCONTROL_INDICATOR') {
+            setQuoteItems([
+                ...quoteItems,
+                {
+                    id: crypto.randomUUID(),
+                    code: 'PRJ-BIOCONTROL',
+                    name: 'Control Biológico de Esterilización (Verificación Bioindicadores Geobacillus / Bacillus 24-48h)',
+                    price: 75000,
+                    cost: 15000,
+                    isReferred: false,
+                    referredLabId: '',
+                    referredLabName: ''
+                }
+            ]);
+        }
+    };
 
     const handleAddTest = (test) => {
         // Find if this test is supported by any reference lab
@@ -238,6 +328,53 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                                     </div>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Plantillas de Alcance Regulado por Proyecto */}
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Alcances Predeterminados:</span>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('SHELF_LIFE_RTCA')}
+                                className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + Vida Útil RTCA (5 Puntos)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('CHALLENGE_USP51')}
+                                className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + Challenge Test USP &lt;51&gt;
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('DISINFECTANT_555')}
+                                className="px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + Prueba 5,5,5 (EN 1276/1650)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('AOAC_96009')}
+                                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + AOAC Method 960.09 (Sanitizantes)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('STERILITY_USP71')}
+                                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + Esterilidad Comercial (USP &lt;71&gt;)
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleAddIndustrialScopePreset('BIOCONTROL_INDICATOR')}
+                                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                + Control Biológico (Bioindicadores)
+                            </button>
                         </div>
 
                         {/* Agregar ítem manual */}
@@ -477,7 +614,7 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                 <div className="mt-16 pt-8 border-t border-slate-300 text-center text-xs text-slate-500">
                     <p className="mb-1 font-bold">CONDICIONES DE LA COTIZACIÓN</p>
                     <p>Precios válidos por 30 días. Los tiempos de entrega (TAT) dependen de la complejidad de cada ensayo.</p>
-                    <p className="mt-4 italic text-[10px]">Documento generado electrónicamente por LIMS-Pro Microlabs.</p>
+                    <p className="mt-4 italic text-[10px]">Documento Proforma FOR-COT-01 (Rev. 02) — Generado electrónicamente por LIMS-PRO {versionData?.fullVersion || 'v2.5.0'} (#{versionData?.gitCommit || 'dev'}).</p>
                 </div>
             </div>
         </div>

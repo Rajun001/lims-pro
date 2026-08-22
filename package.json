@@ -1,18 +1,19 @@
 {
   "name": "lims-pro",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.5.0",
   "type": "module",
   "workspaces": [
     "api",
     "analyzer-service"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev -w api\" \"npm run dev -w analyzer-service\"",
-    "dev:frontend": "vite",
-    "build": "vite build",
-    "start:prod": "pm2 start ecosystem.config.cjs",
-    "stop:prod": "pm2 stop ecosystem.config.cjs",
+    "dev": "node scripts/generate_version.js && concurrently \"npm run dev:frontend\" \"npm run dev -w api\" \"npm run dev -w analyzer-service\"",
+    "dev:frontend": "node scripts/generate_version.js && vite",
+    "prebuild": "node scripts/generate_version.js",
+    "build": "node scripts/generate_version.js && vite build",
+    "start:prod": "npx pm2 start ecosystem.config.cjs",
+    "stop:prod": "npx pm2 stop ecosystem.config.cjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

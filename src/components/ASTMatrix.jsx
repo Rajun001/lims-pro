@@ -48,7 +48,6 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
     // Sincronizar estados cuando cambian los resultados guardados
     useEffect(() => {
         if (savedResults) {
-            /* eslint-disable react-hooks/set-state-in-effect */
             setPathogen(savedResults.pathogen || savedResults.bacteriaIdentified || '');
             setConcentration(savedResults.concentration || '');
             if (savedResults.aiInterpretation) setAiInterpretation(savedResults.aiInterpretation);
@@ -63,7 +62,6 @@ export const ASTMatrix = ({ savedResults, onChange, onSave }) => {
                     console.error(e);
                 }
             }
-            /* eslint-enable react-hooks/set-state-in-effect */
         }
     }, [savedResults]);
 

@@ -58,9 +58,9 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
 
                 {/* Connectivity Status Indicator */}
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-300 ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                    <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
+                    <span className={`w-2 h-2 rounded-full ${isOnline ? (watchdogStatus.api === 'ONLINE' ? 'bg-emerald-500' : 'bg-emerald-400 animate-pulse') : 'bg-amber-500 animate-pulse'}`}></span>
                     <span>
-                        {isOnline ? 'En Línea' : 'Sin Conexión (Autoguardado)'}
+                        {isOnline ? (watchdogStatus.api === 'ONLINE' ? 'En Línea (API Local OK)' : 'En Línea (Cloud)') : 'Sin Conexión (Autoguardado)'}
                     </span>
                 </div>
 

@@ -37,17 +37,22 @@ echo [INFO] Iniciando el servicio local...
 echo.
 
 echo ===================================================
-echo [3/3] ABRIENDO TUNEL SEGURO DESDE TU CASA...
+echo [3/3] ABRIENDO TÚNEL SEGURO DESDE TU CASA...
 echo ===================================================
 echo.
 echo Instrucciones:
-echo 1. Una vez que inicie, busca la linea que termina con ".lhr.life" (ej. https://xxxx.lhr.life)
-echo 2. Abre esa URL en el navegador de tu casa o en tu celular.
-echo 3. Accede de forma directa.
+echo 1. Una vez que inicie, busca la linea con el enlace de Cloudflare:
+echo    ej. https://xxxx-xxxx-xxxx.trycloudflare.com
+echo 2. Abre esa URL en el navegador de tu Mac Mini o celular en casa.
+echo 3. Accede de forma directa a tu LIMS-PRO del Laboratorio.
 echo.
 echo Iniciando servidores... presiona Ctrl+C para terminar.
 echo.
 
-call npx.cmd concurrently --kill-others "node api/index.js" "ssh -o StrictHostKeyChecking=no -R 80:localhost:3001 nokey@localhost.run"
+if exist "cloudflared.exe" (
+    call npx.cmd concurrently --kill-others -n "API,CLOUDFLARE" -c "green,cyan" "node api/index.js" "cloudflared.exe tunnel --url http://localhost:3001"
+) else (
+    call npx.cmd concurrently --kill-others -n "API,SSH-TUNNEL" -c "green,cyan" "node api/index.js" "ssh -o StrictHostKeyChecking=no -R 80:localhost:3001 nokey@localhost.run"
+)
 
 pause

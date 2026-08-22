@@ -2,7 +2,7 @@
 
 const CACHE_NAME = 'lims-pro-v3-' + Date.now();
 
-self.addEventListener('install', event => {
+self.addEventListener('install', _event => {
   self.skipWaiting();
 });
 

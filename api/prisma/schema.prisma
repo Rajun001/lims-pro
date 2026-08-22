@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// This is your Prisma schema file for Hybrid LIMS (Clinical + Industrial Microbiology & ISO 17025 / ISO 15189 / 21 CFR Part 11)
 
 generator client {
   provider = "prisma-client-js"
@@ -10,98 +9,405 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-model Patient {
-  id        Int      @id @default(autoincrement())
-  uniqueId  String?  @unique // DNI/Passport
-  firstName String
-  lastName  String
-  dob       DateTime?
-  gender    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  samples   Sample[]
+// =============================================================================
+// 1. AUTENTICACIÓN, CREDENCIALES Y SEGURIDAD (RBAC + 21 CFR PART 11)
+// =============================================================================
 
-  @@index([firstName, lastName])
-}
-
-model Sample {
-  id          Int       @id @default(autoincrement())
-  patientId   Int?      // Optional for industrial samples that don't have a human patient
-  patient     Patient?  @relation(fields: [patientId], references: [id])
-  sampleType  String    // e.g., "Blood", "Urine", "Food", "Water"
-  barcode     String    @unique
-  batchNumber String?   // For industrial/food lots
-  collectedAt DateTime?
-  receivedAt  DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  orders       Order[]
-  workcards    Workcard[]
-  antibiograms Antibiogram[]
-
-  @@index([patientId])
-  @@index([receivedAt])
-}
-
-model Order {
-  id        Int      @id @default(autoincrement())
-  sampleId  Int
-  sample    Sample   @relation(fields: [sampleId], references: [id])
-  status    String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, VALIDATED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tests     Test[]
-
-  @@index([sampleId])
-  @@index([status])
-  @@index([createdAt])
-}
-
-model Test {
-  id             Int      @id @default(autoincrement())
-  orderId        Int
-  order          Order    @relation(fields: [orderId], references: [id])
-  testName       String   // e.g., "Glucose", "Aerobic Plate Count"
-  resultValue    String?
-  referenceRange String?
-  unit           String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([testName])
-}
-
-model Workcard {
-  id              Int       @id @default(autoincrement())
-  sampleId        Int
-  sample          Sample    @relation(fields: [sampleId], references: [id])
-  mediaType       String    // e.g., "Blood Agar", "MacConkey"
-  incubationStart DateTime?
-  readDay1        String?   // Observation Day 1
-  readDay2        String?   // Observation Day 2
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([sampleId])
-}
-
-model Antibiogram {
+model User {
   id                 Int      @id @default(autoincrement())
-  sampleId           Int
-  sample             Sample   @relation(fields: [sampleId], references: [id])
-  bacteriaIdentified String
-  guidelineUsed      String   // "CLSI" or "EUCAST"
-  // JSONB used to store dynamic arrays of antibiotic tests { antibiotic: "Penicillin", mic: 0.5, interpretation: "S" }
-  jsonResults        String     
+  email              String   @unique
+  passwordHash       String
+  fullName           String
+  role               String   @default("CLINICAL_ANALYST") // Roles: ADMINISTRATOR, TECHNICAL_DIRECTOR, MICROBIOLOGIST, CLINICAL_ANALYST, RECEPTION
+  licenseNumber      String?  // Número de colegiatura / Registro profesional
+  signaturePin       String?  // PIN encriptado para firma electrónica de 2º factor
+  signatureImageUrl  String?  // URL o Base64 del trazo de firma almacenado de forma segura
+  isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
+  auditLogs          AuditTrail[]
+  signedReports      Report[]     @relation("SignedByDirector")
+  verifiedTests      ClinicalTest[] @relation("VerifiedByAnalyst")
+
+  @@index([email])
+  @@index([role])
+}
+
+model AuditTrail {
+  id              Int      @id @default(autoincrement())
+  timestamp       DateTime @default(now())
+  userId          Int?
+  user            User?    @relation(fields: [userId], references: [id])
+  userName        String
+  userRole        String
+  action          String   // e.g. "CREATE", "UPDATE_RESULT", "ELECTRONIC_SIGNATURE", "RANGE_OVERRIDE"
+  entityName      String   // e.g. "ClinicalTest", "ChallengeTest", "Report"
+  entityId        String   // ID del registro modificado
+  previousValues  String?  // JSON stringified con estado previo (Trazabilidad 21 CFR Part 11)
+  newValues       String?  // JSON stringified con nuevos datos
+  reasonForChange String?  // Requisito regulatorio ISO 17025 para modificaciones analíticas
+  ipAddress       String
+  hashChecksum    String   // Hashing SHA-256 encadenado para prevención de alteración de auditoría
+
+  @@index([timestamp])
+  @@index([entityName, entityId])
+  @@index([userId])
+}
+
+model ElectronicSignature {
+  id              Int      @id @default(autoincrement())
+  timestamp       DateTime @default(now())
+  userId          Int
+  userName        String
+  userRole        String
+  meaning         String   // e.g. "APROBACIÓN_Y_EMISION_FINAL_DE_INFORME"
+  entityName      String   // e.g. "Report"
+  entityId        String
+  sha256Digest    String   // Cryptographic digest of report payload at moment of signing
+  ipAddress       String
+
+  reports         Report[]
+
+  @@index([entityName, entityId])
+}
+
+// =============================================================================
+// 2. MÓDULO DE QUÍMICA CLÍNICA Y PACIENTES (HL7 / REGLAS BIOLÓGICAS)
+// =============================================================================
+
+model Patient {
+  id           Int              @id @default(autoincrement())
+  uniqueId     String?          @unique // Cedula / DNI / Pasaporte
+  firstName    String
+  lastName     String
+  dob          DateTime?
+  gender       String?          // M, F, OTHER
+  email        String?
+  phone        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  samples      ClinicalSample[]
+
+  @@index([firstName, lastName])
+  @@index([uniqueId])
+}
+
+model ClinicalSample {
+  id             Int             @id @default(autoincrement())
+  patientId      Int
+  patient        Patient         @relation(fields: [patientId], references: [id])
+  barcode        String          @unique
+  sampleType     String          // "Sangre Total", "Suero", "Orina"
+  fastingStatus  Boolean         @default(false) // Ayuno (Requisito para motor de reglas)
+  collectionTime DateTime        @default(now())
+  receivedAt     DateTime        @default(now())
+  status         String          @default("RECEIVED") // RECEIVED, IN_ANALYSIS, COMPLETED
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  orders         ClinicalOrder[]
+
+  @@index([patientId])
+  @@index([barcode])
+}
+
+model ClinicalOrder {
+  id            Int             @id @default(autoincrement())
+  sampleId      Int
+  sample        ClinicalSample  @relation(fields: [sampleId], references: [id])
+  physicianName String?
+  status        String          @default("PENDING") // PENDING, COMPLETED, VALIDATED
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  tests         ClinicalTest[]
+  reports       Report[]
+
   @@index([sampleId])
 }
+
+model ClinicalTest {
+  id                      Int            @id @default(autoincrement())
+  orderId                 Int
+  order                   ClinicalOrder  @relation(fields: [orderId], references: [id])
+  testCode                String         // e.g., "GLU", "CORTISOL_AM", "ALB_MICRO"
+  testName                String         // e.g., "Cortisol Matutino", "Microalbúmina"
+  rawResult               Float?         // Valor medido bruto del equipo
+  dilutionFactor          Float          @default(1.0) // Multiplicador de dilución (ej. 10.0)
+  calculatedResult        Float?         // rawResult * dilutionFactor (transparente en BD)
+  unit                    String?
+  appliedReferenceRange   String?        // Rango evaluado según motor de reglas
+  flag                    String?        // "NORMAL", "HIGH", "LOW", "CRITICAL"
+  status                  String         @default("PENDING") // PENDING, ANALYZED, VALIDATED
+  verifiedById            Int?
+  verifiedBy              User?          @relation("VerifiedByAnalyst", fields: [verifiedById], references: [id])
+  verifiedAt              DateTime?
+  technicalNotes          String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  @@index([orderId])
+  @@index([testCode])
+}
+
+model ClinicalRule {
+  id              Int      @id @default(autoincrement())
+  testCode        String   // e.g. "CORTISOL"
+  gender          String?  // "M", "F", null = ANY
+  ageMinYears     Int?     @default(0)
+  ageMaxYears     Int?     @default(120)
+  timeStart       String?  // "06:00" (Para análisis con variación circadiana)
+  timeEnd         String?  // "10:00"
+  fastingRequired Boolean?
+  minRange        Float
+  maxRange        Float
+  criticalMin     Float?
+  criticalMax     Float?
+  unit            String
+  description     String   // e.g., "Rango Cortisol Muestra Matutina (06:00 - 10:00 AM)"
+  isActive        Boolean  @default(true)
+
+  @@index([testCode])
+}
+
+model HL7StreamMessage {
+  id           Int      @id @default(autoincrement())
+  timestamp    DateTime @default(now())
+  deviceId     String   // Identificador del Autoanalizador (ej. "ROCHE_COBAS_6000")
+  messageType  String   // "ORU_R01", "ASTM_E1394"
+  rawData      String   // Mensaje crudo HL7/ASTM
+  parsedJson   String?  // JSON procesado
+  status       String   @default("PROCESSED") // PROCESSED, ERROR, UNMATCHED
+  errorMessage String?
+
+  @@index([timestamp])
+  @@index([deviceId])
+}
+
+// =============================================================================
+// 3. MÓDULO DE MICROBIOLOGÍA INDUSTRIAL Y FARMACÉUTICA
+// =============================================================================
+
+model CorporateClient {
+  id            Int                  @id @default(autoincrement())
+  taxId         String               @unique // RUC / NIT / CIF
+  companyName   String
+  industrySector String              // "Alimentos", "Farmacéutica", "Cosméticos", "Licores"
+  contactName   String?
+  email         String?
+  phone         String?
+  address       String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  contracts     IndustrialContract[]
+
+  @@index([companyName])
+  @@index([taxId])
+}
+
+model IndustrialContract {
+  id              Int               @id @default(autoincrement())
+  clientId        Int
+  client          CorporateClient   @relation(fields: [clientId], references: [id])
+  projectCode     String            @unique // e.g. "PRJ-2026-STAB-089"
+  projectName     String
+  contractType    String            // "ESTUDIO_VIDA_UTIL", "CONTROL_CALIDAD_LOTE", "CHALLENGE_TEST", "PLAN_MUESTREO_PERSONALIZADO"
+  startDate       DateTime
+  endDate         DateTime?
+  status          String            @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  samples         IndustrialSample[]
+  shelfLifeStudies ShelfLifeStudy[]
+  samplingPlans   SamplingPlan[]
+
+  @@index([clientId])
+  @@index([projectCode])
+}
+
+model SamplingPlan {
+  id               Int                 @id @default(autoincrement())
+  contractId       Int
+  contract         IndustrialContract  @relation(fields: [contractId], references: [id])
+  planName         String              // e.g. "Plan de Muestreo Microbiológico Hotel Barceló 5 Estrellas"
+  industrySector   String              // "HOTEL_HOSPITALITY", "FOOD_FACTORY", "PHARMA", "RESTO_BAR"
+  profileType      String              // "EXISTING_PLAN_MAPPED", "GENERATED_FROM_SCRATCH"
+  frequency        String              // "MENSUAL", "BIMESTRAL", "TRIMESTRAL"
+  status           String              @default("ACTIVE")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  points           SamplingPlanPoint[]
+
+  @@index([contractId])
+  @@index([industrySector])
+}
+
+model SamplingPlanPoint {
+  id                  Int          @id @default(autoincrement())
+  planId              Int
+  plan                SamplingPlan @relation(fields: [planId], references: [id])
+  pointName           String       // e.g. "Máquina de Hielo Bar Principal", "Agua Piscina Adultos", "Manipulador Cocina 1"
+  zoneCategory        String       // "AGUA_POTABLE", "RECREACIONAL_PISCINA", "SUPERFICIE_CONTACTO", "MANIPULADOR", "AIRE_AMBIENTAL", "HIELO"
+  matrixType          String       // "Agua", "Hielo", "Hisopado Superficie", "Filtro Aire"
+  samplingFrequency   String       // "SEMANAL", "MENSUAL", "TRIMESTRAL"
+  targetParameters    String       // JSON string array: ["Legionella pneumophila", "E. coli", "Staphylococcus aureus"]
+  isoStandardRef      String?      // "ISO 11731", "ISO 18593", "ISO 6888-1", "ISO 6222"
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([planId])
+  @@index([zoneCategory])
+}
+
+model ShelfLifeStudy {
+  id                Int                  @id @default(autoincrement())
+  contractId        Int
+  contract          IndustrialContract   @relation(fields: [contractId], references: [id])
+  productName       String
+  lotNumber         String
+  storageConditions String               // e.g. "25°C ± 2°C / 60% HR ± 5% HR (Zona CUAL IVa RTCA)"
+  startDate         DateTime             @default(now())
+  timepointsDays    String               // JSON array string: "[0, 30, 60, 90, 180]"
+  status            String               @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  timepoints        ShelfLifeTimepoint[]
+
+  @@index([contractId])
+}
+
+model ShelfLifeTimepoint {
+  id            Int            @id @default(autoincrement())
+  studyId       Int
+  study         ShelfLifeStudy @relation(fields: [studyId], references: [id])
+  targetDay     Int            // 30, 60, 90, 180
+  scheduledDate DateTime
+  actualDate    DateTime?
+  status        String         @default("PENDING") // PENDING, SAMPLING_DUE, COMPLETED, OVERDUE
+  sampleBarcode String?
+  alertSent     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([studyId])
+  @@index([scheduledDate])
+  @@index([status])
+}
+
+model ChallengeTest {
+  id                 Int      @id @default(autoincrement())
+  sampleBarcode      String   @unique
+  productName        String
+  preservativeSystem String   // e.g. "Benzoato de Sodio 0.1% + Parabenos"
+  guideline          String   @default("USP_<51>") // "USP_<51>", "ISO_11930"
+  organismName       String   // e.g. "Candida albicans ATCC 10231", "Escherichia coli ATCC 8739"
+  initialInoculumN0  Float    // UFC/g o mL al tiempo 0 (e.g. 1.5e6)
+  
+  // Recuentos e Inóculos
+  day7Count          Float?
+  day14Count         Float?
+  day28Count         Float?
+  
+  // Reducciones Logarítmicas calculadas automáticamente
+  day7LogReduct      Float?   // log10(N0) - log10(N7)
+  day14LogReduct     Float?  // log10(N0) - log10(N14)
+  day28LogReduct     Float?  // log10(N0) - log10(N28)
+
+  complianceStatus   String   @default("IN_EVALUATION") // PASS, FAIL, IN_EVALUATION
+  conclusion         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organismName])
+  @@index([complianceStatus])
+}
+
+model IndustrialSample {
+  id                 Int                @id @default(autoincrement())
+  contractId         Int
+  contract           IndustrialContract @relation(fields: [contractId], references: [id])
+  barcode            String             @unique
+  matrixType         String             // "Alimento Procesado", "Agua Potable", "Cosmético Emulsión", "Licor"
+  lotNumber          String
+  samplingProtocol   String             // "ISO 7218", "ISO 6888-1", "RTCA Microbiológico"
+  receptionTempC     Float?             // Temperatura de recepción (°C) según ISO 7218
+  receivedAt         DateTime           @default(now())
+  status             String             @default("RECEIVED") // RECEIVED, IN_ANALYSIS, COMPLETED
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  tests              IndustrialTest[]
+  reports            Report[]
+
+  @@index([contractId])
+  @@index([barcode])
+}
+
+model IndustrialTest {
+  id                     Int              @id @default(autoincrement())
+  sampleId               Int
+  sample                 IndustrialSample @relation(fields: [sampleId], references: [id])
+  category               String           // "MICROBIOLOGICAL", "PHYSICOCHEMICAL", "RAPID_KIT"
+  parameterName          String           // "Staphylococcus aureus", "Recuento Aerobios Mesófilos", "Detección Alérgeno Maní 3D"
+  isoStandardRef         String?          // "ISO 6888-1:2021", "ISO 4833-1:2013"
+  quantitativeResult     Float?           // UFC/g o UFC/mL
+  qualitativeResult      String?          // "AUSENCIA/25g", "PRESENCIA/25g", "POSITIVO", "NEGATIVO"
+  rapidKitName           String?          // "Kit 3D Allergen Express", "Lateral Flow Pathogen"
+  specificationLimit     String?          // "< 10 UFC/g", "Ausencia en 25g"
+  compliance             String?          // "CONFORME", "NO_CONFORME", "SATISFACTORIO"
+  microscopicObservation String?          // Observaciones técnicas de partículas/estructuras microscópicas
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  @@index([sampleId])
+  @@index([category])
+}
+
+// =============================================================================
+// 4. REPORTES Y EXPORTACIÓN (DYNAMIC DUAL TEMPLATE REPORTS)
+// =============================================================================
+
+model Report {
+  id                    Int                  @id @default(autoincrement())
+  reportNumber          String               @unique // e.g. "INF-CLI-2026-0045" o "COA-IND-2026-0129"
+  reportType            String               // "CLINICAL_HUMAN", "INDUSTRIAL_COA"
+  
+  // Relaciones condicionales (Clinico vs Industrial)
+  clinicalOrderId       Int?
+  clinicalOrder         ClinicalOrder?       @relation(fields: [clinicalOrderId], references: [id])
+  
+  industrialSampleId    Int?
+  industrialSample      IndustrialSample?    @relation(fields: [industrialSampleId], references: [id])
+  
+  status                String               @default("DRAFT") // DRAFT, PENDING_SIGNATURE, ISSUED
+  
+  // Firma Electrónica del Director Técnico
+  technicalDirectorId   Int?
+  technicalDirector     User?                @relation("SignedByDirector", fields: [technicalDirectorId], references: [id])
+  signatureId           Int?
+  signature             ElectronicSignature? @relation(fields: [signatureId], references: [id])
+  signedAt              DateTime?
+  
+  // Observaciones técnicas detalladas
+  technicalObservations String?              // Hallazgos microscópicos, partículas o notas analíticas
+  pdfUrl                String?              // URL o ruta al PDF generado
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([reportNumber])
+  @@index([reportType])
+  @@index([status])
+}
+
+// =============================================================================
+// 5. MANTENIMIENTO, INVENTARIO Y CAPAS (ISO 17025)
+// =============================================================================
 
 model InventoryItem {
   id             Int       @id @default(autoincrement())
@@ -117,7 +423,7 @@ model InventoryItem {
 }
 
 model Equipment {
-  id              String    @id // e.g., EQ-001
+  id              String    @id
   name            String
   lastCalibration DateTime?
   nextCalibration DateTime?
@@ -132,7 +438,7 @@ model Capa {
   id          Int      @id @default(autoincrement())
   title       String
   description String?
-  origin      String   // e.g. "Auditoría Interna", "Queja de Cliente"
+  origin      String
   status      String   @default("Abierta")
   assignedTo  String?
   createdAt   DateTime @default(now())
@@ -162,16 +468,14 @@ model AccessLog {
   id         Int      @id @default(autoincrement())
   timestamp  DateTime @default(now())
   ip         String
-  accessType String   // "LOCAL" o "EXTERNAL"
+  accessType String
   userId     String?
   email      String?
   role       String?
   company    String?
-  action     String   // ej. "SESSION_START", "SESSION_END", "API_REQUEST"
-  details    String?  // Guarda el User-Agent (navegador/dispositivo) u otros detalles
+  action     String
+  details    String?
 
   @@index([timestamp])
   @@index([ip])
-  @@index([userId])
 }
-

@@ -32,35 +32,73 @@ export const createDatabaseBackup = async (reason = 'SCHEDULED') => {
 
     console.log(`📦 [BACKUP EXITOSO] Respaldo guardado: ${backupFileName} (${sizeMB} MB)`);
 
-    // Réplica automática al NAS: UNC path en Windows, rsync en Mac/Linux
+    // Réplica automática al NAS / Nube (Unidad Z: o ruta UNC)
     const isWindows = process.platform === 'win32';
     if (isWindows) {
-      const NAS_PATH = '\\\\192.168.0.105\\Respaldos_LIMS';
-      try {
-        if (fs.existsSync(NAS_PATH)) {
-          const nasDest = path.join(NAS_PATH, backupFileName);
-          fs.copyFileSync(backupFilePath, nasDest);
-          console.log(`🛡️ [NAS SYNOLOGY] Réplica copiada (UNC): ${nasDest}`);
-        } else {
-          console.log('ℹ️ [NAS] Unidad de red no montada — omitiendo réplica.');
+      const candidatePaths = [
+        'Z:\\public\\Respaldos_LIMS',
+        'Z:\\Respaldos_LIMS',
+        '\\\\192.168.0.105\\Respaldos_LIMS'
+      ];
+      let replicated = false;
+      for (const destDir of candidatePaths) {
+        try {
+          const rootDrive = destDir.slice(0, 3);
+          if (fs.existsSync(rootDrive) || destDir.startsWith('\\\\')) {
+            if (!fs.existsSync(destDir)) {
+              fs.mkdirSync(destDir, { recursive: true });
+            }
+            const nasDest = path.join(destDir, backupFileName);
+            fs.copyFileSync(backupFilePath, nasDest);
+            console.log(`🛡️ [NAS / NUBE Z:] Réplica guardada con éxito en: ${nasDest}`);
+            replicated = true;
+            break;
+          }
+        } catch (nasErr) {
+          console.log(`ℹ️ [NAS Sync Windows - ${destDir}]: ${nasErr.message}`);
         }
-      } catch (nasErr) {
-        console.log(`ℹ️ [NAS Sync Windows]: ${nasErr.message}`);
+      }
+      if (!replicated) {
+        console.log('ℹ️ [NAS] Unidad Z: o ruta de red no accesible — omitiendo réplica externa.');
       }
     } else {
-      // Mac Mini / Linux: usar rsync si está disponible
-      const { exec } = await import('child_process');
-      const NAS_USER = process.env.NAS_SSH_USER || 'admin';
-      const NAS_HOST = process.env.NAS_SSH_HOST || '192.168.0.105';
-      const NAS_REMOTE_PATH = process.env.NAS_SSH_PATH || '/volume1/Respaldos_LIMS/';
-      const rsyncCmd = `rsync -az --timeout=10 "${backupFilePath}" "${NAS_USER}@${NAS_HOST}:${NAS_REMOTE_PATH}"`;
-      exec(rsyncCmd, (err) => {
-        if (err) {
-          console.log(`ℹ️ [NAS rsync Mac/Linux]: ${err.message}`);
-        } else {
-          console.log(`🛡️ [NAS SYNOLOGY] Réplica rsync enviada a ${NAS_HOST}:${NAS_REMOTE_PATH}`);
+      // Mac Mini (macOS): Detectar carpetas montadas de Synology NAS en /Volumes o usar rsync
+      const macCandidatePaths = [
+        '/Volumes/Respaldos_LIMS',
+        '/Volumes/public/Respaldos_LIMS',
+        '/Volumes/home/Respaldos_LIMS',
+        process.env.HOME + '/Respaldos_LIMS'
+      ];
+      let macReplicated = false;
+      for (const destDir of macCandidatePaths) {
+        try {
+          if (fs.existsSync(destDir)) {
+            const nasDest = path.join(destDir, backupFileName);
+            fs.copyFileSync(backupFilePath, nasDest);
+            console.log(`🛡️ [NAS SYNOLOGY MAC] Réplica guardada directamente en: ${nasDest}`);
+            macReplicated = true;
+            break;
+          }
+        } catch (macErr) {
+          console.log(`ℹ️ [NAS Sync macOS - ${destDir}]: ${macErr.message}`);
         }
-      });
+      }
+
+      // Si no está montado en /Volumes, intentar rsync si hay credenciales
+      if (!macReplicated) {
+        const { exec } = await import('child_process');
+        const NAS_USER = process.env.NAS_SSH_USER || 'admin';
+        const NAS_HOST = process.env.NAS_SSH_HOST || '192.168.0.105';
+        const NAS_REMOTE_PATH = process.env.NAS_SSH_PATH || '/volume1/Respaldos_LIMS/';
+        const rsyncCmd = `rsync -az --timeout=10 "${backupFilePath}" "${NAS_USER}@${NAS_HOST}:${NAS_REMOTE_PATH}"`;
+        exec(rsyncCmd, (err) => {
+          if (err) {
+            console.log(`ℹ️ [NAS Synology rsync]: ${err.message}`);
+          } else {
+            console.log(`🛡️ [NAS SYNOLOGY] Réplica rsync enviada a ${NAS_HOST}:${NAS_REMOTE_PATH}`);
+          }
+        });
+      }
     }
 
     // Rotación automática: conservar solo los últimos 30 respaldos

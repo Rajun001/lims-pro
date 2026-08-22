@@ -1,3 +1,4 @@
+import fs from 'fs';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -94,17 +95,45 @@ app.use(express.json({ limit: '10kb' }));
 // Middleware para auditoría automática
 app.use('/api/', auditLogger);
 
+// Helper para obtener metadatos de versión del backend
+const getVersionMetadata = () => {
+  try {
+    const versionPath = path.join(__dirname, 'version.json');
+    if (fs.existsSync(versionPath)) {
+      return JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('[VERSION] No se pudo leer api/version.json:', err.message);
+  }
+  return { version: '2.5.0', fullVersion: 'v2.5.0-dev', gitCommit: 'local' };
+};
+
 // =============================================================================
-// HEALTH CHECK (used by system watchdog in frontend)
+// HEALTH & VERSION ENDPOINTS (Trazabilidad y diagnóstico)
 // =============================================================================
 app.get('/health', (req, res) => {
+  const versionInfo = getVersionMetadata();
   res.status(200).json({
     status: 'ok',
     service: 'LIMS API',
+    version: versionInfo.fullVersion || versionInfo.version,
+    gitCommit: versionInfo.gitCommit || 'unknown',
+    gitBranch: versionInfo.gitBranch || 'main',
+    buildNumber: versionInfo.buildNumber || null,
+    builtAt: versionInfo.builtAt || null,
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
     nodeVersion: process.version,
     environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/api/version', (req, res) => {
+  const versionInfo = getVersionMetadata();
+  res.status(200).json({
+    status: 'ok',
+    ...versionInfo,
+    uptimeSeconds: Math.round(process.uptime())
   });
 });
 

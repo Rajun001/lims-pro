@@ -6,6 +6,7 @@ import { ArrowLeft, Printer, Share2, Smartphone, Mail } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Logo, BarcodeDisplay } from '../components/UI';
 import { ShareReportModal } from '../components/ShareReportModal';
+import versionData from '../version.json';
 
 const RangeIndicator = ({ value, min, max, reportLang }) => {
     const val = parseFloat(value);
@@ -1511,6 +1512,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <span>📄 {labInfo?.emailReports || 'reportes@microlabscr.com'}</span>
                                 <span>💳 {labInfo?.emailBilling || 'fe@microlabscr.com'}</span>
                             </div>
+                        </div>
+
+                        {/* Pie de Trazabilidad de Versión e ISO 17025 */}
+                        <div className="mt-2 pt-1.5 border-t border-slate-200 flex justify-between items-center text-[8.5px] text-slate-400 font-mono select-none">
+                            <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
+                            <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
                         </div>
                     </>
                 )}

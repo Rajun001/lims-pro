@@ -4,6 +4,7 @@ import { ASTMatrix } from './ASTMatrix';
 import { FormInput, StatusBadge } from './UI';
 
 import { formatToCRDate } from '../utils/dateFormatter.js';
+import versionData from '../version.json';
 
 export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
     // Parse media state safely
@@ -169,19 +170,24 @@ export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
                 </div>
 
                 {/* Footer / Actions */}
-                <div className="p-6 border-t border-slate-200 bg-white flex justify-end gap-3">
-                    <button 
-                        onClick={onClose}
-                        className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button 
-                        onClick={handleSave}
-                        className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200"
-                    >
-                        <Save size={18} /> Guardar Cambios
-                    </button>
+                <div className="p-4 px-6 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div className="text-[10px] font-mono text-slate-400">
+                        FOR-HTA-01 (Rev. 02) | LIMS {versionData?.fullVersion || 'v2.5.0'}
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                            onClick={onClose}
+                            className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                        <button 
+                            onClick={handleSave}
+                            className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-200"
+                        >
+                            <Save size={18} /> Guardar Cambios
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

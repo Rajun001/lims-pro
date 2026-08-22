@@ -130,7 +130,7 @@ const CLINICAL_ANALYSIS_CODES = [
 ];
 
 // Tipos de Muestra Predefinidos
-export const CLINICAL_SAMPLE_TYPES = [
+const CLINICAL_SAMPLE_TYPES = [
     'Sangre Total (EDTA)',
     'Suero Sanguíneo',
     'Plasma Sanguíneo (Heparina / Citrato)',
@@ -149,7 +149,7 @@ export const CLINICAL_SAMPLE_TYPES = [
     'Muestra Biológica (Otro)'
 ];
 
-export const INDUSTRIAL_SAMPLE_TYPES = [
+const INDUSTRIAL_SAMPLE_TYPES = [
     'Alimento Procesado / Producto Terminado',
     'Lácteos y Derivados',
     'Cárnicos y Embutidos',
@@ -246,7 +246,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
     const [isSubmitting, setIsSubmitting] = useState(false);
     
     // CRM Contact State
-    const [selectedContact, setSelectedContact] = useState(null);
+    const [_selectedContact, _setSelectedContact] = useState(null);
     const [newClientEmail, setNewClientEmail] = useState('');
     
     // AI State
@@ -294,9 +294,9 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
 
     // Departamento de Calidad & Inocuidad (Destino de Informes Técnicos y COA)
     const [qualityContactFirstName, setQualityContactFirstName] = useState('');
-    const [qualityContactSecondName, setQualityContactSecondName] = useState('');
+    const [qualityContactSecondName, _setQualityContactSecondName] = useState('');
     const [qualityContactFirstLastName, setQualityContactFirstLastName] = useState('');
-    const [qualityContactSecondLastName, setQualityContactSecondLastName] = useState('');
+    const [qualityContactSecondLastName, _setQualityContactSecondLastName] = useState('');
     const [qualityContactRole, setQualityContactRole] = useState('Jefe de Calidad e Inocuidad');
     const [qualityContactEmail, setQualityContactEmail] = useState('');
     const [qualityContactPhoneMobile, setQualityContactPhoneMobile] = useState('');
@@ -311,16 +311,16 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
     const [procurementContactEmail, setProcurementContactEmail] = useState('');
 
     // --- CAMPOS DE MUESTRAS REFERIDAS POR OTROS LABORATORIOS (INBOUND REFERRAL) ---
-    const [isReferredInbound, setIsReferredInbound] = useState(location.state?.mode === 'referral');
-    const [referringLabName, setReferringLabName] = useState(location.state?.referringLabName || '');
-    const [referringLabCode, setReferringLabCode] = useState('');
-    const [referringLabOrderId, setReferringLabOrderId] = useState('');
-    const [referringMicrobiologist, setReferringMicrobiologist] = useState('');
-    const [referringLabEmail, setReferringLabEmail] = useState('');
-    const [referringLabPhone, setReferringLabPhone] = useState('');
-    const [referralColdChainCondition, setReferralColdChainCondition] = useState('Refrigerada (2°C - 8°C)');
-    const [referralAcceptanceStatus, setReferralAcceptanceStatus] = useState('Aceptada Conforme');
-    const [referralMatrixCategory, setReferralMatrixCategory] = useState('clinical'); // 'clinical' | 'industrial'
+    const [_isReferredInbound, _setIsReferredInbound] = useState(location.state?.mode === 'referral');
+    const [_referringLabName, _setReferringLabName] = useState(location.state?.referringLabName || '');
+    const [_referringLabCode, _setReferringLabCode] = useState('');
+    const [_referringLabOrderId, _setReferringLabOrderId] = useState('');
+    const [_referringMicrobiologist, _setReferringMicrobiologist] = useState('');
+    const [_referringLabEmail, _setReferringLabEmail] = useState('');
+    const [_referringLabPhone, _setReferringLabPhone] = useState('');
+    const [_referralColdChainCondition, _setReferralColdChainCondition] = useState('Refrigerada (2°C - 8°C)');
+    const [_referralAcceptanceStatus, _setReferralAcceptanceStatus] = useState('Aceptada Conforme');
+    const [_referralMatrixCategory, _setReferralMatrixCategory] = useState('clinical'); // 'clinical' | 'industrial'
 
     // --- MOTOR DE MEMORIA Y AUTOCOMPLETADO INTELIGENTE (HISTORIAL + CRM) ---
     const [autoFilledInfo, setAutoFilledInfo] = useState(null);
@@ -661,6 +661,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
         if (location.state?.mode && location.state.mode !== formMode) {
             handleSwitchMode(location.state.mode);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [location.state?.mode]);
 
     // Active catalogs strictly separated by formMode
@@ -804,7 +805,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                 if (gender === 'vacio') gender = 'Masculino';
                 setPatientGender(gender);
                 
-                setPatientPhone(result.paciente_o_cliente?.telefono !== 'vacio' ? (result.paciente_o_cliente?.telefono || '') : '');
+                setPatientPhoneMobile(result.paciente_o_cliente?.telefono !== 'vacio' ? (result.paciente_o_cliente?.telefono || '') : '');
                 setPatientAddress(result.paciente_o_cliente?.direccion !== 'vacio' ? (result.paciente_o_cliente?.direccion || '') : '');
                 setClinicalInfo(result.datosClinicos?.informacionClinica !== 'vacio' ? (result.datosClinicos?.informacionClinica || '') : '');
                 if (result.datosClinicos?.fechaTomaMuestra && result.datosClinicos.fechaTomaMuestra !== 'vacio') {
@@ -826,7 +827,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                     setClientName(nameToSearch);
                     setSearchClientQuery(nameToSearch);
                     if (result.paciente_o_cliente?.telefono && result.paciente_o_cliente.telefono !== 'vacio') {
-                        setPatientPhone(result.paciente_o_cliente.telefono);
+                        setPatientPhoneMobile(result.paciente_o_cliente.telefono);
                     }
                 }
             }
@@ -1193,6 +1194,8 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                     const methodObj = (formMode === 'clinical' ? CLINICAL_METHOD_CODES : INDUSTRIAL_METHOD_CODES).find(m => m.code === sample.methodCode);
                     const platingMethodStr = methodObj ? methodObj.name : sample.methodCode;
 
+                    const activeBranch = branchesList.find(b => b.id === selectedBranchId) || branchesList[0] || {};
+
                     const docData = {
                         clientName: finalClientName,
                         clientId: actualClientId,
@@ -1285,7 +1288,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
 
             alert(`✅ Se registraron con éxito ${samples.length} muestras bajo la solicitud para ${finalClientName}.`);
             navigateTo('dashboard');
-        } catch (error) {
+        } catch {
             alert("Ocurrió un error al guardar las solicitudes.");
             setIsSubmitting(false);
         }

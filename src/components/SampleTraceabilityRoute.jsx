@@ -5,7 +5,7 @@ import {
     Calendar, MapPin, AlertCircle, Info, Sparkles, FileText
 } from 'lucide-react';
 
-export const SampleTraceabilityRoute = ({ request, compact = false, onNavigateAction }) => {
+export const SampleTraceabilityRoute = ({ request, compact = false, _onNavigateAction }) => {
     const [selectedStepIndex, setSelectedStepIndex] = useState(null);
 
     if (!request) return null;
@@ -200,7 +200,7 @@ export const SampleTraceabilityRoute = ({ request, compact = false, onNavigateAc
                     {steps.map((step, idx) => {
                         const isCompleted = idx < activeIndex;
                         const isCurrent = idx === activeIndex;
-                        const isPending = idx > activeIndex;
+                        const _isPending = idx > activeIndex;
                         const isSelected = selectedStepIndex === idx;
                         const Icon = step.icon;
 

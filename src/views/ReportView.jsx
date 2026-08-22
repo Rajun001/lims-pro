@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { LoadingSpinner, Logo } from '../components/UI';
+import versionData from '../version.json';
 
 export const ReportView = ({ request, navigateTo, availableAnalyses, labInfo }) => {
     const [reportLang, setReportLang] = useState('es');
@@ -112,6 +113,10 @@ export const ReportView = ({ request, navigateTo, availableAnalyses, labInfo }) 
                     <p className="font-bold">
                         {reportLang === 'es' ? 'Firma Autorizada' : 'Authorized Signature'}
                     </p>
+                </div>
+                <div className="mt-8 pt-2 border-t border-slate-200 flex justify-between items-center text-[8.5px] text-slate-400 font-mono select-none">
+                    <span>Documento Controlado: FOR-INF-02 — LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
+                    <span>Hash Trazabilidad: #{versionData?.gitCommit || 'dev'}</span>
                 </div>
             </div>
         </div>

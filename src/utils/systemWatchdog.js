@@ -50,7 +50,7 @@ class SystemWatchdogService {
                 apiStatus = 'DEGRADED';
                 issues.push(`API respondió con estado HTTP ${res.status}`);
             }
-        } catch (err) {
+        } catch {
             apiStatus = 'OFFLINE';
             // It's normal in cloud-only mode if local API isn't running
         }

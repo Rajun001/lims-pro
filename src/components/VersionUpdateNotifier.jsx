@@ -32,7 +32,7 @@ export const VersionUpdateNotifier = () => {
                         setHasUpdate(true);
                     }
                 }
-            } catch (err) {
+            } catch {
                 // Silently ignore network or offline issues
             }
         };

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { FlaskConical, Search, Eye, Download, Lock, FileText, FileSpreadsheet, Check, Send, History, HelpCircle, ChevronDown, ChevronUp, Info, Activity, CreditCard, DollarSign, Smartphone, X, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import html2pdf from 'html2pdf.js';
 import { SampleTraceabilityRoute } from '../components/SampleTraceabilityRoute';
+import SamplingPlanWizard from '../components/SamplingPlanWizard';
 
 const ClientHelpSection = ({ userRole, language }) => {
     const [openFaq, setOpenFaq] = useState(null);
@@ -795,10 +796,10 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
 
     const welcomeName = isCompany ? 'Distribuidora Alimenticia S.A.' : isDoctor ? 'Dr. Roberto Vargas' : 'Juan Pérez';
 
-    const [resultsList, setResultsList] = useState(isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK);
+    const [paidSampleIds, setPaidSampleIds] = useState([]);
 
-    useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+    const resultsList = useMemo(() => {
+        let baseList = [];
         if (requests && requests.length > 0) {
             const filteredReqs = requests.filter(r => {
                 if (isCompany) {
@@ -808,7 +809,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                 }
             });
             if (filteredReqs.length > 0) {
-                const mapped = filteredReqs.map(r => ({
+                baseList = filteredReqs.map(r => ({
                     id: r.id,
                     date: r.requestDate ? (r.requestDate.toDate ? r.requestDate.toDate().toLocaleDateString() : new Date(r.requestDate).toLocaleDateString()) : 'N/A',
                     analysis: r.analysisRequested || 'Análisis',
@@ -821,13 +822,13 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                     paymentStatus: r.paymentStatus || 'Pagado',
                     sampleType: r.sampleType
                 }));
-                setResultsList(mapped);
-                return;
             }
         }
-        setResultsList(isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [requests, isCompany]);
+        if (baseList.length === 0) {
+            baseList = isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK;
+        }
+        return baseList.map(r => paidSampleIds.includes(r.id) ? { ...r, paymentStatus: 'Pagado' } : r);
+    }, [requests, isCompany, paidSampleIds]);
 
     // Payment and Checkout States
     const [checkoutSample, setCheckoutSample] = useState(null);
@@ -850,12 +851,9 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
         setTimeout(() => {
             setIsPaying(false);
             setPaidSuccess(true);
-            setResultsList(prev => prev.map(r => {
-                if (r.id === checkoutSample.id) {
-                    return { ...r, paymentStatus: 'Pagado' };
-                }
-                return r;
-            }));
+            if (checkoutSample?.id) {
+                setPaidSampleIds(prev => [...prev, checkoutSample.id]);
+            }
             setPaymentForm({ cardName: '', cardNumber: '', cardExp: '', cardCvv: '', referenceNumber: '', voucherNumber: '' });
         }, 2000);
     };
@@ -1525,8 +1523,11 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                     <div className="space-y-8 animate-fade-in">
                         <div className="mb-6">
                             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">{t.titleQuotes}</h1>
-                            <p className="text-slate-500 mt-2 text-sm md:text-base">{t.descQuotes}</p>
+                            <p className="text-slate-500 mt-2 text-sm md:text-base">Configure su plan de muestreo microbiológico a la medida y obtenga una proforma estimada al instante.</p>
                         </div>
+
+                        {/* Diseñador Asistido de Planes de Muestreo e Inocuidad para Clientes B2B / Hoteles */}
+                        <SamplingPlanWizard />
 
                         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8 relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
@@ -1544,19 +1545,19 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                                 <form onSubmit={handleQuoteSubmit} className="space-y-6 relative z-10">
                                     <div>
                                         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                            <FileSpreadsheet className="text-indigo-600" /> {t.createQuoteReq}
+                                            <FileSpreadsheet className="text-indigo-600" /> Solicitud Personalizada Adicional
                                         </h3>
                                         <label className="block text-sm font-bold text-slate-700 mb-2">{t.descQuoteReq}</label>
                                         <textarea
                                             required
                                             value={quoteDesc}
                                             onChange={(e) => setQuoteDesc(e.target.value)}
-                                            rows="5"
+                                            rows="4"
                                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder-slate-400"
                                             placeholder={t.placeholderQuoteReq}
                                         />
                                     </div>
-                                    <button type="submit" className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-sm">
+                                    <button type="submit" className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-sm cursor-pointer">
                                         <Send size={18} /> {t.btnSendQuote}
                                     </button>
                                 </form>

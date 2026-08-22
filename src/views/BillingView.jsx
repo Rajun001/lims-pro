@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers } from 'lucide-react';
+import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers, Users, Percent, Award } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
@@ -282,6 +282,12 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'quickbooks' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-600'}`}
                     >
                         <Layers size={14} /> QuickBooks Sync
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('commissions')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'commissions' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-600'}`}
+                    >
+                        <Users size={14} /> Comisiones Médicas
                     </button>
                 </div>
             </div>
@@ -588,6 +594,111 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
                         {qbSyncLog?.time && (
                             <p className="text-[10px] text-slate-500">Fecha: {new Date(qbSyncLog.time).toLocaleString('es-CR')}</p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB: MEDICAL COMMISSIONS & REFERRALS */}
+            {activeTab === 'commissions' && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-6 space-y-6">
+                    <div className="flex flex-wrap justify-between items-center pb-4 border-b border-slate-100 gap-3">
+                        <div>
+                            <h3 className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
+                                <Users className="text-indigo-600" /> Liquidación de Comisiones Médicas y Procedencias
+                            </h3>
+                            <p className="text-xs text-slate-500">Cálculo automatizado de honorarios y porcentajes por referidor para médicos y clínicas aliadas.</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <span className="bg-indigo-50 text-indigo-700 font-extrabold text-xs px-3 py-1.5 rounded-xl border border-indigo-100 flex items-center gap-1">
+                                <Percent size={14} /> Tasa Estándar: 10%
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Commissions summary cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4">
+                            <span className="text-[10px] font-black uppercase text-indigo-600 block mb-1">Total Comisiones Generadas</span>
+                            <span className="text-2xl font-black text-indigo-950 font-mono">¢84,500</span>
+                            <span className="text-[10px] text-indigo-500 block mt-1">En 24 órdenes referidas este mes</span>
+                        </div>
+                        <div className="bg-amber-50/60 border border-amber-100 rounded-2xl p-4">
+                            <span className="text-[10px] font-black uppercase text-amber-600 block mb-1">Pendiente de Liquidar</span>
+                            <span className="text-2xl font-black text-amber-950 font-mono">¢32,000</span>
+                            <span className="text-[10px] text-amber-600 block mt-1">3 Médicos por pagar</span>
+                        </div>
+                        <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4">
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block mb-1">Comisiones Liquidadas</span>
+                            <span className="text-2xl font-black text-emerald-950 font-mono">¢52,500</span>
+                            <span className="text-[10px] text-emerald-600 block mt-1">Pagos completados este mes</span>
+                        </div>
+                    </div>
+
+                    {/* Doctors & Referrers table */}
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                        <table className="w-full text-left border-collapse text-xs">
+                            <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-600 uppercase text-[10px]">
+                                <tr>
+                                    <th className="p-3">Médico / Procedencia</th>
+                                    <th className="p-3">Código MQC</th>
+                                    <th className="p-3 text-center">Muestras Referidas</th>
+                                    <th className="p-3 text-right">Facturación Bruta</th>
+                                    <th className="p-3 text-center">% Comisión</th>
+                                    <th className="p-3 text-right">Monto Comisión</th>
+                                    <th className="p-3 text-center">Estado</th>
+                                    <th className="p-3 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                <tr className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="p-3 font-bold text-slate-800">Dr. Fernando Vargas M.</td>
+                                    <td className="p-3 font-mono text-slate-500">MQC-1042</td>
+                                    <td className="p-3 text-center font-bold">12 Muestras</td>
+                                    <td className="p-3 text-right font-mono font-bold">¢320,000</td>
+                                    <td className="p-3 text-center font-bold text-indigo-600">10%</td>
+                                    <td className="p-3 text-right font-mono font-black text-indigo-900">¢32,000</td>
+                                    <td className="p-3 text-center">
+                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black uppercase">Pendiente</span>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                        <button 
+                                            onClick={() => alert("Comisión de ¢32,000 marcada como liquidada para Dr. Fernando Vargas.")}
+                                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-[10px]"
+                                        >
+                                            Liquidar
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="p-3 font-bold text-slate-800">Dra. Sofía Mora Castro</td>
+                                    <td className="p-3 font-mono text-slate-500">MQC-885</td>
+                                    <td className="p-3 text-center font-bold">8 Muestras</td>
+                                    <td className="p-3 text-right font-mono font-bold">¢225,000</td>
+                                    <td className="p-3 text-center font-bold text-indigo-600">10%</td>
+                                    <td className="p-3 text-right font-mono font-black text-indigo-900">¢22,500</td>
+                                    <td className="p-3 text-center">
+                                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-black uppercase">Liquidado</span>
+                                    </td>
+                                    <td className="p-3 text-center text-slate-400 font-medium text-[10px]">
+                                        Pagado el 05/08
+                                    </td>
+                                </tr>
+                                <tr className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="p-3 font-bold text-slate-800">Clínica Santa Lucía</td>
+                                    <td className="p-3 font-mono text-slate-500">CED-3010492</td>
+                                    <td className="p-3 text-center font-bold">4 Muestras</td>
+                                    <td className="p-3 text-right font-mono font-bold">¢300,000</td>
+                                    <td className="p-3 text-center font-bold text-indigo-600">10%</td>
+                                    <td className="p-3 text-right font-mono font-black text-indigo-900">¢30,000</td>
+                                    <td className="p-3 text-center">
+                                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-black uppercase">Liquidado</span>
+                                    </td>
+                                    <td className="p-3 text-center text-slate-400 font-medium text-[10px]">
+                                        Pagado el 01/08
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             )}

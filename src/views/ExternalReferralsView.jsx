@@ -34,7 +34,7 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
     const [resultNotes, setResultNotes] = useState('');
     const [attachmentFile, setAttachmentFile] = useState(null);
     const [uploadProgress, setUploadProgress] = useState('');
-    const [extractedPatient, setExtractedPatient] = useState(null); // used in reset on modal open
+    const [_extractedPatient, setExtractedPatient] = useState(null);
 
     // geminiApiKey is read from env/storage and forwarded to aiService internally
     const [_geminiApiKey, _setGeminiApiKey] = useState(localStorage.getItem('LIMS_GEMINI_API_KEY') || import.meta.env.VITE_GEMINI_API_KEY || '');
@@ -71,7 +71,6 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
     const [importProgress, setImportProgress] = useState('');
     const [previewTests, setPreviewTests] = useState([]);
     const [showPreviewModal, setShowPreviewModal] = useState(false);
-    /* eslint-disable no-unused-vars */
     // These state vars are ready for the Catalog & BulkImport tabs (UI in progress)
     void [catalogSelectedLabId, setCatalogSelectedLabId, catalogSearchQuery, setCatalogSearchQuery,
           catalogSelectedTest, setCatalogSelectedTest, catalogCostPrice, setCatalogCostPrice,
@@ -79,7 +78,6 @@ export const ExternalReferralsView = ({ requests = [], db, user, navigateTo, ref
           editingTest, setEditingTest, importFile, setImportFile, importText, setImportText,
           isImporting, setIsImporting, importProgress, setImportProgress, previewTests, setPreviewTests,
           showPreviewModal, setShowPreviewModal];
-    /* eslint-enable no-unused-vars */
 
     // Filter Outbound (Muestras enviadas a laboratorios externos)
     const outboundReferrals = useMemo(() => {
