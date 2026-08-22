@@ -10,6 +10,15 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
     const [info, setInfo] = useState(() => {
         // Deep-copy to avoid mutating the incoming prop reference (ESLint: no prop mutation)
         const base = { ...(labInfo || {}) };
+        if (!base.name) base.name = 'Laboratorio Microlabs Químicos S.A.';
+        if (!base.website) base.website = 'www.microlabscr.com';
+        if (!base.address) base.address = '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica';
+        if (!base.telephones) base.telephones = '+506 22348837, +506 22345862, +506 22246541';
+        if (!base.whatsapp) base.whatsapp = '71382750';
+        if (!base.email) base.email = 'laboratorio@microlabscr.com';
+        if (!base.emailReports) base.emailReports = 'reportes@microlabscr.com';
+        if (!base.emailBilling) base.emailBilling = 'fe@microlabscr.com';
+
         if (!base.branches || base.branches.length === 0) {
             base.branches = [
                 {
@@ -18,12 +27,13 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     name: 'Sede Central Guadalupe',
                     type: 'Sede Matriz & Laboratorio Central',
                     isMain: true,
-                    address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
-                    telephones: '22348837, 22345862, 22246541',
+                    address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
+                    telephones: '+506 22348837, +506 22345862, +506 22246541',
                     whatsapp: '71382750',
                     email: 'laboratorio@microlabscr.com',
                     emailReports: 'reportes@microlabscr.com',
                     emailBilling: 'fe@microlabscr.com',
+                    website: 'www.microlabscr.com',
                     directorName: 'Dr. Roldán Ajún Chaverri',
                     directorCode: '802',
                     permitNumber: 'MINSA-01048',
@@ -359,22 +369,23 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                 <form onSubmit={handleGeneralSave} className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-fade-in">
                     <div className="space-y-4">
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Información del Laboratorio (Razón Social y Marca)</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormInput label="Nombre del Laboratorio" value={info.name || ''} onChange={e => setInfo({ ...info, name: e.target.value })} placeholder="Ej. Laboratorio Microlabs" />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <FormInput label="Nombre del Laboratorio" value={info.name || ''} onChange={e => setInfo({ ...info, name: e.target.value })} placeholder="Laboratorio Microlabs Químicos S.A." />
+                            <FormInput label="Sitio Web Oficial" value={info.website || ''} onChange={e => setInfo({ ...info, website: e.target.value })} placeholder="www.microlabscr.com" />
                             <FormInput label="URL del Logo Oficial" value={info.logoUrl || ''} onChange={e => setInfo({ ...info, logoUrl: e.target.value })} placeholder="/logo.png" />
                         </div>
-                        <FormInput label="Dirección de la Sede Matriz (Guadalupe)" value={info.address || ''} onChange={e => setInfo({ ...info, address: e.target.value })} placeholder="Guadalupe, del correo 75 mts Norte. Zip: 10801" />
+                        <FormInput label="Dirección de la Sede Matriz (Guadalupe)" value={info.address || ''} onChange={e => setInfo({ ...info, address: e.target.value })} placeholder="75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica" />
                     </div>
 
                     <div className="space-y-4">
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Canales de Contacto Centrales</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormInput label="Teléfonos Centrales" value={info.telephones || ''} onChange={e => setInfo({ ...info, telephones: e.target.value })} placeholder="22348837, 22345862, 22246541" />
+                            <FormInput label="Teléfonos de Atención Central" value={info.telephones || ''} onChange={e => setInfo({ ...info, telephones: e.target.value })} placeholder="+506 22348837, +506 22345862, +506 22246541" />
                             <FormInput label="WhatsApp Central" value={info.whatsapp || ''} onChange={e => setInfo({ ...info, whatsapp: e.target.value })} placeholder="71382750" />
-                            <FormInput label="Correo Central" value={info.email || ''} onChange={e => setInfo({ ...info, email: e.target.value })} placeholder="laboratorio@microlabscr.com" />
-                            <FormInput label="Correo de Informes/Reportes" value={info.emailReports || ''} onChange={e => setInfo({ ...info, emailReports: e.target.value })} placeholder="reportes@microlabscr.com" />
+                            <FormInput label="Correo Central / General" value={info.email || ''} onChange={e => setInfo({ ...info, email: e.target.value })} placeholder="laboratorio@microlabscr.com" />
+                            <FormInput label="Correo de Informes y Formularios" value={info.emailReports || ''} onChange={e => setInfo({ ...info, emailReports: e.target.value })} placeholder="reportes@microlabscr.com" />
                             <div className="md:col-span-2">
-                                <FormInput label="Correo de Facturación Electrónica" value={info.emailBilling || ''} onChange={e => setInfo({ ...info, emailBilling: e.target.value })} placeholder="fe@microlabscr.com" />
+                                <FormInput label="Correo de Facturas Electrónicas y Gastos Externos" value={info.emailBilling || ''} onChange={e => setInfo({ ...info, emailBilling: e.target.value })} placeholder="fe@microlabscr.com" />
                             </div>
                         </div>
                     </div>
@@ -488,7 +499,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                     required
                                     value={editingBranch.address} 
                                     onChange={e => setEditingBranch({ ...editingBranch, address: e.target.value })} 
-                                    placeholder="Ej. San José, Calle 1, Avenidas 2 y 4, frente a..." 
+                                    placeholder="75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica" 
                                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
                                 />
                             </div>
@@ -500,7 +511,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                         type="tel" 
                                         value={editingBranch.telephones || ''} 
                                         onChange={e => setEditingBranch({ ...editingBranch, telephones: e.target.value })} 
-                                        placeholder="Ej. 2222-1111" 
+                                        placeholder="+506 22348837, 22345862, 22246541" 
                                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
                                     />
                                 </div>
@@ -510,7 +521,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                         type="tel" 
                                         value={editingBranch.whatsapp || ''} 
                                         onChange={e => setEditingBranch({ ...editingBranch, whatsapp: e.target.value })} 
-                                        placeholder="Ej. 8888-9999" 
+                                        placeholder="71382750" 
                                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
                                     />
                                 </div>
@@ -520,7 +531,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                         type="email" 
                                         value={editingBranch.email || ''} 
                                         onChange={e => setEditingBranch({ ...editingBranch, email: e.target.value })} 
-                                        placeholder="sede@microlabs.com" 
+                                        placeholder="laboratorio@microlabscr.com" 
                                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm"
                                     />
                                 </div>

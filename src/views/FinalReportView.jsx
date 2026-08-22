@@ -835,7 +835,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <div className="text-[10px] text-slate-600 font-medium mt-1">
                                     <span className="font-bold text-slate-800">{request.branchName || 'Sede Central Guadalupe'}</span>
                                     {request.branchCode && <span className="ml-1 text-[9px] bg-slate-100 font-mono font-bold px-1 rounded">({request.branchCode})</span>}
-                                    <p className="text-[9px] text-slate-500 line-clamp-1">{request.branchAddress || labInfo?.address || 'Guadalupe, San José'}</p>
+                                    <p className="text-[9px] text-slate-500 line-clamp-1">{request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</p>
                                 </div>
                             </div>
 
@@ -1359,15 +1359,15 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             <div className="col-span-6 grid grid-cols-2 gap-x-4 gap-y-1 text-[9px] text-slate-700 font-medium">
                                 <div className="flex items-center">
                                     <svg className="w-3 h-3 text-blue-600 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-2.824-1.802-5.14-4.117-6.942-6.942l1.293-.97c.362-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
-                                    <span>Tels: {labInfo?.telephones || '2234-8837 / 5862 / 6541'}</span>
+                                    <span>Tels: {labInfo?.telephones || '+506 22348837 / 22345862 / 22246541'}</span>
                                 </div>
                                 <div className="flex items-center">
                                     <svg className="w-3 h-3 text-emerald-600 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.402.002 9.795-4.39 9.797-9.795.002-2.618-1.016-5.079-2.87-6.934C16.29 2.02 13.834.999 11.223 1c-5.41 0-9.804 4.394-9.806 9.801 0 1.547.404 3.056 1.171 4.385l-.99 3.61 3.7-.971z"/></svg>
-                                    <span>WhatsApp: {labInfo?.whatsapp || '7138-2750'}</span>
+                                    <span>WhatsApp: {labInfo?.whatsapp || '71382750'}</span>
                                 </div>
                                 <div className="col-span-2 flex items-center">
                                     <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                                    <span className="truncate">General: {labInfo?.email || 'laboratorio@microlabscr.com'}</span>
+                                    <span className="truncate">General: {labInfo?.email || 'laboratorio@microlabscr.com'} | Web: {labInfo?.website || 'www.microlabscr.com'}</span>
                                 </div>
                                 <div className="col-span-2 flex items-center">
                                     <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
@@ -1379,7 +1379,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 </div>
                                 <div className="col-span-2 flex items-start mt-0.5">
                                     <svg className="w-3 h-3 text-blue-900 mr-1 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
-                                    <span className="leading-tight">{labInfo?.address || 'Guadalupe, del correo 75 mts Norte.'}</span>
+                                    <span className="leading-tight">{labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</span>
                                 </div>
                             </div>
                             
@@ -1503,11 +1503,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                         <div className="mt-8 pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center text-[10px] text-slate-500 font-semibold gap-y-2 select-none">
                             <div>
                                 <span className="font-bold text-slate-700">🏥 {request.branchName || 'Sede Central Guadalupe'}:</span>
-                                <span className="ml-1.5">{request.branchAddress || labInfo?.address || 'Guadalupe, San José'}</span>
+                                <span className="ml-1.5">{request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</span>
                                 <span className="mx-2">|</span>
-                                <span>📞 {request.branchPhones || labInfo?.telephones || '2234-8837 | 2234-5862'}</span>
+                                <span>📞 {request.branchPhones || labInfo?.telephones || '+506 22348837 | 22345862 | 22246541'}</span>
                             </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                <span>🌐 {labInfo?.website || 'www.microlabscr.com'}</span>
                                 <span>📧 {labInfo?.email || 'laboratorio@microlabscr.com'}</span>
                                 <span>📄 {labInfo?.emailReports || 'reportes@microlabscr.com'}</span>
                                 <span>💳 {labInfo?.emailBilling || 'fe@microlabscr.com'}</span>

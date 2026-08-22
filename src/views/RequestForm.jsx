@@ -223,8 +223,14 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                 id: 'suc-guadalupe',
                 code: 'GUA-01',
                 name: 'Sede Central Guadalupe',
-                address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
-                telephones: '22348837, 22345862, 22246541',
+                type: 'Sede Matriz & Laboratorio Central',
+                address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
+                telephones: '+506 22348837, +506 22345862, +506 22246541',
+                whatsapp: '71382750',
+                email: 'laboratorio@microlabscr.com',
+                emailReports: 'reportes@microlabscr.com',
+                emailBilling: 'fe@microlabscr.com',
+                website: 'www.microlabscr.com',
                 directorName: 'Dr. Roldán Ajún Chaverri',
                 directorCode: '802'
             }

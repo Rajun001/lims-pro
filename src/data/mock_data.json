@@ -122,14 +122,15 @@
     { "id": "an-5", "code": "STA", "name": "Staphylococcus aureus", "category": "Microbiología (Alimentos y Aguas)" }
   ],
   "labInfo": {
-    "name": "Laboratorio Microlabs",
+    "name": "Laboratorio Microlabs Químicos S.A.",
     "logoUrl": "/logo.png",
-    "telephones": "22348837, 22345862, 22246541",
+    "website": "www.microlabscr.com",
+    "telephones": "+506 22348837, +506 22345862, +506 22246541",
     "whatsapp": "71382750",
     "email": "laboratorio@microlabscr.com",
     "emailReports": "reportes@microlabscr.com",
     "emailBilling": "fe@microlabscr.com",
-    "address": "Guadalupe, del correo 75 mts Norte. Zip: 10801",
+    "address": "75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica",
     "directorName": "Dr. Roldán Ajún Chaverri",
     "directorCode": "802",
     "professional2Name": "Dr. José Guillermo Ajún Jiménez",

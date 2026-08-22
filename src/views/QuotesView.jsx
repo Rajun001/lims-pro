@@ -4,7 +4,7 @@ import html2pdf from 'html2pdf.js';
 import catalogData from '../data/cmqccr_catalog.json';
 import versionData from '../version.json';
 
-export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests = [] }) => {
+export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests = [], labInfo }) => {
     const [clients] = useState([
         { id: 'C-001', name: 'Hospital Central', type: 'Institucional', discount: 15 },
         { id: 'C-002', name: 'Empresa Soya S.A.', type: 'Industrial', discount: 10 },
@@ -556,9 +556,10 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                 <div className="flex justify-between items-start border-b-2 border-indigo-600 pb-6 mb-6">
                     <div>
                         <img src="https://www.microlabscr.com/s/misc/logo.jpg" alt="Microlabs Logo" className="h-16 object-contain mb-2" />
-                        <p className="text-xs text-slate-500 font-bold">Laboratorio Microlabs Químicos S.A.</p>
-                        <p className="text-xs text-slate-500">San José, Costa Rica</p>
-                        <p className="text-xs text-slate-500">Tel: (506) 2222-3333 | info@microlabscr.com</p>
+                        <p className="text-xs text-slate-800 font-bold">{labInfo?.name || 'Laboratorio Microlabs Químicos S.A.'}</p>
+                        <p className="text-[11px] text-slate-600">{labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</p>
+                        <p className="text-[11px] text-slate-600">Tels: {labInfo?.telephones || '+506 22348837 / 22345862 / 22246541'} | WhatsApp: {labInfo?.whatsapp || '71382750'}</p>
+                        <p className="text-[11px] text-slate-600">Web: {labInfo?.website || 'www.microlabscr.com'} | Email: {labInfo?.email || 'laboratorio@microlabscr.com'}</p>
                     </div>
                     <div className="text-right">
                         <h1 className="text-3xl font-black text-indigo-700 uppercase tracking-widest">PROFORMA</h1>

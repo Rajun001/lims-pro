@@ -269,14 +269,15 @@ const AppContent = () => {
     const [referenceLabs, setReferenceLabs] = useState([]);
     const [referenceLabTests, setReferenceLabTests] = useState([]);
     const [labInfo, setLabInfo] = useState({
-        name: 'Laboratorio Microlabs',
+        name: 'Laboratorio Microlabs Químicos S.A.',
         logoUrl: '/logo.png',
-        telephones: '22348837, 22345862, 22246541',
+        website: 'www.microlabscr.com',
+        telephones: '+506 22348837, +506 22345862, +506 22246541',
         whatsapp: '71382750',
         email: 'laboratorio@microlabscr.com',
         emailReports: 'reportes@microlabscr.com',
         emailBilling: 'fe@microlabscr.com',
-        address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
+        address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
         directorName: 'Dr. Roldán Ajún Chaverri',
         directorCode: '802',
         professional2Name: 'Dr. José Guillermo Ajún Jiménez',
@@ -288,10 +289,13 @@ const AppContent = () => {
                 name: 'Sede Central Guadalupe',
                 type: 'Sede Matriz & Laboratorio Central',
                 isMain: true,
-                address: 'Guadalupe, del correo 75 mts Norte. Zip: 10801, San José',
-                telephones: '22348837, 22345862, 22246541',
+                address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
+                telephones: '+506 22348837, +506 22345862, +506 22246541',
                 whatsapp: '71382750',
                 email: 'laboratorio@microlabscr.com',
+                emailReports: 'reportes@microlabscr.com',
+                emailBilling: 'fe@microlabscr.com',
+                website: 'www.microlabscr.com',
                 directorName: 'Dr. Roldán Ajún Chaverri',
                 directorCode: '802',
                 permitNumber: 'MINSA-01048',
@@ -655,7 +659,7 @@ const AppContent = () => {
                 <Route path="/accounting" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AccountingView navigateTo={navigateTo} userRole={userRole} /></LayoutWrapper>} />
                 <Route path="/billing" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BillingView requests={requests} db={db} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} user={user} /></LayoutWrapper>} />
                 <Route path="/crm" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><CRMView db={db} clients={clients} user={user} requests={requests} /></LayoutWrapper>} />
-                <Route path="/quotes" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QuotesView navigateTo={navigateTo} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} /></LayoutWrapper>} />
+                <Route path="/quotes" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QuotesView navigateTo={navigateTo} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} labInfo={labInfo} /></LayoutWrapper>} />
                 <Route path="/analyzer_inbox" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AnalyzerInboxView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/results_review" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ResultsReviewView db={db} user={user} requests={requests} analyses={analyses} labInfo={labInfo} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/microbiology" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><MicrobiologyWorkcards db={db} user={user} requests={requests} labInfo={labInfo} navigateTo={navigateTo} /></LayoutWrapper>} />
