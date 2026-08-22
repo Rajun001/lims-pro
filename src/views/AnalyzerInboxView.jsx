@@ -108,8 +108,12 @@ export const AnalyzerInboxView = ({ db, user }) => {
                         }
                     });
 
-                    updatedResults = runClinicalCalculations(updatedResults);
-
+                    const patientContext = {
+                        age: requestData.age || requestData.patientAge,
+                        gender: requestData.gender || requestData.patientGender || requestData.sex,
+                        birthDate: requestData.birthDate
+                    };
+                    updatedResults = runClinicalCalculations(updatedResults, patientContext);
 
                     localReqs[reqIndex] = {
                         ...requestData,
@@ -173,8 +177,13 @@ export const AnalyzerInboxView = ({ db, user }) => {
                         }
                     });
 
-                    updatedResults = runClinicalCalculations(updatedResults);
-
+                    const reqDoc = requestSnap.exists() ? requestSnap.data() : {};
+                    const patientContext = {
+                        age: reqDoc.age || reqDoc.patientAge,
+                        gender: reqDoc.gender || reqDoc.patientGender || reqDoc.sex,
+                        birthDate: reqDoc.birthDate
+                    };
+                    updatedResults = runClinicalCalculations(updatedResults, patientContext);
 
                     await updateDoc(requestRef, {
                         analyzerResults: updatedResults,

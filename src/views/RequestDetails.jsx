@@ -241,7 +241,12 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
             }
 
             // Run automated clinical calculations
-            updatedResults = runClinicalCalculations(updatedResults);
+            const patientContext = {
+                age: request.age || request.patientAge,
+                gender: request.gender || request.patientGender || request.sex,
+                birthDate: request.birthDate
+            };
+            updatedResults = runClinicalCalculations(updatedResults, patientContext);
 
 
             let newStatus = request.status;
@@ -281,7 +286,12 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
             let updatedResults = currentResults.filter(r => r.testCode !== testCodeToDelete);
 
             // Run automated clinical calculations to recalculate or clear derived parameters
-            updatedResults = runClinicalCalculations(updatedResults);
+            const patientContext = {
+                age: request.age || request.patientAge,
+                gender: request.gender || request.patientGender || request.sex,
+                birthDate: request.birthDate
+            };
+            updatedResults = runClinicalCalculations(updatedResults, patientContext);
 
 
             let newStatus = request.status;
