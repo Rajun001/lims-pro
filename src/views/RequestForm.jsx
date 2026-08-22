@@ -231,7 +231,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                 emailReports: 'reportes@microlabscr.com',
                 emailBilling: 'fe@microlabscr.com',
                 website: 'www.microlabscr.com',
-                directorName: 'Dr. Roldán Ajún Chaverri',
+                directorName: 'Dr. Roldan Ajún Chaverri',
                 directorCode: '802'
             }
         ];

@@ -97,7 +97,7 @@ export const SampleTraceabilityRoute = ({ request, compact = false, _onNavigateA
             subtitle: 'Revisión Facultativa',
             icon: ShieldCheck,
             description: 'Verificación de controles de calidad (QC), correlación analítica y firma por el Microbiólogo Regente.',
-            responsible: request.signedByName || 'Dr. Roldán Ajún Chaverri (Reg. 802)',
+            responsible: request.signedByName || 'Dr. Roldan Ajún Chaverri (Reg. 802)',
             location: 'Dirección Técnica & Calidad',
             timestamp: request.status === 'Completado' ? (completionDate || 'Validado') : (activeIndex === 3 ? 'En revisión' : 'Pendiente'),
             details: [

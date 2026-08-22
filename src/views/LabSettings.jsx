@@ -34,7 +34,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     emailReports: 'reportes@microlabscr.com',
                     emailBilling: 'fe@microlabscr.com',
                     website: 'www.microlabscr.com',
-                    directorName: 'Dr. Roldán Ajún Chaverri',
+                    directorName: 'Dr. Roldan Ajún Chaverri',
                     directorCode: '802',
                     permitNumber: 'MINSA-01048',
                     active: true
@@ -166,7 +166,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
             telephones: '',
             whatsapp: '',
             email: '',
-            directorName: info.directorName || 'Dr. Roldán Ajún Chaverri',
+            directorName: info.directorName || 'Dr. Roldan Ajún Chaverri',
             directorCode: info.directorCode || '802',
             permitNumber: 'MINSA-PROV',
             active: true
@@ -402,7 +402,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     <div className="space-y-4">
                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Microbiólogos Químicos Clínicos y Validadores Oficiales</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormInput label="Director Técnico / Regente Principal" value={info.directorName || ''} onChange={e => setInfo({ ...info, directorName: e.target.value })} placeholder="Dr. Roldán Ajún Chaverri" />
+                            <FormInput label="Director Técnico / Regente Principal" value={info.directorName || ''} onChange={e => setInfo({ ...info, directorName: e.target.value })} placeholder="Dr. Roldan Ajún Chaverri" />
                             <FormInput label="Código / Registro Profesional MQC" value={info.directorCode || ''} onChange={e => setInfo({ ...info, directorCode: e.target.value })} placeholder="802" />
                             <FormInput label="Microbiólogo Co-firmante / Sede" value={info.professional2Name || ''} onChange={e => setInfo({ ...info, professional2Name: e.target.value })} placeholder="Dr. José Guillermo Ajún Jiménez" />
                             <FormInput label="Código / Registro Co-firmante" value={info.professional2Code || ''} onChange={e => setInfo({ ...info, professional2Code: e.target.value })} placeholder="Reg. Trámite" />

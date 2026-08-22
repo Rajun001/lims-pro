@@ -416,7 +416,7 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
         try {
             const updatedResults = request.analyzerResults?.map(r => ({...r, status: 'released'})) || [];
             const name = microType === 'director' 
-                ? (labInfo?.directorName || 'Dr. Roldán Ajún Chaverri')
+                ? (labInfo?.directorName || 'Dr. Roldan Ajún Chaverri')
                 : (labInfo?.professional2Name || 'Dr. José Guillermo Ajún Jiménez');
             const code = microType === 'director'
                 ? (labInfo?.directorCode || '802')
@@ -1084,7 +1084,7 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                                         onChange={(e) => setSelectedMicrobiologist(e.target.value)}
                                                         className="px-2 py-1 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 w-56 cursor-pointer"
                                                     >
-                                                        <option value="director">{labInfo?.directorName || 'Dr. Roldán Ajún Chaverri'} (Reg. {labInfo?.directorCode || '802'})</option>
+                                                        <option value="director">{labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} (Reg. {labInfo?.directorCode || '802'})</option>
                                                         {labInfo?.professional2Name && (
                                                             <option value="professional2">{labInfo.professional2Name} ({labInfo.professional2Code || 'Reg. Trámite'})</option>
                                                         )}

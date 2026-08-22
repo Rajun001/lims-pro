@@ -30,7 +30,7 @@ export const PublicVerificationView = () => {
                         analysisRequested: searchId.startsWith('COA') ? 'Ensayo Microbiológico ISO 6888-1 & Challenge Test USP <51>' : 'Panel Química Clínica & Cortisol AM',
                         status: 'ISSUED',
                         signedAt: new Date().toISOString(),
-                        technicalDirector: 'Dr. Roldán Ajún Chaverri (Director Técnico MQC #802)',
+                        technicalDirector: 'Dr. Roldan Ajún Chaverri (Director Técnico MQC #802)',
                         sha256Digest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
                         isIntegrityVerified: true,
                         accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022', '21 CFR Part 11 Compliant']
@@ -47,7 +47,7 @@ export const PublicVerificationView = () => {
                     analysisRequested: 'Panel Analítico Certificado',
                     status: 'ISSUED',
                     signedAt: new Date().toISOString(),
-                    technicalDirector: 'Dr. Roldán Ajún Chaverri (Director Técnico MQC #802)',
+                    technicalDirector: 'Dr. Roldan Ajún Chaverri (Director Técnico MQC #802)',
                     sha256Digest: 'a8f5f167f44f4964e6c998dee827110c',
                     isIntegrityVerified: true,
                     accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022']

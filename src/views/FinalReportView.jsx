@@ -1419,7 +1419,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     </div>
                                     <div className="border-t border-slate-700 w-32 my-1"></div>
                                     <span className="text-[10px] font-bold text-slate-800">
-                                        {request.signedByName || labInfo?.directorName || 'Dr. Roldán Ajún Chaverri'}
+                                        {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}
                                     </span>
                                     <span className="text-[8px] text-slate-500 font-mono font-bold">
                                         Reg. M.Q.C. {request.signedByCode || labInfo?.directorCode || '802'}
@@ -1470,12 +1470,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             <div className="border-b border-slate-400 w-3/4 mx-auto mb-2 relative h-16 flex items-end justify-center">
                                 <div className="absolute bottom-0 w-full text-center pb-1">
                                     <span className="font-signature text-2xl text-blue-900 opacity-85" style={{ fontFamily: 'cursive' }}>
-                                        {request.signedByName ? request.signedByName : (labInfo?.directorName || 'Dr. Roldán Ajún Chaverri')}
+                                        {request.signedByName ? request.signedByName : (labInfo?.directorName || 'Dr. Roldan Ajún Chaverri')}
                                     </span>
                                 </div>
                             </div>
                             <p className="text-sm font-bold text-slate-800">
-                                {request.signedByName || labInfo?.directorName || 'Dr. Roldán Ajún Chaverri'}
+                                {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}
                             </p>
                             <p className="text-xs text-slate-505">
                                 {reportLang === 'es' 

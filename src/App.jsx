@@ -278,7 +278,7 @@ const AppContent = () => {
         emailReports: 'reportes@microlabscr.com',
         emailBilling: 'fe@microlabscr.com',
         address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
-        directorName: 'Dr. Roldán Ajún Chaverri',
+        directorName: 'Dr. Roldan Ajún Chaverri',
         directorCode: '802',
         professional2Name: 'Dr. José Guillermo Ajún Jiménez',
         professional2Code: 'Reg. Trámite',
@@ -296,7 +296,7 @@ const AppContent = () => {
                 emailReports: 'reportes@microlabscr.com',
                 emailBilling: 'fe@microlabscr.com',
                 website: 'www.microlabscr.com',
-                directorName: 'Dr. Roldán Ajún Chaverri',
+                directorName: 'Dr. Roldan Ajún Chaverri',
                 directorCode: '802',
                 permitNumber: 'MINSA-01048',
                 active: true

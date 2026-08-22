@@ -130,7 +130,7 @@ export const ResultsReviewView = ({ db, user, requests = [], analyses = [], labI
         if (selectedIds.length === 0) return;
         if (!window.confirm(`¿Confirma la liberación y firma digital en lote de ${selectedIds.length} muestras seleccionadas?`)) return;
 
-        const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldán Ajún Chaverri';
+        const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldan Ajún Chaverri';
         const signerCode = labInfo?.directorCode || '802';
         const validationTimestamp = new Date().toISOString();
 
@@ -223,7 +223,7 @@ export const ResultsReviewView = ({ db, user, requests = [], analyses = [], labI
         }
 
         try {
-            const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldán Ajún Chaverri';
+            const signerName = labInfo?.directorName || user?.displayName || 'Dr. Roldan Ajún Chaverri';
             const signerCode = labInfo?.directorCode || '802';
             const validationTimestamp = new Date().toISOString();
 
