@@ -6,7 +6,7 @@ import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-export const HomeDashboard = ({ navigateTo, requests = [] }) => {
+export const HomeDashboard = ({ navigateTo, requests = [], userRole = 'admin', user }) => {
     const { addNotification } = useNotification();
     
     const handleDeleteRequest = async (e, reqId) => {
@@ -32,9 +32,9 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
         }
     };
 
-    const { volumeData, typeData, recentSamples, avgTat, projectedRevenue, criticalSamples, inventoryAlerts } = React.useMemo(() => {
+    const { volumeData, typeData, recentSamples, avgTat, projectedRevenue, criticalSamples, inProgressSamples, completedSamples, inventoryAlerts } = React.useMemo(() => {
         if (!requests || requests.length === 0) {
-            return { volumeData: [], typeData: [], recentSamples: [], avgTat: '0h', projectedRevenue: 0, criticalSamples: 0, inventoryAlerts: 0 };
+            return { volumeData: [], typeData: [], recentSamples: [], avgTat: '0h', projectedRevenue: 0, criticalSamples: 0, inProgressSamples: 0, completedSamples: 0, inventoryAlerts: 0 };
         }
 
         // Tipo de Muestras
@@ -62,92 +62,234 @@ export const HomeDashboard = ({ navigateTo, requests = [] }) => {
         });
 
         const recentSamples = requests.slice(0, 5);
-
-        // TAT Simulado para la vista empresarial (idealmente calculado con timestamps reales)
         const avgTat = '4.2h';
-
-        // Nuevos KPIs Gerenciales
-        const projectedRevenue = requests.length * 45; // Estimación: $45 USD promedio por muestra
+        const projectedRevenue = requests.length * 45; // Estimación USD
         const criticalSamples = requests.filter(r => r.status === 'Pendiente Revisión').length;
-        const inventoryAlerts = 3; // Simulación de insumos por vencer o sin stock
+        const inProgressSamples = requests.filter(r => r.status === 'En Proceso' || r.status === 'Pendiente').length;
+        const completedSamples = requests.filter(r => r.status === 'Completado').length;
+        const inventoryAlerts = 3;
 
-        return { volumeData: volCounts, typeData, recentSamples, avgTat, projectedRevenue, criticalSamples, inventoryAlerts };
+        return { volumeData: volCounts, typeData, recentSamples, avgTat, projectedRevenue, criticalSamples, inProgressSamples, completedSamples, inventoryAlerts };
     }, [requests]);
 
     const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 
+    // Textos y configuraciones adaptativas según el rol
+    const getDashboardHeader = () => {
+        switch (userRole) {
+            case 'director_tecnico':
+                return {
+                    title: 'Dirección Técnica & Calidad',
+                    subtitle: 'Supervisión analítica, validación de informes y aseguramiento ISO 17025.',
+                    rolePill: 'Director Técnico (Regente)'
+                };
+            case 'analyst':
+                return {
+                    title: 'Panel Analítico de Laboratorio',
+                    subtitle: 'Hojas de trabajo, analizadores e ingreso de resultados.',
+                    rolePill: 'Analista de Laboratorio'
+                };
+            case 'billing_agent':
+                return {
+                    title: 'Panel de Facturación & Emisiones',
+                    subtitle: 'Emisión de reportes, facturación electrónica y cotizaciones.',
+                    rolePill: 'Facturación & Cobros'
+                };
+            case 'admin':
+            default:
+                return {
+                    title: 'Panel General LIMS-PRO',
+                    subtitle: 'Resumen gerencial, auditoría 21 CFR Part 11 y métricas operativas.',
+                    rolePill: 'Administrador Global'
+                };
+        }
+    };
+
+    const header = getDashboardHeader();
+
     return (
         <div className="flex flex-col min-h-[80vh] w-full max-w-6xl mx-auto p-4 animate-fade-in pb-12">
-            <div className="mb-8 text-center md:text-left flex justify-between items-end">
+            <div className="mb-8 text-center md:text-left flex flex-col md:flex-row justify-between md:items-end gap-4">
                 <div>
-                    <h1 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-2 tracking-tight">Panel de Control LIMS</h1>
-                    <p className="text-slate-500">Resumen general y accesos rápidos del laboratorio.</p>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {header.rolePill}
+                        </span>
+                    </div>
+                    <h1 className="text-3xl md:text-4xl font-extrabold text-slate-800 mb-1 tracking-tight">{header.title}</h1>
+                    <p className="text-slate-500 text-sm">{header.subtitle}</p>
                 </div>
                 <div className="hidden md:flex flex-col items-end">
-                    <span className="text-sm font-bold text-slate-500 uppercase">TAT Promedio (24h)</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">TAT Promedio (24h)</span>
                     <span className="text-3xl font-black text-indigo-600">{avgTat}</span>
                 </div>
             </div>
 
-            {/* KPIs Gerenciales */}
+            {/* KPIs Adaptativos por Rol */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
-                    <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                        <TrendingUp size={28} />
+                {/* KPI 1 */}
+                {userRole === 'billing_agent' ? (
+                    <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                            <TrendingUp size={28} />
+                        </div>
+                        <div>
+                            <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider">Ingresos Proyectados</p>
+                            <h2 className="text-3xl font-black">${projectedRevenue.toLocaleString()} <span className="text-xs font-medium">USD</span></h2>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-indigo-100 text-sm font-bold uppercase tracking-wider">Ingresos Proyectados</p>
-                        <h2 className="text-3xl font-black">${projectedRevenue.toLocaleString()} <span className="text-sm font-medium">USD</span></h2>
+                ) : (
+                    <div className="bg-gradient-to-br from-indigo-500 to-indigo-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                            <Activity size={28} />
+                        </div>
+                        <div>
+                            <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider">Muestras en Proceso</p>
+                            <h2 className="text-3xl font-black">{inProgressSamples} <span className="text-xs font-medium">Activas</span></h2>
+                        </div>
                     </div>
-                </div>
+                )}
                 
+                {/* KPI 2 */}
                 <div className="bg-gradient-to-br from-rose-500 to-rose-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
                     <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
                         <AlertOctagon size={28} />
                     </div>
                     <div>
-                        <p className="text-rose-100 text-sm font-bold uppercase tracking-wider">Muestras Críticas</p>
-                        <h2 className="text-3xl font-black">{criticalSamples} <span className="text-sm font-medium">En Revisión</span></h2>
+                        <p className="text-rose-100 text-xs font-bold uppercase tracking-wider">
+                            {userRole === 'director_tecnico' ? 'Pendientes de Firma / DT' : 'Muestras Críticas'}
+                        </p>
+                        <h2 className="text-3xl font-black">{criticalSamples} <span className="text-xs font-medium">En Revisión</span></h2>
                     </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-amber-500 to-amber-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
-                    <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                        <Bell size={28} />
+                {/* KPI 3 */}
+                {userRole === 'billing_agent' ? (
+                    <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                            <Wallet size={28} />
+                        </div>
+                        <div>
+                            <p className="text-emerald-100 text-xs font-bold uppercase tracking-wider">Órdenes Listas</p>
+                            <h2 className="text-3xl font-black">{completedSamples} <span className="text-xs font-medium">Facturables</span></h2>
+                        </div>
                     </div>
-                    <div>
-                        <p className="text-amber-100 text-sm font-bold uppercase tracking-wider">Alertas Inventario</p>
-                        <h2 className="text-3xl font-black">{inventoryAlerts} <span className="text-sm font-medium">Insumos bajos</span></h2>
+                ) : (
+                    <div className="bg-gradient-to-br from-amber-500 to-amber-700 p-6 rounded-2xl shadow-lg text-white flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+                            <Bell size={28} />
+                        </div>
+                        <div>
+                            <p className="text-amber-100 text-xs font-bold uppercase tracking-wider">Alertas Inventario</p>
+                            <h2 className="text-3xl font-black">{inventoryAlerts} <span className="text-xs font-medium">Insumos bajos</span></h2>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Accesos Rápidos */}
+            {/* Accesos Rápidos Selectivos */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-                <button onClick={() => navigateTo('dashboard')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><FileText size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Solicitudes</h2>
+                {/* Botón 1: Solicitudes (Común a todos) */}
+                <button onClick={() => navigateTo('dashboard')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                    <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><FileText size={22} /></div>
+                    <h2 className="font-bold text-slate-800 text-xs md:text-sm">Solicitudes</h2>
                 </button>
-                <button onClick={() => navigateTo('inventory')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Package size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Inventario</h2>
-                </button>
-                <button onClick={() => navigateTo('qc')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Activity size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Calidad (QC)</h2>
-                </button>
-                <button onClick={() => navigateTo('audit')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><History size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Auditoría</h2>
-                </button>
-                <button onClick={() => navigateTo('accounting')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Wallet size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Finanzas</h2>
-                </button>
-                <button onClick={() => navigateTo('quotes')} className="group bg-white p-6 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Calculator size={24} /></div>
-                    <h2 className="font-bold text-slate-800 text-sm md:text-base">Cotizaciones</h2>
-                </button>
+
+                {/* Botones para Analistas */}
+                {userRole === 'analyst' && (
+                    <>
+                        <button onClick={() => navigateTo('microbiology')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Microbiología</h2>
+                        </button>
+                        <button onClick={() => navigateTo('results_review')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Ensayos</h2>
+                        </button>
+                        <button onClick={() => navigateTo('analyzer_inbox')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Analizadores</h2>
+                        </button>
+                        <button onClick={() => navigateTo('storage')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Mapeo Frío</h2>
+                        </button>
+                        <button onClick={() => navigateTo('inventory')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Inventario</h2>
+                        </button>
+                    </>
+                )}
+
+                {/* Botones para Director Técnico */}
+                {userRole === 'director_tecnico' && (
+                    <>
+                        <button onClick={() => navigateTo('qc')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Calidad (QC)</h2>
+                        </button>
+                        <button onClick={() => navigateTo('results_review')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><FileText size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Validación</h2>
+                        </button>
+                        <button onClick={() => navigateTo('microbiology')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Microbiología</h2>
+                        </button>
+                        <button onClick={() => navigateTo('analysis_settings')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Calculator size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Ensayos</h2>
+                        </button>
+                        <button onClick={() => navigateTo('quotes')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Calculator size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Cotizaciones</h2>
+                        </button>
+                    </>
+                )}
+
+                {/* Botones para Facturación */}
+                {userRole === 'billing_agent' && (
+                    <>
+                        <button onClick={() => navigateTo('billing')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Wallet size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Facturación</h2>
+                        </button>
+                        <button onClick={() => navigateTo('quotes')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Calculator size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Cotizaciones</h2>
+                        </button>
+                        <button onClick={() => navigateTo('crm')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Clientes CRM</h2>
+                        </button>
+                    </>
+                )}
+
+                {/* Botones para Administrador */}
+                {userRole === 'admin' && (
+                    <>
+                        <button onClick={() => navigateTo('inventory')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Inventario</h2>
+                        </button>
+                        <button onClick={() => navigateTo('qc')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Calidad (QC)</h2>
+                        </button>
+                        <button onClick={() => navigateTo('audit')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><History size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Auditoría</h2>
+                        </button>
+                        <button onClick={() => navigateTo('accounting')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Wallet size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Finanzas</h2>
+                        </button>
+                        <button onClick={() => navigateTo('quotes')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Calculator size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Cotizaciones</h2>
+                        </button>
+                    </>
+                )}
             </div>
 
             {/* Dashboard Analytics (Recharts) */}

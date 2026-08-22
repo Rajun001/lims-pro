@@ -151,6 +151,25 @@ const ClientRoute = ({ user, userRole, children }) => {
     return children;
 };
 
+const routeRoleMap = {
+    accounting: ['admin'],
+    audit: ['admin'],
+    diagnostics: ['admin'],
+    lab_settings: ['admin', 'director_tecnico'],
+    analysis_settings: ['admin', 'director_tecnico'],
+    qc: ['admin', 'director_tecnico'],
+    capa: ['admin', 'director_tecnico'],
+    billing: ['admin', 'director_tecnico', 'billing_agent'],
+    quotes: ['admin', 'director_tecnico', 'billing_agent'],
+    microbiology: ['admin', 'director_tecnico', 'analyst'],
+    results_review: ['admin', 'director_tecnico', 'analyst'],
+    analyzer_inbox: ['admin', 'director_tecnico', 'analyst'],
+    batch: ['admin', 'director_tecnico', 'analyst'],
+    storage: ['admin', 'director_tecnico', 'analyst'],
+    environmental: ['admin', 'director_tecnico', 'analyst'],
+    referrals: ['admin', 'director_tecnico', 'analyst']
+};
+
 const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
     const location = useLocation();
     const view = location.pathname.substring(1) || 'home';
@@ -163,6 +182,21 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
     // Redirect client role users to the client portal if they try to access internal views
     if (userRole && userRole.startsWith('client_')) {
         return <Navigate to="/client_portal" replace />;
+    }
+
+    // Check module permission per user role
+    if (routeRoleMap[view] && !routeRoleMap[view].includes(userRole)) {
+        return (
+            <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
+                <Sidebar user={user} userRole={userRole} navigateTo={navigateTo} view={view} labInfo={labInfo} />
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <TopBar user={user} userRole={userRole} navigateTo={navigateTo} labInfo={labInfo} />
+                    <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+                        <RestrictedAccess navigateTo={navigateTo} />
+                    </main>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -635,7 +669,7 @@ const AppContent = () => {
                 {/* Internal App Routes with Layout */}
                 <Route path="/" element={<Navigate to="/home" replace />} />
                 
-                <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} /></LayoutWrapper>} />
+                <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} user={user} userRole={userRole} /></LayoutWrapper>} />
                 <Route path="/dashboard" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><Dashboard requests={requests} navigateTo={navigateTo} clients={clients} /></LayoutWrapper>} />
                 
                 <Route path="/new_request" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestForm db={db} user={user} navigateTo={navigateTo} availableAnalyses={analyses} clients={clients} requests={requests} labInfo={labInfo} /></LayoutWrapper>} />

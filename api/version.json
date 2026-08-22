@@ -1,10 +1,10 @@
 {
   "app": "LIMS-PRO",
   "version": "2.5.0",
-  "buildNumber": 40,
-  "gitCommit": "7938f3a",
+  "buildNumber": 42,
+  "gitCommit": "6185055",
   "gitBranch": "main",
-  "fullVersion": "v2.5.0-b40.7938f3a",
-  "builtAt": "2026-08-22T17:01:47.210Z",
+  "fullVersion": "v2.5.0-b42.6185055",
+  "builtAt": "2026-08-22T17:35:42.680Z",
   "environment": "production"
 }
