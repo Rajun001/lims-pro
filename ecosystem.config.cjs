@@ -33,6 +33,23 @@ module.exports = {
         NODE_ENV: "production",
         ANALYZER_PORT: 9000
       }
+    },
+    {
+      name: "lims-frontend",
+      script: "./node_modules/vite/bin/vite.js",
+      args: "preview --port 5173 --host",
+      cwd: "./",
+      watch: false,
+      max_restarts: 10,
+      restart_delay: 5000,
+      min_uptime: "10s",
+      out_file: "./logs/lims-frontend-out.log",
+      error_file: "./logs/lims-frontend-error.log",
+      merge_logs: true,
+      log_date_format: "YYYY-MM-DD HH:mm:ss",
+      env: {
+        NODE_ENV: "production"
+      }
     }
   ]
 };
