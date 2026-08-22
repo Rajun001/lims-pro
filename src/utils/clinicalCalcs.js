@@ -149,5 +149,57 @@ export const runClinicalCalculations = (results) => {
         updated = updated.filter(r => r.testCode !== 'NA_K');
     }
 
+    // 7. BILIRRUBINA INDIRECTA / NO CONJUGADA
+    const tb = getParamValue(updated, '1080', ['bilirrubina', 'total']);
+    const dbVal = getParamValue(updated, '1070', ['bilirrubina', 'directa']);
+    const hasBili = !isNaN(tb) && !isNaN(dbVal);
+
+    if (hasBili && tb >= dbVal) {
+        const indBili = tb - dbVal;
+        upsertCalculatedResult('BIL_IND', (Math.round(indBili * 100) / 100).toString());
+    } else {
+        updated = updated.filter(r => r.testCode !== 'BIL_IND');
+    }
+
+    // 8. PROTEÍNAS: GLOBULINA Y RELACIÓN A/G
+    const tp = getParamValue(updated, '1690', ['prote', 'total']);
+    const alb = getParamValue(updated, '1030', ['albumina']);
+    const hasProteins = !isNaN(tp) && !isNaN(alb);
+
+    if (hasProteins && tp >= alb) {
+        const glob = tp - alb;
+        const agRatio = glob > 0 ? alb / glob : 0;
+        upsertCalculatedResult('GLOB', (Math.round(glob * 10) / 10).toString());
+        if (agRatio > 0) {
+            upsertCalculatedResult('REL_AG', (Math.round(agRatio * 100) / 100).toString());
+        }
+    } else {
+        updated = updated.filter(r => !['GLOB', 'REL_AG'].includes(r.testCode));
+    }
+
+    // 9. ANION GAP (Brecha Aniónica)
+    const cl = getParamValue(updated, '1160', ['cloro']);
+    const hasAnionGap = !isNaN(sodium) && !isNaN(cl);
+
+    if (hasAnionGap) {
+        // Fórmula estándar: (Na + K) - Cl o Na - Cl
+        const agVal = !isNaN(potassium) ? (sodium + potassium) - cl : sodium - cl;
+        upsertCalculatedResult('ANION_GAP', Math.round(agVal).toString());
+    } else {
+        updated = updated.filter(r => r.testCode !== 'ANION_GAP');
+    }
+
+    // 10. CALCIO CORREGIDO POR ALBÚMINA
+    const ca = getParamValue(updated, '1110', ['calcio']);
+    const hasCaCorr = !isNaN(ca) && !isNaN(alb);
+
+    if (hasCaCorr && alb > 0) {
+        // Fórmula de Payne: Calcio Medido + 0.8 * (4.0 - Albúmina)
+        const caCorr = ca + 0.8 * (4.0 - alb);
+        upsertCalculatedResult('CA_CORR', (Math.round(caCorr * 10) / 10).toString());
+    } else {
+        updated = updated.filter(r => r.testCode !== 'CA_CORR');
+    }
+
     return updated;
 };
