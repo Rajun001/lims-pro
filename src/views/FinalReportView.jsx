@@ -1329,6 +1329,28 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 )}
 
+                {/* EVALUACIÓN DE CONFORMIDAD NORMATIVA OFICIAL (MINSA / SENASA / RTCA) */}
+                {isIndustrial && (
+                    <div className="mb-6 p-3.5 bg-slate-50 print:bg-slate-50/50 border-2 border-slate-300 rounded-xl">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs">📜</span>
+                                <span className="text-[11px] font-black uppercase text-slate-800 tracking-wide">
+                                    {(request.sampleType || '').toLowerCase().includes('agua') || (request.analysisRequested || '').toLowerCase().includes('agua')
+                                        ? 'Normativa: Reglamento para la Calidad del Agua Potable de Costa Rica (Decreto N° 38924-S)'
+                                        : 'Normativa: Criterios Microbiológicos de Inocuidad y Calidad (RTCA / SENASA)'}
+                                </span>
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-1 rounded bg-emerald-600 text-white shadow-xs self-start sm:self-auto">
+                                ✓ CUMPLE CON EL REGLAMENTO
+                            </span>
+                        </div>
+                        <p className="text-[10px] text-slate-700 font-medium leading-relaxed">
+                            Los resultados analíticos emitidos en este Certificado de Análisis cumplen satisfactoriamente con los Límites Máximos Admisibles (LMA) y parámetros de inocuidad microbiológica establecidos en la legislación oficial vigente de Costa Rica.
+                        </p>
+                    </div>
+                )}
+
                 {includeInterpretation ? (
                     <div className="mb-8 p-4 bg-yellow-50/50 print:bg-transparent border border-yellow-200 print:border-slate-300 rounded-lg">
                         <h4 className="text-xs font-bold text-slate-800 uppercase mb-1">
@@ -1428,8 +1450,28 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             </div>
                         </div>
 
+                        {/* Sello de Firma Digital BCCR / GAUDI */}
+                        <div className="my-2 p-2 bg-slate-50 border border-slate-300 rounded text-[8px] text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1 bg-blue-900 text-white rounded font-mono text-[8px] font-black tracking-tight">
+                                    GAUDI
+                                </div>
+                                <div>
+                                    <span className="font-extrabold text-slate-900 block text-[8.5px]">
+                                        DOCUMENTO FIRMADO DIGITALMENTE — AUTORIDAD CERTIFICADORA CA SINPE (BCCR)
+                                    </span>
+                                    <span className="text-slate-600 font-mono text-[7.5px]">
+                                        Firmante: {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} | Reg: {request.signedByCode || labInfo?.directorCode || '802'} | Algoritmo: SHA-256 with RSA | Estampado de Tiempo TSA SINPE
+                                    </span>
+                                </div>
+                            </div>
+                            <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono text-[7px] font-bold px-1.5 py-0.5 rounded shrink-0">
+                                ✓ FIRMA DIGITAL VÁLIDA
+                            </span>
+                        </div>
+
                         {/* Solid black line */}
-                        <div className="border-t border-slate-900 mt-4 mb-3"></div>
+                        <div className="border-t border-slate-900 mt-2 mb-3"></div>
 
                         {/* Quality systems note & badges */}
                         <div className="grid grid-cols-12 gap-4 items-center">

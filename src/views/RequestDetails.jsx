@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, FileText, ShieldCheck, Check, Package, Microscope, Activity, CheckCircle2, FlaskConical, Trash2, Edit, Users, User, MapPin, Lock, Share2 } from 'lucide-react';
+import { ArrowLeft, FileText, ShieldCheck, Check, Package, Microscope, Activity, CheckCircle2, FlaskConical, Trash2, Edit, Users, User, MapPin, Lock, Share2, AlertTriangle, Send } from 'lucide-react';
 import { StatusBadge } from '../components/UI';
 import { ASTMatrix } from '../components/ASTMatrix';
 import { UFCCalculator } from '../components/UFCCalculator';
@@ -16,7 +16,8 @@ import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { generateAnalysisCode } from '../utils/generators';
 import { useNotification } from '../contexts/NotificationContext';
-import { runClinicalCalculations } from '../utils/clinicalCalcs';
+import { runClinicalCalculations, detectPanicValues } from '../utils/clinicalCalcs';
+import { generatePanicAlertWhatsApp } from '../utils/whatsappGenerator';
 import cmqccrCatalog from '../data/cmqccr_catalog.json';
 
 export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, user, labInfo }) => {
@@ -119,6 +120,25 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
     const [senderPin, setSenderPin] = useState('');
     const [receiverPin, setReceiverPin] = useState('');
     const [isSavingTransfer, setIsSavingTransfer] = useState(false);
+
+    // Detect Panic / Critical Values (ISO 15189)
+    const panicAlerts = useMemo(() => {
+        return detectPanicValues(request.analyzerResults || []);
+    }, [request.analyzerResults]);
+
+    const handleSendPanicWhatsApp = () => {
+        const docPhone = request.doctorPhone || request.clientPhone || labInfo?.whatsapp || '';
+        const { link } = generatePanicAlertWhatsApp({
+            doctorName: request.doctorName || 'Médico Tratante',
+            doctorPhone: docPhone,
+            patientName: request.clientName || request.patientName || 'Paciente',
+            patientDni: request.clientDni || request.patientDni || 'N/A',
+            orderCode: request.id?.substring(0, 8).toUpperCase(),
+            panicAlerts: panicAlerts,
+            laboratoryName: labInfo?.name || 'MicroLabs Laboratorio Clínico y Microbiológico'
+        });
+        window.open(link, '_blank');
+    };
 
     // Filter available analyses strictly by request domain (Clinical vs Industrial/Food/Water)
     const combinedAnalyses = useMemo(() => {
@@ -602,6 +622,40 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                     </button>
                 </div>
             </div>
+
+            {/* ALERTA DE VALORES DE PÁNICO (ISO 15189) */}
+            {panicAlerts.length > 0 && (
+                <div className="mb-6 p-5 bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 border-2 border-red-500/80 rounded-2xl shadow-lg text-red-950 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 animate-pulse">
+                    <div className="flex items-start gap-3.5">
+                        <div className="p-3 bg-red-600 text-white rounded-xl shrink-0 mt-0.5 shadow-md">
+                            <AlertTriangle size={26} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="bg-red-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded tracking-wide">
+                                    ALERTA CRÍTICA ISO 15189
+                                </span>
+                                <h3 className="font-black text-sm text-red-900">
+                                    VALOR DE PÁNICO DETECTADO EN MUESTRA
+                                </h3>
+                            </div>
+                            <p className="text-xs text-red-950 font-bold mt-1.5 leading-relaxed">
+                                {panicAlerts.map(a => `${a.testName}: ${a.value} ${a.unit} (${a.message})`).join('  •  ')}
+                            </p>
+                            <p className="text-[11px] text-red-700 font-medium mt-1">
+                                Requiere notificación inmediata al médico tratante y registro de trazabilidad en la bitácora clínica.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleSendPanicWhatsApp}
+                        className="bg-red-600 hover:bg-red-700 text-white font-black text-xs px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 shrink-0 cursor-pointer transition-all hover:scale-105 active:scale-95"
+                    >
+                        <Send size={16} /> Notificar Alerta por WhatsApp
+                    </button>
+                </div>
+            )}
 
             {/* Tarjeta de Información General */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6 animate-fade-in">

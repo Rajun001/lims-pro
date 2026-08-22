@@ -307,3 +307,55 @@ export const runClinicalCalculations = (results, patientInfo = {}) => {
 
     return updated;
 };
+
+/**
+ * Detecta valores de pánico o límites críticos de seguridad médica (ISO 15189)
+ * para disparar alertas inmediatas al médico tratante y paciente.
+ * 
+ * @param {Array} results - Array de { testCode, value, unit }
+ * @returns {Array} - Array de alertas críticas detectadas
+ */
+export const detectPanicValues = (results = []) => {
+    const alerts = [];
+    if (!Array.isArray(results)) return alerts;
+
+    results.forEach(res => {
+        const code = (res.testCode || '').toUpperCase();
+        const num = parseFloat(String(res.value || '').replace(',', '.'));
+        if (isNaN(num)) return;
+
+        // 1. Glucosa (< 50 o > 400 mg/dL)
+        if (code === '1450' || code.includes('GLUC') || code.includes('GLIC')) {
+            if (num < 50) alerts.push({ testName: 'Glucosa / Glicemia', value: num, unit: 'mg/dL', limitMin: '50 mg/dL', severity: 'CRITICAL_LOW', message: 'Hipoglicemia Severa' });
+            else if (num > 400) alerts.push({ testName: 'Glucosa / Glicemia', value: num, unit: 'mg/dL', limitMax: '400 mg/dL', severity: 'CRITICAL_HIGH', message: 'Hiperglicemia Severa (Riesgo Cetoacidosis / EHH)' });
+        }
+        // 2. Potasio Sérico (< 2.8 o > 6.2 mEq/L)
+        if (code === '1670' || code === 'K' || code.includes('POTAS')) {
+            if (num < 2.8) alerts.push({ testName: 'Potasio Sérico (K+)', value: num, unit: 'mEq/L', limitMin: '2.8 mEq/L', severity: 'CRITICAL_LOW', message: 'Hipopotasemia Severa (Riesgo Arritmia)' });
+            else if (num > 6.2) alerts.push({ testName: 'Potasio Sérico (K+)', value: num, unit: 'mEq/L', limitMax: '6.2 mEq/L', severity: 'CRITICAL_HIGH', message: 'Hiperpotasemia Severa (Riesgo Paro Cardíaco)' });
+        }
+        // 3. Sodio Sérico (< 120 o > 160 mEq/L)
+        if (code === '1740' || code === 'NA' || code.includes('SODIO')) {
+            if (num < 120) alerts.push({ testName: 'Sodio Sérico (Na+)', value: num, unit: 'mEq/L', limitMin: '120 mEq/L', severity: 'CRITICAL_LOW', message: 'Hiponatremia Severa (Riesgo Edema Cerebral)' });
+            else if (num > 160) alerts.push({ testName: 'Sodio Sérico (Na+)', value: num, unit: 'mEq/L', limitMax: '160 mEq/L', severity: 'CRITICAL_HIGH', message: 'Hipernatremia Severa' });
+        }
+        // 4. Hemoglobina (< 7.0 o > 20.0 g/dL)
+        if (code === '1460' || code === 'HGB' || code === 'HB' || code.includes('HEMOGLOBINA')) {
+            if (num < 7.0) alerts.push({ testName: 'Hemoglobina', value: num, unit: 'g/dL', limitMin: '7.0 g/dL', severity: 'CRITICAL_LOW', message: 'Anemia Severa (Indicación Transfusional Inmediata)' });
+            else if (num > 20.0) alerts.push({ testName: 'Hemoglobina', value: num, unit: 'g/dL', limitMax: '20.0 g/dL', severity: 'CRITICAL_HIGH', message: 'Policitemia Crítica' });
+        }
+        // 5. Plaquetas (< 30,000 /uL o > 1,000,000 /uL)
+        if (code === '1660' || code === 'PLQ' || code.includes('PLAQUETAS')) {
+            const valNorm = num < 1000 ? num * 1000 : num;
+            if (valNorm < 30000) alerts.push({ testName: 'Plaquetas', value: valNorm.toLocaleString(), unit: '/uL', limitMin: '30,000 /uL', severity: 'CRITICAL_LOW', message: 'Trombocitopenia Severa (Riesgo Hemorragia Espontánea)' });
+            else if (valNorm > 1000000) alerts.push({ testName: 'Plaquetas', value: valNorm.toLocaleString(), unit: '/uL', limitMax: '1,000,000 /uL', severity: 'CRITICAL_HIGH', message: 'Trombocitosis Extrema' });
+        }
+        // 6. Calcio Total (< 6.5 o > 13.0 mg/dL)
+        if (code === '1110' || code === 'CA' || code.includes('CALCIO')) {
+            if (num < 6.5) alerts.push({ testName: 'Calcio Total', value: num, unit: 'mg/dL', limitMin: '6.5 mg/dL', severity: 'CRITICAL_LOW', message: 'Hipocalcemia Crítica (Tetania / Convulsión)' });
+            else if (num > 13.0) alerts.push({ testName: 'Calcio Total', value: num, unit: 'mg/dL', limitMax: '13.0 mg/dL', severity: 'CRITICAL_HIGH', message: 'Crisis Hipercalcémica' });
+        }
+    });
+
+    return alerts;
+};
