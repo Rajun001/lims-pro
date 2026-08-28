@@ -304,6 +304,8 @@ const AppContent = () => {
     const [referenceLabTests, setReferenceLabTests] = useState([]);
     const [labInfo, setLabInfo] = useState({
         name: 'Laboratorio Microlabs Químicos S.A.',
+        legalId: '3101144450',
+        cedulaJuridica: '3101144450',
         logoUrl: '/logo.png',
         website: 'www.microlabscr.com',
         telephones: '+506 22348837, +506 22345862, +506 22246541',
@@ -321,6 +323,8 @@ const AppContent = () => {
                 id: 'suc-guadalupe',
                 code: 'GUA-01',
                 name: 'Sede Central Guadalupe',
+                legalId: '3101144450',
+                cedulaJuridica: '3101144450',
                 type: 'Sede Matriz & Laboratorio Central',
                 isMain: true,
                 address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',

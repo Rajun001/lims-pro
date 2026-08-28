@@ -11,6 +11,10 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
         // Deep-copy to avoid mutating the incoming prop reference (ESLint: no prop mutation)
         const base = { ...(labInfo || {}) };
         if (!base.name) base.name = 'Laboratorio Microlabs Químicos S.A.';
+        if (!base.legalId && !base.cedulaJuridica) {
+            base.legalId = '3101144450';
+            base.cedulaJuridica = '3101144450';
+        }
         if (!base.website) base.website = 'www.microlabscr.com';
         if (!base.address) base.address = '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica';
         if (!base.telephones) base.telephones = '+506 22348837, +506 22345862, +506 22246541';
@@ -25,6 +29,8 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     id: 'suc-guadalupe',
                     code: 'GUA-01',
                     name: 'Sede Central Guadalupe',
+                    legalId: '3101144450',
+                    cedulaJuridica: '3101144450',
                     type: 'Sede Matriz & Laboratorio Central',
                     isMain: true,
                     address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
@@ -368,9 +374,12 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
             {activeTab === 'general' && (
                 <form onSubmit={handleGeneralSave} className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-fade-in">
                     <div className="space-y-4">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Información del Laboratorio (Razón Social y Marca)</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <FormInput label="Nombre del Laboratorio" value={info.name || ''} onChange={e => setInfo({ ...info, name: e.target.value })} placeholder="Laboratorio Microlabs Químicos S.A." />
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Información del Laboratorio (Razón Social y Registro Tributario)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormInput label="Nombre o Razón Social del Laboratorio" value={info.name || ''} onChange={e => setInfo({ ...info, name: e.target.value })} placeholder="Laboratorio Microlabs Químicos S.A." />
+                            <FormInput label="Cédula Jurídica (Costa Rica)" value={info.legalId || info.cedulaJuridica || ''} onChange={e => setInfo({ ...info, legalId: e.target.value, cedulaJuridica: e.target.value })} placeholder="3101144450" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormInput label="Sitio Web Oficial" value={info.website || ''} onChange={e => setInfo({ ...info, website: e.target.value })} placeholder="www.microlabscr.com" />
                             <FormInput label="URL del Logo Oficial" value={info.logoUrl || ''} onChange={e => setInfo({ ...info, logoUrl: e.target.value })} placeholder="/logo.png" />
                         </div>
@@ -466,7 +475,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Tipo de Sucursal</label>
                                     <select 
@@ -481,12 +490,22 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Permiso Ministerio de Salud</label>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Cédula Jurídica</label>
+                                    <input 
+                                        type="text" 
+                                        value={editingBranch.legalId || editingBranch.cedulaJuridica || ''} 
+                                        onChange={e => setEditingBranch({ ...editingBranch, legalId: e.target.value, cedulaJuridica: e.target.value })} 
+                                        placeholder="3101144450" 
+                                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-semibold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Permiso Ministerio Salud</label>
                                     <input 
                                         type="text" 
                                         value={editingBranch.permitNumber || ''} 
                                         onChange={e => setEditingBranch({ ...editingBranch, permitNumber: e.target.value })} 
-                                        placeholder="Ej. MINSA-02451" 
+                                        placeholder="Ej. MINSA-01048" 
                                         className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-semibold"
                                     />
                                 </div>

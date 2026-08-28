@@ -835,6 +835,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <div className="text-[10px] text-slate-600 font-medium mt-1">
                                     <span className="font-bold text-slate-800">{request.branchName || 'Sede Central Guadalupe'}</span>
                                     {request.branchCode && <span className="ml-1 text-[9px] bg-slate-100 font-mono font-bold px-1 rounded">({request.branchCode})</span>}
+                                    <span className="ml-2 text-[9px] text-slate-600 font-bold">Céd. Jurídica: {request.branchLegalId || labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'}</span>
                                     <p className="text-[9px] text-slate-500 line-clamp-1">{request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</p>
                                 </div>
                             </div>
@@ -892,7 +893,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     {reportLang === 'es' ? 'Reporte de Resultados Analíticos' : 'Analytical Results Report'}
                                 </p>
                                 <p className="text-slate-500 text-xs mt-1">
-                                    {reportLang === 'es' ? 'Licencia de Salud: #445-A | ISO 9001:2015' : 'Health License: #445-A | ISO 9001:2015'}
+                                    {reportLang === 'es' ? `Cédula Jurídica: ${labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'} | Licencia de Salud: #445-A` : `Tax ID: ${labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'} | Health License: #445-A`}
                                 </p>
                             </div>
                         </div>
