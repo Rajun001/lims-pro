@@ -206,9 +206,9 @@ export const HomeDashboard = ({ navigateTo, requests = [], userRole = 'admin', u
                             <div className="w-11 h-11 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
                             <h2 className="font-bold text-slate-800 text-xs md:text-sm">Ensayos</h2>
                         </button>
-                        <button onClick={() => navigateTo('analyzer_inbox')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
-                            <div className="w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
-                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Analizadores</h2>
+                        <button onClick={() => navigateTo('microbiology')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
+                            <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Activity size={22} /></div>
+                            <h2 className="font-bold text-slate-800 text-xs md:text-sm">Microbiología</h2>
                         </button>
                         <button onClick={() => navigateTo('storage')} className="group bg-white p-5 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-indigo-200 transition-all flex flex-col items-center text-center">
                             <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-2.5 group-hover:scale-110 transition-transform"><Package size={22} /></div>

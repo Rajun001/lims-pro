@@ -124,7 +124,7 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                         <NavItem view="microbiology" currentView={view} navigateTo={navigateTo} icon={Microscope} label="Microbiología & Hojas" />
                         <NavItem view="results_review" currentView={view} navigateTo={navigateTo} icon={Activity} label="Ingreso de Datos & Ensayos" />
                         <NavItem view="batch" currentView={view} navigateTo={navigateTo} icon={Layers} label="Lotes, Alícuotas & Incubación" />
-                        <NavItem view="analyzer_inbox" currentView={view} navigateTo={navigateTo} icon={Cpu} label="Analizadores Automatizados" />
+                        {/* <NavItem view="analyzer_inbox" currentView={view} navigateTo={navigateTo} icon={Cpu} label="Analizadores Automatizados" /> */}
                         <NavItem view="environmental" currentView={view} navigateTo={navigateTo} icon={Factory} label="Monitoreo de Planta" />
                         <NavItem view="referrals" currentView={view} navigateTo={navigateTo} icon={Truck} label="Laboratorios de Referencia (B2B)" />
                     </NavGroup>
@@ -153,7 +153,7 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                 {['admin', 'director_tecnico'].includes(userRole) && (
                     <NavGroup title="Configuración y Sistema">
                         <NavItem view="inventory" currentView={view} navigateTo={navigateTo} icon={Package} label="Inventario & Reactivos" />
-                        <NavItem view="equipment" currentView={view} navigateTo={navigateTo} icon={Wrench} label="Gestión de Equipos" />
+                        {/* <NavItem view="equipment" currentView={view} navigateTo={navigateTo} icon={Wrench} label="Gestión de Equipos" /> */}
                         <NavItem view="analysis_settings" currentView={view} navigateTo={navigateTo} icon={SlidersHorizontal} label="Catálogo de Ensayos" />
                         <NavItem view="lab_settings" currentView={view} navigateTo={navigateTo} icon={Building2} label="Sedes & Sucursales" />
                         {userRole === 'admin' && (

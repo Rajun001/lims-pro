@@ -258,9 +258,9 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
-                        <Receipt className="text-orange-600" /> Finanzas, Facturación y QuickBooks
+                        <Receipt className="text-orange-600" /> Finanzas y Facturación
                     </h2>
-                    <p className="text-slate-500 text-sm mt-1">Gestión de cartera, cuentas por pagar a laboratorios externos y conector contable.</p>
+                    <p className="text-slate-500 text-sm mt-1">Gestión de cartera, cuentas por pagar a laboratorios externos y comisiones médicas.</p>
                 </div>
                 
                 {/* Navigation Tabs */}
@@ -277,12 +277,12 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
                     >
                         <Truck size={14} /> Cuentas por Pagar
                     </button>
-                    <button
+                    {/* <button
                         onClick={() => setActiveTab('quickbooks')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'quickbooks' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-600'}`}
                     >
                         <Layers size={14} /> QuickBooks Sync
-                    </button>
+                    </button> */}
                     <button
                         onClick={() => setActiveTab('commissions')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'commissions' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-600'}`}
