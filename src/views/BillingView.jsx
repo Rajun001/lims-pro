@@ -1,18 +1,25 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers, Users, Percent, Award, Zap, Shield, Copy, X, AlertTriangle, Hash } from 'lucide-react';
+import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers, Users, Percent, Award, Zap, Shield, Copy, X, AlertTriangle, Hash, Smartphone, QrCode } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import BillingAPI from '../services/BillingAPI';
 import { getApiUrl } from '../utils/api';
+import SINPEPaymentModal from '../components/SINPEPaymentModal';
+import { getTransactions } from '../services/SINPEService';
 
 const API_URL = getApiUrl();
 
 export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceLabTests = [], user }) => {
-    const [activeTab, setActiveTab] = useState('receivable'); // 'receivable' | 'payable' | 'quickbooks'
+    const [activeTab, setActiveTab] = useState('receivable'); // 'receivable' | 'payable' | 'commissions' | 'hacienda' | 'sinpe'
     const [expandedLabId, setExpandedLabId] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [qbSyncLog, setQbSyncLog] = useState(null);
+    
+    // SINPE Móvil State
+    const [selectedSinpeInvoice, setSelectedSinpeInvoice] = useState(null);
+    const [showSinpeModal, setShowSinpeModal] = useState(false);
+    const [sinpeTransactions, setSinpeTransactions] = useState(() => getTransactions());
     
     // Factura Electrónica Hacienda CR state
     const [feDocType, setFeDocType] = useState('01'); // 01=Factura, 02=Tiquete, 03=NdC, 04=NdD
@@ -422,6 +429,13 @@ ${feLines.map((l, i) => `    <LineaDetalle>
                         <Zap size={14} /> FE Hacienda CR
                         <span className="text-[8px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded-full">v4.4</span>
                     </button>
+                    <button
+                        onClick={() => { setActiveTab('sinpe'); setSinpeTransactions(getTransactions()); }}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'sinpe' ? 'bg-white text-sky-700 shadow-sm' : 'text-slate-600 hover:text-sky-600'}`}
+                    >
+                        <Smartphone size={14} /> Cobros SINPE
+                        <span className="text-[8px] font-black bg-sky-600 text-white px-1.5 py-0.5 rounded-full">BCCR</span>
+                    </button>
                 </div>
             </div>
 
@@ -501,9 +515,21 @@ ${feLines.map((l, i) => `    <LineaDetalle>
                                         </td>
                                         <td className="p-4 flex items-center justify-center gap-1.5">
                                             {inv.status !== 'Pagada' && (
-                                                <button onClick={() => handleRegisterClientPayment(inv.id)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer" title="Registrar Cobro / Pago">
-                                                    <DollarSign size={16} />
-                                                </button>
+                                                <>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setSelectedSinpeInvoice(inv);
+                                                            setShowSinpeModal(true);
+                                                        }} 
+                                                        className="p-2 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer" 
+                                                        title="Cobrar con SINPE Móvil (QR / Referencia)"
+                                                    >
+                                                        <QrCode size={16} />
+                                                    </button>
+                                                    <button onClick={() => handleRegisterClientPayment(inv.id)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer" title="Registrar Cobro / Pago Manual">
+                                                        <DollarSign size={16} />
+                                                    </button>
+                                                </>
                                             )}
                                             <button onClick={() => generateStatement(inv)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Estado de Cuenta Interno">
                                                 <FileText size={16} />
@@ -1172,6 +1198,140 @@ ${feLines.map((l, i) => `    <LineaDetalle>
                     </div>
                 </div>
             )}
+
+            {/* TAB: COBROS SINPE MÓVIL (BCCR) */}
+            {activeTab === 'sinpe' && (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Header Banner SINPE */}
+                    <div className="bg-gradient-to-r from-sky-600 via-sky-700 to-indigo-800 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                                <span className="bg-white/20 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded-full backdrop-blur-xs border border-white/20">
+                                    BCCR Costa Rica
+                                </span>
+                                <span className="text-xs text-sky-200 font-bold">Cobranza Digital Inmediata</span>
+                            </div>
+                            <h3 className="text-2xl font-black tracking-tight">Monitoreo & Conciliación SINPE Móvil</h3>
+                            <p className="text-sky-100 text-xs max-w-xl">
+                                Registro de transferencias entrantes, generación de códigos QR de pago instantáneo con referencias normativas de 15 dígitos.
+                            </p>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/20 text-center shrink-0">
+                            <span className="text-[10px] font-bold text-sky-200 uppercase tracking-widest block">Número Oficial SINPE</span>
+                            <span className="text-2xl font-black font-mono tracking-wider text-white">8888-8888</span>
+                            <span className="text-[10px] text-sky-200 block mt-0.5">MICROLABS CR S.A.</span>
+                        </div>
+                    </div>
+
+                    {/* Resumen de Métricas SINPE */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Total Recaudado por SINPE</span>
+                            <span className="text-2xl font-black font-mono text-slate-800 mt-1 block">
+                                ¢{sinpeTransactions.filter(t => t.status === 'CONFIRMADO').reduce((acc, t) => acc + (t.amount || 0), 0).toLocaleString()}
+                            </span>
+                            <span className="text-[11px] text-emerald-600 font-bold mt-1 block">Fondos acreditados en tiempo real</span>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Transacciones Conciliadas</span>
+                            <span className="text-2xl font-black font-mono text-sky-600 mt-1 block">
+                                {sinpeTransactions.filter(t => t.status === 'CONFIRMADO').length}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium mt-1 block">Con comprobante bancario validado</span>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
+                            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Ticket Promedio SINPE</span>
+                            <span className="text-2xl font-black font-mono text-indigo-600 mt-1 block">
+                                ¢{sinpeTransactions.length > 0 ? Math.round(sinpeTransactions.reduce((acc, t) => acc + (t.amount || 0), 0) / sinpeTransactions.length).toLocaleString() : '0'}
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium mt-1 block">Por transacción de cobro</span>
+                        </div>
+                    </div>
+
+                    {/* Tabla de Auditoría de Transferencias SINPE */}
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h4 className="font-extrabold text-slate-800 text-base">Historial de Transferencias Acreditadas</h4>
+                                <p className="text-slate-400 text-xs mt-0.5">Conciliación automática vinculada a facturas del laboratorio.</p>
+                            </div>
+                            <button
+                                onClick={() => setSinpeTransactions(getTransactions())}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                                <Clock size={14} /> Actualizar
+                            </button>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs whitespace-nowrap">
+                                <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold">
+                                    <tr>
+                                        <th className="p-4">Referencia BCCR (15d)</th>
+                                        <th className="p-4">Cliente / Pagador</th>
+                                        <th className="p-4">Factura</th>
+                                        <th className="p-4 text-right">Monto</th>
+                                        <th className="p-4">Banco & Teléfono</th>
+                                        <th className="p-4">Comprobante</th>
+                                        <th className="p-4">Fecha & Hora</th>
+                                        <th className="p-4 text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {sinpeTransactions.map((tx) => (
+                                        <tr key={tx.id || tx.reference} className="hover:bg-slate-50/80 transition-colors">
+                                            <td className="p-4 font-mono font-bold text-sky-700">
+                                                {tx.reference}
+                                            </td>
+                                            <td className="p-4 font-bold text-slate-800">{tx.client}</td>
+                                            <td className="p-4 font-mono font-medium text-slate-600">{tx.invoiceId || 'N/A'}</td>
+                                            <td className="p-4 text-right font-mono font-black text-slate-800">¢{(tx.amount || 0).toLocaleString()}</td>
+                                            <td className="p-4 text-slate-600">
+                                                <div className="font-bold text-slate-700">{tx.bank || 'Banca Móvil'}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{tx.senderPhone || '-'}</div>
+                                            </td>
+                                            <td className="p-4 font-mono font-bold text-indigo-600">{tx.bankAuth || '-'}</td>
+                                            <td className="p-4 text-slate-500">
+                                                {tx.date ? new Date(tx.date).toLocaleString('es-CR') : 'N/A'}
+                                            </td>
+                                            <td className="p-4 text-center">
+                                                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                    {tx.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Cobro SINPE Móvil */}
+            <SINPEPaymentModal
+                isOpen={showSinpeModal}
+                onClose={() => {
+                    setShowSinpeModal(false);
+                    setSelectedSinpeInvoice(null);
+                }}
+                invoice={selectedSinpeInvoice}
+                onPaymentSuccess={(invoiceId, reference, authNum) => {
+                    setInvoices(invoices.map(inv => {
+                        if (inv.id === invoiceId) {
+                            return {
+                                ...inv,
+                                status: 'Pagada',
+                                paidDate: new Date().toLocaleDateString('es-CR'),
+                                sinpeReference: reference,
+                                sinpeAuth: authNum
+                            };
+                        }
+                        return inv;
+                    }));
+                    setSinpeTransactions(getTransactions());
+                }}
+            />
 
             {/* Modal: Nueva Factura */}
             {showNewInvoiceModal && (
