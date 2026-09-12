@@ -1239,19 +1239,31 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
 
                                             <div className="space-y-1">
                                                 <label className="block text-xs font-bold text-slate-600 uppercase">Valor de Resultado (Opcional)</label>
-                                                <input 
+                                                <input
                                                     id="manual-value-input"
-                                                    type="text" 
-                                                    value={manualValue} 
+                                                    type="text"
+                                                    value={manualValue}
                                                     onChange={e => setManualValue(e.target.value)}
-                                                    placeholder="Ej. 95 o Negativo" 
-                                                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                                    placeholder="Ej. 95 o Negativo"
+                                                    className={`w-full px-3 py-2 bg-white border rounded-lg outline-none focus:ring-2 text-sm font-bold transition-all ${
+                                                        (() => {
+                                                            if (!manualValue || !selectedAnalysis?.minRange || !selectedAnalysis?.maxRange) return 'border-slate-300 focus:ring-indigo-500';
+                                                            const v = parseFloat(manualValue);
+                                                            const lo = parseFloat(selectedAnalysis.minRange);
+                                                            const hi = parseFloat(selectedAnalysis.maxRange);
+                                                            if (isNaN(v)) return 'border-amber-400 focus:ring-amber-400 bg-amber-50';
+                                                            const panicCheck = detectPanicValues([{ testCode: manualTestCode, value: manualValue }]);
+                                                            if (panicCheck.length > 0) return 'border-red-600 focus:ring-red-500 bg-red-50 text-red-800';
+                                                            if (v < lo || v > hi) return 'border-amber-400 focus:ring-amber-400 bg-amber-50 text-amber-900';
+                                                            return 'border-emerald-400 focus:ring-emerald-400 bg-emerald-50 text-emerald-900';
+                                                        })()
+                                                    }`}
                                                 />
                                                 <span className="block text-[10px] text-slate-400 mt-0.5">Dejar vacío para registrar como examen pendiente</span>
                                             </div>
 
-                                            <button 
-                                                type="submit" 
+                                            <button
+                                                type="submit"
                                                 disabled={isSavingManual}
                                                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm shadow-sm transition-all disabled:opacity-50 h-[38px] w-full"
                                             >
@@ -1259,46 +1271,56 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                             </button>
 
                                             {selectedAnalysis && (
-                                                <div className="col-span-full bg-blue-50/70 border border-blue-100 rounded-xl p-4 text-sm text-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 animate-fade-in mt-2">
-                                                    <div>
-                                                        <span className="font-bold text-slate-800">Parámetro: </span>
-                                                        <span className="text-slate-600">{selectedAnalysis.name}</span>
-                                                        <span className="mx-2 text-slate-300">|</span>
-                                                        <span className="font-bold text-slate-800">Rango de Referencia: </span>
-                                                        {selectedAnalysis.minRange && selectedAnalysis.maxRange ? (
-                                                            <span className="bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded font-mono font-bold text-xs">
-                                                                {selectedAnalysis.minRange} - {selectedAnalysis.maxRange}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-400 italic text-xs">Cualitativo / No definido</span>
-                                                        )}
-                                                    </div>
-                                                    {manualValue && selectedAnalysis.minRange && selectedAnalysis.maxRange && (
-                                                        <div className="text-xs font-bold">
-                                                            {(() => {
-                                                                const val = parseFloat(manualValue);
-                                                                if (isNaN(val)) {
-                                                                    return (
-                                                                        <span className="text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                            ⚠️ El valor ingresado no es numérico
+                                                <div className="col-span-full animate-fade-in mt-2">
+                                                    {/* Banner de rango de referencia con semáforo */}
+                                                    {(() => {
+                                                        const val = parseFloat(manualValue);
+                                                        const lo = parseFloat(selectedAnalysis.minRange);
+                                                        const hi = parseFloat(selectedAnalysis.maxRange);
+                                                        const hasRange = selectedAnalysis.minRange && selectedAnalysis.maxRange;
+                                                        const panicAlertNow = manualValue ? detectPanicValues([{ testCode: manualTestCode, value: manualValue }]) : [];
+                                                        const isPanic = panicAlertNow.length > 0;
+                                                        const isOutOfRange = hasRange && !isNaN(val) && (val < lo || val > hi);
+                                                        const isNormal = hasRange && !isNaN(val) && val >= lo && val <= hi;
+
+                                                        // Contexto del paciente
+                                                        const patAge = request.patientAge || request.age || '';
+                                                        const patSex = request.patientGender || request.sex || request.gender || '';
+
+                                                        return (
+                                                            <div className={`border rounded-xl p-3 flex flex-wrap gap-3 items-center justify-between text-xs ${
+                                                                isPanic ? 'bg-red-50 border-red-200' :
+                                                                isOutOfRange ? 'bg-amber-50 border-amber-200' :
+                                                                isNormal ? 'bg-emerald-50 border-emerald-200' :
+                                                                'bg-blue-50 border-blue-100'
+                                                            }`}>
+                                                                <div className="flex flex-wrap gap-3 items-center">
+                                                                    <span className="font-bold text-slate-800">{selectedAnalysis.name}</span>
+                                                                    {selectedAnalysis.unit && <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-mono">{selectedAnalysis.unit}</span>}
+                                                                    {hasRange ? (
+                                                                        <span className="bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded font-mono font-bold">
+                                                                            Ref: {selectedAnalysis.minRange} – {selectedAnalysis.maxRange} {selectedAnalysis.unit || ''}
                                                                         </span>
-                                                                    );
-                                                                } else if (val < parseFloat(selectedAnalysis.minRange) || val > parseFloat(selectedAnalysis.maxRange)) {
-                                                                    return (
-                                                                        <span className="text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                            ⚠️ Fuera de rango de referencia
-                                                                        </span>
-                                                                    );
-                                                                } else {
-                                                                    return (
-                                                                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1">
-                                                                            ✓ Dentro del rango de referencia
-                                                                        </span>
-                                                                    );
-                                                                }
-                                                            })()}
-                                                        </div>
-                                                    )}
+                                                                    ) : (
+                                                                        <span className="text-slate-400 italic">Cualitativo / Sin rango numérico</span>
+                                                                    )}
+                                                                    {(patAge || patSex) && (
+                                                                        <span className="text-slate-400">👤 {patSex} {patAge ? `· ${patAge} años` : ''}</span>
+                                                                    )}
+                                                                </div>
+                                                                {manualValue && (
+                                                                    <span className={`font-black px-3 py-1 rounded-lg flex items-center gap-1.5 ${
+                                                                        isPanic ? 'bg-red-600 text-white animate-pulse' :
+                                                                        isOutOfRange ? 'bg-amber-500 text-white' :
+                                                                        isNormal ? 'bg-emerald-500 text-white' :
+                                                                        'bg-slate-200 text-slate-600'
+                                                                    }`}>
+                                                                        {isPanic ? '🚨 VALOR DE PÁNICO' : isOutOfRange ? '⚠️ Fuera de rango' : isNormal ? '✓ Normal' : '— No numérico'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
                                         </form>
@@ -1314,65 +1336,109 @@ export const RequestDetails = ({ request, navigateTo, db, availableAnalyses, use
                                 ) : (
                                     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                                         <table className="w-full text-left text-sm">
-                                            <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                            <thead className="bg-slate-800 text-white border-b border-slate-700">
                                                 <tr>
-                                                    <th className="p-4 font-bold">Parámetro / Prueba</th>
-                                                    <th className="p-4 font-bold">Resultado</th>
-                                                    <th className="p-4 font-bold">Origen de Datos</th>
-                                                    <th className="p-4 font-bold">Estado</th>
-                                                    {request.status !== 'Completado' && <th className="p-4 font-bold text-right">Acciones</th>}
+                                                    <th className="p-3 font-bold text-xs uppercase tracking-wider">Parámetro / Prueba</th>
+                                                    <th className="p-3 font-bold text-xs uppercase tracking-wider">Resultado</th>
+                                                    <th className="p-3 font-bold text-xs uppercase tracking-wider">Rango de Referencia</th>
+                                                    <th className="p-3 font-bold text-xs uppercase tracking-wider">Semáforo</th>
+                                                    <th className="p-3 font-bold text-xs uppercase tracking-wider">Origen</th>
+                                                    {request.status !== 'Completado' && <th className="p-3 font-bold text-xs text-right uppercase tracking-wider">Acciones</th>}
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
                                                 {request.analyzerResults.map((res, i) => {
-                                                    let isAlert = false;
                                                     const panic = evaluateCriticalPanicValue(res.testCode, res.value);
+                                                    const panicList = detectPanicValues([{ testCode: res.testCode, value: res.value }]);
+                                                    const isPanic = panic.isPanic || panicList.length > 0;
                                                     const delta = res.previousValue ? calculateDeltaCheck(res.value, res.previousValue) : { isDeltaAlert: false };
-                                                    const a = availableAnalyses?.find(x => x.code === res.testCode);
-                                                    if (a) {
-                                                        if (a.minRange && a.maxRange) {
-                                                            const v = parseFloat(res.value);
-                                                            if (!isNaN(v) && (v < parseFloat(a.minRange) || v > parseFloat(a.maxRange))) {
-                                                                isAlert = true;
-                                                            }
-                                                        }
-                                                    }
+
+                                                    // Buscar en catálogo CMQCCR primero, luego en availableAnalyses
+                                                    const cmqItem = cmqccrCatalog.find(c => c.code === res.testCode);
+                                                    const aItem = availableAnalyses?.find(x => x.code === res.testCode);
+                                                    const displayName = cmqItem?.name || aItem?.name || res.testCode;
+                                                    const unit = cmqItem?.unit || aItem?.unit || res.unit || '';
+                                                    const minRef = cmqItem?.minRange || aItem?.minRange || '';
+                                                    const maxRef = cmqItem?.maxRange || aItem?.maxRange || '';
+
+                                                    // Semáforo
+                                                    const numVal = parseFloat(String(res.value || '').replace(',', '.'));
+                                                    const lo = parseFloat(minRef);
+                                                    const hi = parseFloat(maxRef);
+                                                    const hasRange = minRef && maxRef && !isNaN(lo) && !isNaN(hi);
+                                                    const isLow = hasRange && !isNaN(numVal) && numVal < lo;
+                                                    const isHigh = hasRange && !isNaN(numVal) && numVal > hi;
+                                                    const isNormal = hasRange && !isNaN(numVal) && numVal >= lo && numVal <= hi;
+                                                    const isOutOfRange = isLow || isHigh;
+
+                                                    let rowBg = '';
+                                                    if (isPanic) rowBg = 'bg-red-100/60';
+                                                    else if (isOutOfRange) rowBg = 'bg-amber-50/60';
+                                                    else if (isNormal) rowBg = 'bg-emerald-50/30';
+
                                                     return (
-                                                    <tr key={i} className={`hover:bg-slate-50 ${panic.isPanic ? 'bg-red-100/50' : isAlert ? 'bg-red-50/30' : ''}`}>
-                                                        <td className="p-4 font-bold text-slate-800">
-                                                            <span>{a?.name || res.testCode}</span>
-                                                            {panic.isPanic ? (
-                                                                <span className="ml-2 bg-red-600 text-white text-[10px] px-2.5 py-0.5 rounded-full uppercase font-black animate-pulse inline-flex items-center gap-1 shadow-xs" title={panic.message}>
-                                                                    🚨 Valor de Pánico ({panic.type === 'CRITICAL_LOW' ? 'Bajo' : 'Alto'})
-                                                                </span>
-                                                            ) : isAlert ? (
-                                                                <span className="ml-2 bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded uppercase font-bold">
-                                                                    Fuera de Rango
-                                                                </span>
-                                                            ) : null}
+                                                    <tr key={i} className={`hover:bg-slate-50/80 border-b border-slate-100 transition-colors ${rowBg}`}>
+                                                        <td className="p-3">
+                                                            <div className="font-bold text-slate-800 text-sm">{displayName}</div>
+                                                            {res.origin === 'Cálculo Automatizado' && <div className="text-[10px] text-indigo-500 font-bold mt-0.5">⚡ Calculado automáticamente</div>}
                                                             {delta.isDeltaAlert && (
-                                                                <span className="ml-2 bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded uppercase font-bold" title={delta.message}>
-                                                                    ⚠️ Delta ({delta.deltaPercent}%)
+                                                                <span className="mt-0.5 inline-flex bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded uppercase font-bold" title={delta.message}>
+                                                                    ⚠️ Delta Check ({delta.deltaPercent}%)
                                                                 </span>
                                                             )}
                                                         </td>
-                                                        <td className="p-4">
+                                                        <td className="p-3">
                                                             {!res.value ? (
-                                                                <span className="text-slate-400 italic font-medium">Pendiente</span>
+                                                                <span className="text-slate-300 italic text-xs font-medium">Pendiente...</span>
                                                             ) : (
-                                                                <span className={`font-mono text-lg font-black ${panic.isPanic ? 'text-red-700' : isAlert ? 'text-red-600' : 'text-blue-700'}`}>
-                                                                    {res.value}
-                                                                </span>
+                                                                <div className="flex items-baseline gap-1.5">
+                                                                    <span className={`font-mono text-xl font-black ${
+                                                                        isPanic ? 'text-red-700' :
+                                                                        isOutOfRange ? 'text-amber-700' :
+                                                                        isNormal ? 'text-emerald-700' :
+                                                                        'text-slate-800'
+                                                                    }`}>{res.value}</span>
+                                                                    {unit && <span className="text-xs text-slate-400 font-medium">{unit}</span>}
+                                                                </div>
                                                             )}
                                                         </td>
-                                                        <td className="p-4">
-                                                            {res.origin.includes('Automatizado') ? (
-                                                                <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md text-xs font-bold border border-indigo-100">
-                                                                    🤖 {res.origin}
+                                                        <td className="p-3">
+                                                            {hasRange ? (
+                                                                <div className="text-xs font-mono">
+                                                                    <span className="text-slate-500">{minRef} – {maxRef}</span>
+                                                                    {unit && <span className="text-slate-400 ml-1">{unit}</span>}
+                                                                </div>
+                                                            ) : (
+                                                                <span className="text-slate-300 text-xs italic">Cualitativo</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3">
+                                                            {!res.value ? (
+                                                                <span className="text-xs text-slate-300">—</span>
+                                                            ) : isPanic ? (
+                                                                <span className="inline-flex items-center gap-1 bg-red-600 text-white text-[10px] px-2.5 py-1 rounded-full font-black animate-pulse shadow-sm">
+                                                                    🚨 PÁNICO ({isLow ? '↓ Bajo' : '↑ Alto'})
+                                                                </span>
+                                                            ) : isOutOfRange ? (
+                                                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 border border-amber-200 text-[10px] px-2.5 py-1 rounded-full font-bold">
+                                                                    ⚠️ {isLow ? '↓ Bajo' : '↑ Alto'}
+                                                                </span>
+                                                            ) : isNormal ? (
+                                                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] px-2.5 py-1 rounded-full font-bold">
+                                                                    ✓ Normal
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-slate-500 text-xs font-medium bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5">
-                                                                    📝 {res.origin}
+                                                                <span className="text-xs text-slate-400 italic">Cualitativo</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3">
+                                                            {res.origin?.includes('Automatizado') ? (
+                                                                <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold border border-indigo-100">
+                                                                    🤖 Auto
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400 text-[10px] font-medium bg-slate-100 px-2 py-0.5 rounded">
+                                                                    📝 Manual
                                                                 </span>
                                                             )}
                                                         </td>

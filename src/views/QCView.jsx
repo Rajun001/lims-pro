@@ -10,6 +10,7 @@ import { formatToCRDate } from '../utils/dateFormatter.js';
 import { getApiUrl } from '../utils/api.js';
 import { evaluateWestgardRules, calculateStatistics } from '../utils/westgardRules.js';
 import { ShieldCheck, AlertTriangle, TrendingUp, Sparkles } from 'lucide-react';
+import { LeveyJenningsChart } from '../components/LeveyJenningsChart';
 
 const API_URL = getApiUrl();
 
@@ -17,6 +18,7 @@ export const QCView = ({ db, user }) => {
     const [activeTab, setActiveTab] = useState('equipos');
     const [equipments, setEquipments] = useState([]);
     const [qcSamples, setQcSamples] = useState([]);
+    const [selectedParam, setSelectedParam] = useState('');
     
     const [showEqModal, setShowEqModal] = useState(false);
     const [newEq, setNewEq] = useState({ id: '', name: '', lastCal: '', nextCal: '' });
@@ -215,6 +217,10 @@ export const QCView = ({ db, user }) => {
                 <button onClick={() => setActiveTab('control')} className={`flex-1 py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'control' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <TestTube size={18} /> Muestras de Control
                 </button>
+                <button onClick={() => setActiveTab('levey')} className={`flex-1 py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'levey' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <TrendingUp size={18} /> Levey-Jennings
+                    <span className="text-[9px] font-black bg-amber-400 text-white px-1.5 py-0.5 rounded-full">ISO</span>
+                </button>
             </div>
 
             <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden min-h-0">
@@ -359,6 +365,65 @@ export const QCView = ({ db, user }) => {
                         </div>
                     </>
                 )}
+
+                {activeTab === 'levey' && (() => {
+                    // Datos demo enriquecidos si no hay datos numéricos reales
+                    const demoBase = [
+                        { parameter: 'Glucosa', unit: 'mg/dL', values: [98, 101, 97, 99, 103, 96, 102, 100, 98, 104, 112, 97, 99, 101, 95, 98] },
+                        { parameter: 'Hemoglobina', unit: 'g/dL', values: [14.1, 13.9, 14.3, 14.0, 13.8, 14.2, 14.5, 13.7, 14.1, 14.0, 17.8, 13.9, 14.2, 14.1, 13.8, 14.0] },
+                        { parameter: 'Creatinina', unit: 'mg/dL', values: [0.92, 0.95, 0.90, 0.93, 0.96, 0.91, 1.45, 0.94, 0.92, 0.95, 0.91, 0.93, 0.90, 0.94, 0.92, 0.95] },
+                    ];
+                    const numericSamples = qcSamples.filter(s => !isNaN(parseFloat(s.value ?? s.result ?? '')));
+                    const samplesForChart = numericSamples.length >= 2 ? numericSamples : demoBase.flatMap(p =>
+                        p.values.map((v, i) => ({
+                            docId: `demo-${p.parameter}-${i}`,
+                            parameter: p.parameter,
+                            value: v,
+                            unit: p.unit,
+                            type: 'Control Normal',
+                            createdAt: { seconds: Math.floor(Date.now() / 1000) - (p.values.length - i) * 86400 }
+                        }))
+                    );
+
+                    const allParams = [...new Set(samplesForChart.map(s => s.parameter))].filter(Boolean);
+                    const effectiveParam = selectedParam && allParams.includes(selectedParam) ? selectedParam : (allParams[0] || null);
+
+                    return (
+                        <>
+                            <div className="p-4 border-b border-slate-100 bg-slate-50 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="font-black text-slate-800 flex items-center gap-2 text-base">
+                                        <TrendingUp size={18} className="text-indigo-600" />
+                                        Gráfico de Levey-Jennings (ISO 15189 · CLSI EP15-A3)
+                                    </h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">Monitoreo visual de imprecisión: zonas ±1SD, ±2SD, ±3SD y detección automática de reglas Westgard.</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {numericSamples.length < 2 && (
+                                        <span className="text-[10px] bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded-lg font-bold">
+                                            📊 Datos DEMO — registra lecturas numéricas reales
+                                        </span>
+                                    )}
+                                    {allParams.length > 1 && (
+                                        <select
+                                            value={effectiveParam || ''}
+                                            onChange={e => setSelectedParam(e.target.value)}
+                                            className="text-sm font-bold bg-white border border-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 text-slate-700"
+                                        >
+                                            {allParams.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-auto">
+                                <LeveyJenningsChart
+                                    qcSamples={samplesForChart}
+                                    selectedParam={effectiveParam}
+                                />
+                            </div>
+                        </>
+                    );
+                })()}
             </div>
 
             {/* Modals */}

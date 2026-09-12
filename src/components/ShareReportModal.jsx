@@ -18,19 +18,24 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
     const testName = request?.analysisRequested || (isEn ? 'Laboratory Test' : 'Análisis Clínico');
     const labName = labInfo?.name || 'Laboratorio Microlabs';
 
+    const resultsEmail = labInfo?.emailReports || 'resultados@microlabscr.com';
+    const generalEmail = labInfo?.email || 'laboratorio@microlabscr.com';
+
     const defaultWhatsappMessage = isEn
         ? `🧪 *${labName}* - Official Laboratory Results\n\n` +
           `Hello *${patientName}*,\n\n` +
           `Your results for sample *#${reqId}* (${testName}) have been approved and validated by our medical team.\n\n` +
           `📄 *Verify & View Results:* \n${verifyUrl}\n\n` +
           `Thank you for trusting ${labName}.\n` +
-          `📞 Phone: ${labInfo?.telephones || '2234-8837'}`
+          `📞 Phone: ${labInfo?.telephones || '2234-8837'}\n` +
+          `✉️ Results: ${resultsEmail} | Inquiries: ${generalEmail}`
         : `🧪 *${labName}* - Resultados Oficiales de Laboratorio\n\n` +
           `Estimado(a) *${patientName}*,\n\n` +
           `Le informamos que los resultados de su muestra *#${reqId}* (${testName}) han sido procesados y validados por nuestro equipo de microbiología.\n\n` +
           `📄 *Ver y Descargar Informe Oficial:* \n${verifyUrl}\n\n` +
           `Gracias por confiar en ${labName}.\n` +
-          `📞 Consultas: ${labInfo?.telephones || '2234-8837'}`;
+          `📞 Consultas: ${labInfo?.telephones || '2234-8837'}\n` +
+          `✉️ Resultados: ${resultsEmail} | General: ${generalEmail}`;
 
     const [customMessage, setCustomMessage] = useState(defaultWhatsappMessage);
 
@@ -146,9 +151,14 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
 
                     {/* Email Section */}
                     <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center gap-2 text-blue-900 font-bold text-sm">
-                            <Mail size={18} className="text-blue-600" />
-                            <span>Enviar por Correo Electrónico</span>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-blue-900 font-bold text-sm">
+                                <Mail size={18} className="text-blue-600" />
+                                <span>Enviar por Correo Electrónico</span>
+                            </div>
+                            <span className="text-[10px] font-bold bg-blue-100/80 text-blue-700 px-2 py-0.5 rounded-md">
+                                {resultsEmail}
+                            </span>
                         </div>
                         <input 
                             type="email" 

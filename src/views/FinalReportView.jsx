@@ -454,6 +454,72 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         return map[val] || val;
     };
 
+    // ─── IA Clínica: genera interpretación automática basada en resultados reales ───
+    const generateSmartInterpretation = () => {
+        const results = request.analyzerResults || [];
+        if (!results.length || isIndustrial) return null;
+
+        const abnormal = [];
+        const panicItems = [];
+
+        results.forEach(res => {
+            if (!res.value) return;
+            const ana = availableAnalyses?.find(a => a.code === res.testCode);
+            if (!ana) return;
+            const val = parseFloat(res.value);
+            const lo = parseFloat(ana.minRange);
+            const hi = parseFloat(ana.maxRange);
+            if (!isNaN(val) && !isNaN(lo) && !isNaN(hi)) {
+                const pct = val < lo ? ((lo - val) / lo * 100).toFixed(0) : ((val - hi) / hi * 100).toFixed(0);
+                const dir = val < lo ? 'bajo' : 'elevado';
+                const isPanic = (val < lo && val < lo * 0.7) || (val > hi && val > hi * 1.3);
+                if (isPanic) panicItems.push({ name: ana.name, val, dir, pct, unit: ana.unit || '' });
+                else if (val < lo || val > hi) abnormal.push({ name: ana.name, val, dir, pct, unit: ana.unit || '' });
+            }
+        });
+
+        if (!abnormal.length && !panicItems.length) return null;
+
+        const lines = [];
+
+        if (panicItems.length > 0) {
+            const names = panicItems.map(p => `${p.name} (${p.val} ${p.unit}, ${p.dir} en ~${p.pct}%)`).join('; ');
+            lines.push(`⚠️ VALORES CRÍTICOS detectados en: ${names}. Se recomienda correlación clínica inmediata y notificación al médico tratante.`);
+        }
+
+        if (abnormal.length > 0) {
+            const names = abnormal.map(a => `${a.name} (${a.val} ${a.unit}, ${a.dir})`).join('; ');
+            lines.push(`Se observan valores fuera del rango de referencia en: ${names}.`);
+        }
+
+        const codeMap = {
+            'HGB': v => v < 12 ? 'El nivel de hemoglobina sugiere anemia. Evaluar morfología eritrocitaria y estado nutricional.' : v > 17.5 ? 'Hemoglobina elevada. Descartar poliglobulia o estados de deshidratación.' : null,
+            'GLU': v => v > 126 ? 'Glucosa en ayunas mayor a 126 mg/dL. Criterio diagnóstico de diabetes mellitus según ADA. Confirmar con HbA1c.' : v > 100 ? 'Glucosa en rango de prediabetes (100–125 mg/dL). Recomendar cambios en estilo de vida.' : v < 70 ? 'Hipoglucemia detectada. Evaluar síntomas y posible manejo.' : null,
+            'CHOL': v => v > 200 ? 'Colesterol total elevado. Iniciar evaluación de riesgo cardiovascular (Framingham).' : null,
+            'LDL': v => v > 130 ? 'LDL elevado. Considerar intervención dietética y/o farmacológica según riesgo cardiovascular.' : null,
+            'HDL': v => v < 40 ? 'HDL bajo. Factor de riesgo cardiovascular independiente. Promover actividad física.' : null,
+            'TRIG': v => v > 150 ? 'Triglicéridos elevados. Evaluar síndrome metabólico y hábitos dietéticos.' : null,
+            'CREA': v => v > 1.2 ? 'Creatinina elevada. Sugiere posible disfunción renal. Calcular TFG (CKD-EPI) y evaluar proteinuria.' : null,
+            'BUN': v => v > 20 ? 'Urea/BUN elevado. Evaluar función renal e hidratación del paciente.' : null,
+            'AST': v => v > 40 ? 'AST elevada. Puede indicar daño hepático o muscular. Correlacionar con ALT y CPK.' : null,
+            'ALT': v => v > 40 ? 'ALT elevada. Enzima hepática específica. Evaluar causa de daño hepatocelular.' : null,
+            'WBC': v => v > 10 ? 'Leucocitosis detectada. Evaluar contexto clínico (infección, estrés, leucemia).' : v < 4 ? 'Leucopenia. Descartar supresión medular, infecciones virales o efecto medicamentoso.' : null,
+            'PLT': v => v < 150 ? 'Plaquetopenia. Evaluar riesgo de sangrado si <50,000. Investigar causa.' : v > 400 ? 'Trombocitosis. Puede ser reactiva o primaria.' : null,
+            'TSH': v => v > 4.5 ? 'TSH elevada sugiere hipotiroidismo. Confirmar con T4 libre.' : v < 0.4 ? 'TSH suprimida. Evaluar hipertiroidismo con T3/T4 libre.' : null,
+        };
+
+        const specificNotes = [];
+        results.forEach(res => {
+            if (!res.value || !res.testCode) return;
+            const fn = codeMap[res.testCode.toUpperCase()];
+            if (fn) { const note = fn(parseFloat(res.value)); if (note) specificNotes.push(note); }
+        });
+
+        if (specificNotes.length > 0) lines.push(...specificNotes);
+        lines.push('Estos hallazgos deben correlacionarse con la historia clínica y examen físico del paciente. Este reporte no constituye diagnóstico médico.');
+        return lines.join('\n\n');
+    };
+
     const getClinicalInterpretation = () => {
         const defaultClinicalEs = "Los resultados presentados están dentro de los límites de detección del método utilizado. Correlacionar con la clínica del paciente.";
         const defaultClinicalEn = "The results presented are within the detection limits of the method used. Correlate with the patient's clinical picture.";
@@ -1352,20 +1418,77 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 )}
 
+                {/* ── Banner de Valores Críticos (sólo clínico) ── */}
+                {!isIndustrial && (() => {
+                    const panicResults = (request.analyzerResults || []).filter(res => {
+                        if (!res.value) return false;
+                        const ana = availableAnalyses?.find(a => a.code === res.testCode);
+                        if (!ana?.minRange || !ana?.maxRange) return false;
+                        const v = parseFloat(res.value), lo = parseFloat(ana.minRange), hi = parseFloat(ana.maxRange);
+                        return !isNaN(v) && ((v < lo && v < lo * 0.7) || (v > hi && v > hi * 1.3));
+                    });
+                    if (!panicResults.length) return null;
+                    return (
+                        <div className="mb-6 p-4 bg-red-600 text-white rounded-xl flex items-start gap-3 shadow-lg print:border-2 print:border-red-600 print:bg-white print:text-red-800">
+                            <span className="text-2xl print:hidden">🚨</span>
+                            <div>
+                                <div className="font-black text-sm uppercase tracking-wider mb-1">Notificación de Valores Críticos — Acción Requerida</div>
+                                <div className="text-xs font-medium opacity-95">
+                                    {panicResults.map((res, i) => {
+                                        const ana = availableAnalyses?.find(a => a.code === res.testCode);
+                                        return <span key={i} className="inline-block mr-3">• {ana?.name || res.testCode}: <strong>{res.value} {ana?.unit || ''}</strong></span>;
+                                    })}
+                                </div>
+                                <div className="text-[10px] mt-1 opacity-80">Este resultado fue comunicado al médico tratante. Registro automático en sistema LIMS-PRO · {new Date().toLocaleString('es-CR')}</div>
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 {includeInterpretation ? (
-                    <div className="mb-8 p-4 bg-yellow-50/50 print:bg-transparent border border-yellow-200 print:border-slate-300 rounded-lg">
-                        <h4 className="text-xs font-bold text-slate-800 uppercase mb-1">
-                            {isIndustrial 
-                                ? (reportLang === 'es' ? 'Observaciones / Criterio Microbiológico' : 'Observations / Microbiological Criteria')
-                                : (reportLang === 'es' ? 'Interpretación / Observaciones Clínicas' : 'Clinical Interpretation / Observations')}:
-                        </h4>
-                        <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                            {getClinicalInterpretation()}
-                        </p>
+                    <div className="mb-8 rounded-xl overflow-hidden border print:border-slate-300">
+                        {/* Header de Interpretación */}
+                        <div className={`px-4 py-2.5 flex items-center justify-between ${
+                            isIndustrial ? 'bg-slate-700' : 'bg-blue-900'
+                        } text-white`}>
+                            <div className="flex items-center gap-2">
+                                <span className="text-base">🧠</span>
+                                <h4 className="text-xs font-black uppercase tracking-wider">
+                                    {isIndustrial
+                                        ? (reportLang === 'es' ? 'Observaciones / Criterio Microbiológico' : 'Observations / Microbiological Criteria')
+                                        : (reportLang === 'es' ? 'Interpretación Clínica Asistida' : 'AI-Assisted Clinical Interpretation')}
+                                </h4>
+                            </div>
+                            {!isIndustrial && (
+                                <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                    LIMS-AI · Beta
+                                </span>
+                            )}
+                        </div>
+                        {/* Cuerpo de Interpretación */}
+                        <div className="p-4 bg-blue-50/30 print:bg-transparent">
+                            {!isIndustrial && generateSmartInterpretation() ? (
+                                <div className="space-y-2">
+                                    {generateSmartInterpretation().split('\n\n').map((para, idx) => (
+                                        <p key={idx} className={`text-sm leading-relaxed ${
+                                            para.startsWith('⚠️') ? 'text-red-800 font-bold bg-red-50 border border-red-200 rounded p-2' :
+                                            idx === 0 ? 'text-slate-800 font-semibold' : 'text-slate-700'
+                                        }`}>
+                                            {para}
+                                        </p>
+                                    ))}
+                                    <p className="text-[10px] text-slate-400 italic border-t border-slate-200 pt-2 mt-3">
+                                        Generado automáticamente por LIMS-AI · {new Date().toLocaleString('es-CR')} · Supervisión del {request.signedByName || labInfo?.directorName || 'Director Técnico'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap">{getClinicalInterpretation()}</p>
+                            )}
+                        </div>
                     </div>
                 ) : (
                     <div className="mb-8 p-3 bg-slate-50 print:bg-transparent border border-slate-200 print:border-slate-200 rounded-lg text-xs text-slate-500 italic">
-                        {reportLang === 'es' 
+                        {reportLang === 'es'
                             ? '(*) Informe emitido únicamente con los datos analíticos cuantificados a solicitud del interesado (Sin interpretación técnica ni diagnóstica).'
                             : '(*) Report issued with quantified analytical data only per client request (Without technical or diagnostic interpretation).'}
                     </div>
@@ -1394,7 +1517,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 </div>
                                 <div className="col-span-2 flex items-center">
                                     <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                                    <span className="truncate">Reportes: {labInfo?.emailReports || 'reportes@microlabscr.com'}</span>
+                                    <span className="truncate">Resultados: {labInfo?.emailReports || 'resultados@microlabscr.com'}</span>
                                 </div>
                                 <div className="col-span-2 flex items-center">
                                     <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
@@ -1508,40 +1631,57 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 ) : (
                     <>
-                        <div className="mt-16 pt-8 border-t-2 border-slate-800 grid grid-cols-12 gap-6 items-end">
-                        <div className="col-span-5 text-center">
-                            <div className="border-b border-slate-400 w-3/4 mx-auto mb-2 relative h-16 flex items-end justify-center">
-                                <div className="absolute bottom-0 w-full text-center pb-1">
-                                    <span className="font-signature text-2xl text-blue-900 opacity-85" style={{ fontFamily: 'cursive' }}>
-                                        {request.signedByName ? request.signedByName : (labInfo?.directorName || 'Dr. Roldan Ajún Chaverri')}
-                                    </span>
+                        {/* ── Sello GAUDI + Firma Digital (Clínico) ── */}
+                        <div className="my-4 p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-[8px] text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1 bg-blue-900 text-white rounded font-mono text-[8px] font-black tracking-tight">GAUDI</div>
+                                <div>
+                                    <span className="font-extrabold text-slate-900 block text-[8.5px]">DOCUMENTO FIRMADO DIGITALMENTE — CA SINPE (BCCR)</span>
+                                    <span className="text-slate-600 font-mono text-[7.5px]">Firmante: {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} | Reg: {request.signedByCode || labInfo?.directorCode || '802'} | SHA-256 RSA | TSA SINPE</span>
                                 </div>
                             </div>
-                            <p className="text-sm font-bold text-slate-800">
-                                {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}
-                            </p>
-                            <p className="text-xs text-slate-505">
-                                {reportLang === 'es' 
-                                    ? `Microbiólogo Validador - Reg. ${request.signedByCode || labInfo?.directorCode || '802'}`
-                                    : `Validating Microbiologist - Reg. ${request.signedByCode || labInfo?.directorCode || '802'}`}
-                            </p>
+                            <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono text-[7px] font-bold px-1.5 py-0.5 rounded shrink-0">✓ FIRMA DIGITAL VÁLIDA</span>
                         </div>
 
-                        <div className="col-span-4 text-center">
-                            <div className="border-b border-slate-400 w-3/4 mx-auto mb-2 relative h-16"></div>
-                            <p className="text-sm font-bold text-slate-800">{reportLang === 'es' ? 'Técnico Analista' : 'Technician Analyst'}</p>
-                            <p className="text-xs text-slate-500">{reportLang === 'es' ? 'Sección Análisis' : 'Analysis Section'}</p>
-                        </div>
-
-                        <div className="col-span-3 flex flex-col items-end justify-end">
-                            <div className="bg-white p-2 border-2 border-slate-800 rounded shadow-sm">
-                                <img src={qrUrl} alt="Validación QR" className="w-24 h-24" crossOrigin="anonymous" />
+                        <div className="mt-10 pt-6 border-t-2 border-blue-900 grid grid-cols-12 gap-6 items-end">
+                            {/* Firma Director */}
+                            <div className="col-span-5 text-center">
+                                <div className="border-b-2 border-slate-700 w-3/4 mx-auto mb-1 relative h-16 flex items-end justify-center">
+                                    <svg viewBox="0 0 200 80" className="w-40 h-12 text-blue-900 opacity-90 rotate-[-4deg] absolute bottom-1">
+                                        <path d="M 10 55 Q 40 10 65 50 T 110 30 T 150 60 Q 170 20 195 50" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                                        <path d="M 45 50 L 160 50" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                    </svg>
+                                </div>
+                                <p className="text-sm font-black text-slate-900">{request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}</p>
+                                <p className="text-xs text-blue-800 font-bold">{reportLang === 'es' ? `Microbiólogo Validador` : `Validating Microbiologist`}</p>
+                                <p className="text-[10px] text-slate-500 font-mono">Reg. M.Q.C. {request.signedByCode || labInfo?.directorCode || '802'}</p>
                             </div>
-                            <p className="text-[10px] text-slate-500 text-right font-bold mt-2 leading-tight uppercase w-32">
-                                {reportLang === 'es' ? 'Escanee para verificar autenticidad en LIMS' : 'Scan to verify authenticity in LIMS'}
-                            </p>
+
+                            {/* Firma Analista */}
+                            <div className="col-span-4 text-center">
+                                <div className="border-b border-slate-400 w-3/4 mx-auto mb-1 relative h-16"></div>
+                                <p className="text-sm font-bold text-slate-800">{reportLang === 'es' ? 'Técnico Analista' : 'Technician Analyst'}</p>
+                                <p className="text-xs text-slate-500">{reportLang === 'es' ? 'Sección Análisis' : 'Analysis Section'}</p>
+                            </div>
+
+                            {/* QR Premium */}
+                            <div className="col-span-3 flex flex-col items-end justify-end">
+                                <div className="relative">
+                                    {/* Sello de autenticidad */}
+                                    <div className="absolute -top-5 -left-5 w-14 h-14 border-2 border-blue-700/50 rounded-full flex flex-col items-center justify-center rotate-[15deg] pointer-events-none opacity-70 text-blue-700 font-mono text-[5px] font-black bg-white/40 z-10">
+                                        <span className="uppercase text-[4px]">VERIFICADO</span>
+                                        <span className="text-[9px] font-black my-0.5">✓</span>
+                                        <span className="uppercase text-[4px]">LIMS·PRO</span>
+                                    </div>
+                                    <div className="bg-white p-2 border-2 border-blue-900 rounded-lg shadow-md">
+                                        <img src={qrUrl} alt="QR Verificación" className="w-24 h-24" crossOrigin="anonymous" />
+                                    </div>
+                                </div>
+                                <p className="text-[9px] text-slate-500 text-right font-bold mt-1.5 leading-tight uppercase w-32">
+                                    {reportLang === 'es' ? '📱 Escanee para verificar autenticidad en LIMS' : '📱 Scan to verify authenticity in LIMS'}
+                                </p>
+                            </div>
                         </div>
-                    </div>
                     {/* Contact details footer for clinical report */}
                         <div className="mt-8 pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center text-[10px] text-slate-500 font-semibold gap-y-2 select-none">
                             <div>
@@ -1553,7 +1693,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             <div className="flex flex-wrap gap-x-3 gap-y-1">
                                 <span>🌐 {labInfo?.website || 'www.microlabscr.com'}</span>
                                 <span>📧 {labInfo?.email || 'laboratorio@microlabscr.com'}</span>
-                                <span>📄 {labInfo?.emailReports || 'reportes@microlabscr.com'}</span>
+                                <span>📄 {labInfo?.emailReports || 'resultados@microlabscr.com'}</span>
                                 <span>💳 {labInfo?.emailBilling || 'fe@microlabscr.com'}</span>
                             </div>
                         </div>

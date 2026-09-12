@@ -4,7 +4,7 @@ import {
     Calculator, UserCheck, Lock, Cpu, Snowflake, PlusCircle, HelpCircle, 
     Microscope, Factory, Truck, Wrench, ShieldAlert, Navigation, Layers,
     UserPlus, Building2, CheckCircle2, Send, FileSpreadsheet, Settings,
-    FileCheck2, SlidersHorizontal, Home
+    FileCheck2, SlidersHorizontal, Home, Thermometer
 } from 'lucide-react';
 import { Logo } from '../components/UI';
 import versionData from '../version.json';
@@ -135,6 +135,7 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                     <NavGroup step="Paso 4" title="Validación & Calidad" color="text-purple-400">
                         <NavItem view="qc" currentView={view} navigateTo={navigateTo} icon={CheckCircle2} label="Control de Calidad (QC)" />
                         <NavItem view="storage" currentView={view} navigateTo={navigateTo} icon={Snowflake} label="Mapeo & Freezer" />
+                        <NavItem view="cold_chain" currentView={view} navigateTo={navigateTo} icon={Thermometer} label="Cadena de Frío (IoT)" badge="Nuevo" />
                         <NavItem view="capa" currentView={view} navigateTo={navigateTo} icon={ShieldAlert} label="Aseguramiento ISO (CAPA)" />
                     </NavGroup>
                 )}

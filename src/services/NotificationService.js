@@ -24,7 +24,7 @@ class NotificationService {
             whatsappApiKey: '',
             whatsappPhoneNumberId: '',
             smtpServer: '',
-            fromEmail: 'resultados@microlabs-lims.com'
+            fromEmail: 'resultados@microlabscr.com'
         };
     }
 

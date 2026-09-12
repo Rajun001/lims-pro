@@ -111,3 +111,84 @@ export const registerUser = async (req, res) => {
     res.status(500).json({ error: 'Fallo al registrar usuario.' });
   }
 };
+
+export const publicRegister = async (req, res) => {
+  const { email, password, fullName, role, licenseNumber, authCode, clientProfile } = req.body;
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+
+  try {
+    if (!email || !password || !fullName) {
+      return res.status(400).json({ error: 'Todos los campos obligatorios deben ser completados.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'La contraseña debe contener al menos 8 caracteres para cumplir con la política de seguridad.' });
+    }
+
+    const normalizedRole = (role || '').toLowerCase();
+    const isStaff = normalizedRole === 'admin' || normalizedRole === 'director_tecnico' || normalizedRole === 'analyst' || normalizedRole === 'billing_agent';
+
+    if (isStaff) {
+      const validStaffToken = process.env.STAFF_REGISTRATION_TOKEN || 'MICROLABS-2026';
+      if (!authCode || authCode.trim() !== validStaffToken) {
+        return res.status(403).json({ 
+          error: 'Código de Autorización Institucional inválido o no proporcionado. El registro de personal requiere autorización de la Dirección del Laboratorio.' 
+        });
+      }
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(400).json({ error: 'El correo electrónico ya se encuentra registrado en el sistema.' });
+    }
+
+    // Mapear rol a enumeración o valor canónico
+    let assignedRole = 'CLIENT_PATIENT';
+    if (isStaff) {
+      if (normalizedRole === 'admin') assignedRole = 'ADMINISTRATOR';
+      else if (normalizedRole === 'director_tecnico') assignedRole = 'TECHNICAL_DIRECTOR';
+      else if (normalizedRole === 'billing_agent') assignedRole = 'RECEPTION';
+      else assignedRole = 'CLINICAL_ANALYST';
+    } else {
+      if (clientProfile === 'company') assignedRole = 'CLIENT_COMPANY';
+      else if (clientProfile === 'doctor') assignedRole = 'CLIENT_DOCTOR';
+      else assignedRole = 'CLIENT_PATIENT';
+    }
+
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        passwordHash: hashPassword(password),
+        fullName,
+        role: assignedRole,
+        licenseNumber: licenseNumber || null,
+        isActive: true
+      }
+    });
+
+    await AuditService.logEvent({
+      userId: newUser.id,
+      userName: newUser.fullName,
+      userRole: newUser.role,
+      action: isStaff ? 'REGISTER_STAFF_USER' : 'REGISTER_CLIENT_USER',
+      entityName: 'User',
+      entityId: String(newUser.id),
+      newValues: { email, fullName, role: assignedRole },
+      ipAddress
+    });
+
+    res.status(201).json({
+      message: 'Cuenta registrada exitosamente y lista para operar.',
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        fullName: newUser.fullName,
+        role: assignedRole
+      }
+    });
+  } catch (err) {
+    console.error('Error en publicRegister:', err.message);
+    res.status(500).json({ error: 'Error interno al procesar el registro.' });
+  }
+};
+

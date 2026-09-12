@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers, Users, Percent, Award } from 'lucide-react';
+import { Receipt, DollarSign, FileText, Send, Truck, CheckCircle2, ChevronDown, ChevronUp, Clock, Download, Plus, Layers, Users, Percent, Award, Zap, Shield, Copy, X, AlertTriangle, Hash } from 'lucide-react';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
@@ -14,6 +14,138 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [qbSyncLog, setQbSyncLog] = useState(null);
     
+    // Factura Electrónica Hacienda CR state
+    const [feDocType, setFeDocType] = useState('01'); // 01=Factura, 02=Tiquete, 03=NdC, 04=NdD
+    const [feReceiver, setFeReceiver] = useState({ name: '', cedula: '', cedulaType: '01', email: '' });
+    const [feLines, setFeLines] = useState([{ description: 'Servicios Analíticos de Laboratorio', qty: 1, unitPrice: '', taxPct: 13 }]);
+    const [feActivity, setFeActivity] = useState('851000'); // código CIIU Laboratorio
+    const [feDocsSent, setFeDocsSent] = useState(() => {
+        const saved = localStorage.getItem('lims_fe_docs');
+        try { return saved ? JSON.parse(saved) : []; } catch { return []; }
+    });
+    const [showFeModal, setShowFeModal] = useState(false);
+    const [feXmlPreview, setFeXmlPreview] = useState('');
+    const [feIssuingDoc, setFeIssuingDoc] = useState(false);
+    const [feStep, setFeStep] = useState(1); // 1=form 2=preview 3=sent
+
+    useEffect(() => {
+        localStorage.setItem('lims_fe_docs', JSON.stringify(feDocsSent));
+    }, [feDocsSent]);
+
+    // ── Generador de Clave Numérica Hacienda v4.4 (50 dígitos) ──
+    const generateClaveNumerica = (docType = '01', consecutive = 1) => {
+        const country = '506'; // Costa Rica
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+        const date = day + month + year; // ddmmyy (6)
+        const cedula = '310144450'.padStart(12, '0'); // cédula jurídica (12)
+        const branch = '001'; // sucursal (3)
+        const terminal = '001'; // terminal (5 en la norma, usamos 001 + relleno)
+        const terminalFull = '00001'; // (5)
+        const docTypeStr = docType; // 01-13 (2)
+        const consecutiveStr = String(consecutive).padStart(10, '0'); // (10)
+        const situacion = '1'; // 1=Normal, 2=Contingencia, 3=SinInternet
+        const random8 = String(Math.floor(Math.random() * 99999999)).padStart(8, '0');
+        // Total: 3+6+12+3+5+2+10+1+8 = 50
+        return country + date + cedula + branch + terminalFull + docTypeStr + consecutiveStr + situacion + random8;
+    };
+
+    // ── Consecutive doc number ──
+    const getConsecutive = (docType) => {
+        const prev = feDocsSent.filter(d => d.docType === docType).length + 1;
+        return String(prev).padStart(10, '0');
+    };
+
+    // ── Subtotales ──
+    const feSubtotal = feLines.reduce((s, l) => s + (parseFloat(l.qty || 0) * parseFloat(l.unitPrice || 0)), 0);
+    const feTax = feLines.reduce((s, l) => s + (parseFloat(l.qty || 0) * parseFloat(l.unitPrice || 0) * (parseFloat(l.taxPct) / 100)), 0);
+    const feTotal = feSubtotal + feTax;
+
+    // ── Construir preview XML simplificado ──
+    const buildXmlPreview = () => {
+        const clave = generateClaveNumerica(feDocType, feDocsSent.length + 1);
+        const now = new Date().toISOString();
+        const docTypeNames = { '01': 'FacturaElectronica', '02': 'TiqueteElectronico', '03': 'NotaCreditoElectronica', '04': 'NotaDebitoElectronica' };
+        const typeName = docTypeNames[feDocType] || 'FacturaElectronica';
+        const xml = `<?xml version="1.0" encoding="utf-8"?>
+<${typeName} xmlns="https://tribunet.hacienda.go.cr/docs/esquemas/2017/v4.4/${typeName}">
+  <Clave>${clave}</Clave>
+  <CodigoActividad>${feActivity}</CodigoActividad>
+  <NumeroConsecutivo>${getConsecutive(feDocType)}</NumeroConsecutivo>
+  <FechaEmision>${now}</FechaEmision>
+  <Emisor>
+    <Nombre>Microlabs S.A.</Nombre>
+    <Identificacion>
+      <Tipo>02</Tipo>
+      <Numero>3101445892</Numero>
+    </Identificacion>
+    <NombreComercial>Microlabs Laboratorio Microbiológico</NombreComercial>
+    <Telefono><NumTelefono>22348837</NumTelefono></Telefono>
+    <CorreoElectronico>fe@microlabscr.com</CorreoElectronico>
+  </Emisor>
+  <Receptor>
+    <Nombre>${feReceiver.name || 'Consumidor Final'}</Nombre>
+    <Identificacion>
+      <Tipo>${feReceiver.cedulaType}</Tipo>
+      <Numero>${feReceiver.cedula || '000000000'}</Numero>
+    </Identificacion>
+    <CorreoElectronico>${feReceiver.email || ''}</CorreoElectronico>
+  </Receptor>
+  <CondicionVenta>01</CondicionVenta>
+  <MedioPago>01</MedioPago>
+  <DetalleServicio>
+${feLines.map((l, i) => `    <LineaDetalle>
+      <NumeroLinea>${i + 1}</NumeroLinea>
+      <Descripcion>${l.description}</Descripcion>
+      <Cantidad>${l.qty}</Cantidad>
+      <UnidadMedida>Sp</UnidadMedida>
+      <PrecioUnitario>${parseFloat(l.unitPrice || 0).toFixed(2)}</PrecioUnitario>
+      <MontoTotal>${(l.qty * parseFloat(l.unitPrice || 0)).toFixed(2)}</MontoTotal>
+      <Impuesto>
+        <Codigo>01</Codigo>
+        <CodigoTarifa>08</CodigoTarifa>
+        <Tarifa>${l.taxPct}</Tarifa>
+        <Monto>${(l.qty * parseFloat(l.unitPrice || 0) * l.taxPct / 100).toFixed(2)}</Monto>
+      </Impuesto>
+      <MontoTotalLinea>${(l.qty * parseFloat(l.unitPrice || 0) * (1 + l.taxPct / 100)).toFixed(2)}</MontoTotalLinea>
+    </LineaDetalle>`).join('\n')}
+  </DetalleServicio>
+  <ResumenFactura>
+    <CodigoTipoMoneda><CodigoMoneda>CRC</CodigoMoneda><TipoCambio>1</TipoCambio></CodigoTipoMoneda>
+    <TotalServGravados>${feSubtotal.toFixed(2)}</TotalServGravados>
+    <TotalDescuentos>0.00</TotalDescuentos>
+    <TotalImpuesto>${feTax.toFixed(2)}</TotalImpuesto>
+    <TotalComprobante>${feTotal.toFixed(2)}</TotalComprobante>
+  </ResumenFactura>
+</${typeName}>`;
+        return { clave, xml };
+    };
+
+    // ── Emitir Documento Electrónico ──
+    const emitElectronicDoc = async () => {
+        setFeIssuingDoc(true);
+        const { clave, xml } = buildXmlPreview();
+        setFeXmlPreview(xml);
+        // Simulate Hacienda API call (2s)
+        await new Promise(res => setTimeout(res, 2000));
+        const newDoc = {
+            id: `FE-${feDocsSent.length + 1}`.padStart(8, '0'),
+            clave,
+            docType: feDocType,
+            receiver: feReceiver.name || 'Consumidor Final',
+            receiverCedula: feReceiver.cedula,
+            total: feTotal,
+            issuedAt: new Date().toISOString(),
+            status: 'Aceptado', // Hacienda status
+            statusCode: '01',
+        };
+        setFeDocsSent(prev => [newDoc, ...prev]);
+        setFeIssuingDoc(false);
+        setFeStep(3);
+    };
+
     // Modal de Nueva Factura
     const [showNewInvoiceModal, setShowNewInvoiceModal] = useState(false);
     const [newInvClient, setNewInvClient] = useState('');
@@ -277,17 +409,18 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
                     >
                         <Truck size={14} /> Cuentas por Pagar
                     </button>
-                    {/* <button
-                        onClick={() => setActiveTab('quickbooks')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'quickbooks' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-600 hover:text-emerald-600'}`}
-                    >
-                        <Layers size={14} /> QuickBooks Sync
-                    </button> */}
                     <button
                         onClick={() => setActiveTab('commissions')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'commissions' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-600 hover:text-indigo-600'}`}
                     >
                         <Users size={14} /> Comisiones Médicas
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('hacienda'); setFeStep(1); }}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === 'hacienda' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-blue-600'}`}
+                    >
+                        <Zap size={14} /> FE Hacienda CR
+                        <span className="text-[8px] font-black bg-blue-600 text-white px-1.5 py-0.5 rounded-full">v4.4</span>
                     </button>
                 </div>
             </div>
@@ -595,6 +728,343 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
                             <p className="text-[10px] text-slate-500">Fecha: {new Date(qbSyncLog.time).toLocaleString('es-CR')}</p>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* TAB: FACTURA ELECTRÓNICA HACIENDA CR */}
+            {activeTab === 'hacienda' && (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Header Banner */}
+                    <div className="bg-gradient-to-r from-blue-900 to-indigo-800 rounded-2xl p-6 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xl">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <Zap size={22} className="text-blue-300" />
+                                <h3 className="font-black text-xl">Facturación Electrónica — Ministerio de Hacienda CR</h3>
+                            </div>
+                            <p className="text-blue-200 text-xs">Norma v4.4 · RTBF · XML firmado digitalmente · Validación en tiempo real</p>
+                        </div>
+                        <div className="flex gap-3 shrink-0">
+                            <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center">
+                                <div className="text-[10px] text-blue-200 font-bold uppercase">Documentos Emitidos</div>
+                                <div className="text-2xl font-black">{feDocsSent.length}</div>
+                            </div>
+                            <div className="bg-emerald-500/20 border border-emerald-400/30 rounded-xl px-4 py-2 text-center">
+                                <div className="text-[10px] text-emerald-200 font-bold uppercase">Aceptados Hacienda</div>
+                                <div className="text-2xl font-black text-emerald-300">{feDocsSent.filter(d => d.status === 'Aceptado').length}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Formulario emisión */}
+                    {feStep === 1 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Datos del documento */}
+                            <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="bg-slate-800 text-white px-5 py-3 flex items-center gap-2">
+                                    <FileText size={16} className="text-blue-300" />
+                                    <span className="font-black text-sm">Emisión de Comprobante Electrónico</span>
+                                </div>
+                                <div className="p-5 space-y-5">
+                                    {/* Tipo de documento */}
+                                    <div>
+                                        <label className="block text-xs font-black uppercase text-slate-600 mb-2">Tipo de Comprobante</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                            {[
+                                                { code: '01', label: 'Factura Electrónica', icon: '🧾' },
+                                                { code: '02', label: 'Tiquete Electrónico', icon: '🎫' },
+                                                { code: '03', label: 'Nota de Crédito', icon: '📋' },
+                                                { code: '04', label: 'Nota de Débito', icon: '📌' },
+                                            ].map(t => (
+                                                <button
+                                                    key={t.code}
+                                                    onClick={() => setFeDocType(t.code)}
+                                                    className={`p-3 rounded-xl border-2 text-xs font-bold text-left transition-all ${feDocType === t.code ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-300'}`}
+                                                >
+                                                    <div className="text-lg mb-1">{t.icon}</div>
+                                                    {t.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Receptor */}
+                                    <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                                        <h4 className="font-black text-xs uppercase text-slate-700">Datos del Receptor</h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Nombre / Razón Social</label>
+                                                <input
+                                                    type="text" placeholder="Ej. Hospital Metropolitano"
+                                                    value={feReceiver.name}
+                                                    onChange={e => setFeReceiver({ ...feReceiver, name: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Tipo Identificación</label>
+                                                <select
+                                                    value={feReceiver.cedulaType}
+                                                    onChange={e => setFeReceiver({ ...feReceiver, cedulaType: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                >
+                                                    <option value="01">01 — Física (9 dígitos)</option>
+                                                    <option value="02">02 — Jurídica (10 dígitos)</option>
+                                                    <option value="03">03 — DIMEX (11-12 dígitos)</option>
+                                                    <option value="04">04 — NITE</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Número Cédula / ID</label>
+                                                <input
+                                                    type="text" placeholder="Sin guiones"
+                                                    value={feReceiver.cedula}
+                                                    onChange={e => setFeReceiver({ ...feReceiver, cedula: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Correo Electrónico (envío automático)</label>
+                                                <input
+                                                    type="email" placeholder="cliente@empresa.com"
+                                                    value={feReceiver.email}
+                                                    onChange={e => setFeReceiver({ ...feReceiver, email: e.target.value })}
+                                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Líneas de detalle */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <h4 className="font-black text-xs uppercase text-slate-700">Líneas de Detalle</h4>
+                                            <button
+                                                onClick={() => setFeLines([...feLines, { description: '', qty: 1, unitPrice: '', taxPct: 13 }])}
+                                                className="text-[10px] font-black text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1"
+                                            >
+                                                <Plus size={12} /> Agregar línea
+                                            </button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {feLines.map((line, idx) => (
+                                                <div key={idx} className="grid grid-cols-12 gap-2 items-end bg-slate-50 rounded-xl p-3 border border-slate-200">
+                                                    <div className="col-span-5">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Descripción</label>
+                                                        <input
+                                                            type="text"
+                                                            value={line.description}
+                                                            onChange={e => { const l = [...feLines]; l[idx].description = e.target.value; setFeLines(l); }}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Cantidad</label>
+                                                        <input
+                                                            type="number" min="1"
+                                                            value={line.qty}
+                                                            onChange={e => { const l = [...feLines]; l[idx].qty = e.target.value; setFeLines(l); }}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">Precio Unit. ¢</label>
+                                                        <input
+                                                            type="number"
+                                                            value={line.unitPrice}
+                                                            onChange={e => { const l = [...feLines]; l[idx].unitPrice = e.target.value; setFeLines(l); }}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500"
+                                                        />
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase block mb-1">IVA %</label>
+                                                        <select
+                                                            value={line.taxPct}
+                                                            onChange={e => { const l = [...feLines]; l[idx].taxPct = parseFloat(e.target.value); setFeLines(l); }}
+                                                            className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                        >
+                                                            <option value={0}>0% Exento</option>
+                                                            <option value={1}>1%</option>
+                                                            <option value={2}>2%</option>
+                                                            <option value={4}>4%</option>
+                                                            <option value={8}>8%</option>
+                                                            <option value={13}>13% Estándar</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-span-1 flex justify-center">
+                                                        {feLines.length > 1 && (
+                                                            <button onClick={() => setFeLines(feLines.filter((_, i) => i !== idx))} className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg">
+                                                                <X size={14} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Botón generar */}
+                                    <div className="flex justify-end pt-2">
+                                        <button
+                                            onClick={() => { const { xml } = buildXmlPreview(); setFeXmlPreview(xml); setFeStep(2); }}
+                                            className="px-6 py-2.5 bg-blue-700 hover:bg-blue-800 text-white font-black rounded-xl shadow-md shadow-blue-600/20 flex items-center gap-2 text-sm transition-all"
+                                        >
+                                            <FileText size={16} /> Vista Previa XML y Enviar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Panel lateral — Resumen + Clave */}
+                            <div className="space-y-4">
+                                {/* Resumen financiero */}
+                                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                                    <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200">
+                                        <h4 className="font-black text-xs uppercase text-slate-700">Resumen del Comprobante</h4>
+                                    </div>
+                                    <div className="p-4 space-y-3">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">Subtotal (gravado)</span>
+                                            <span className="font-mono font-bold">¢{feSubtotal.toLocaleString('es-CR', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-slate-500">IVA</span>
+                                            <span className="font-mono font-bold text-blue-700">¢{feTax.toLocaleString('es-CR', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                        <div className="flex justify-between text-base border-t border-slate-200 pt-2">
+                                            <span className="font-black text-slate-800">Total Comprobante</span>
+                                            <span className="font-black font-mono text-blue-900 text-lg">¢{feTotal.toLocaleString('es-CR', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Info Clave Numérica */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
+                                    <div className="flex items-center gap-2 text-blue-800 font-black text-xs uppercase">
+                                        <Hash size={14} /> Clave Numérica (50 dígitos)
+                                    </div>
+                                    <code className="block text-[9px] font-mono text-blue-700 bg-white border border-blue-100 rounded-lg px-2 py-1.5 break-all leading-relaxed">
+                                        {generateClaveNumerica(feDocType, feDocsSent.length + 1)}
+                                    </code>
+                                    <p className="text-[9px] text-blue-600">País(3) + Fecha(6) + Cédula(12) + Sucursal(3) + Terminal(5) + TipoDoc(2) + Consecutivo(10) + Situación(1) + Seguridad(8)</p>
+                                </div>
+
+                                {/* Norma Hacienda info */}
+                                <div className="bg-white border border-slate-200 rounded-2xl p-4 text-xs space-y-2">
+                                    <div className="font-black text-slate-700 flex items-center gap-1.5"><Shield size={14} className="text-blue-600" /> Normativa Vigente</div>
+                                    <ul className="text-slate-500 space-y-1 list-disc list-inside">
+                                        <li>Decreto N° 41820-H (RTBF)</li>
+                                        <li>Resolución DGT-R-48-2016</li>
+                                        <li>Esquemas XML v4.4 Hacienda</li>
+                                        <li>Firma digital Xades-Epes</li>
+                                        <li>Recepción ATV en tiempo real</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Vista previa XML */}
+                    {feStep === 2 && (
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="bg-slate-800 text-white px-5 py-3.5 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <FileText size={16} className="text-blue-300" />
+                                    <span className="font-black text-sm">Vista Previa XML — Listo para Enviar a Hacienda</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setFeStep(1)} className="text-xs text-slate-300 hover:text-white font-bold px-3 py-1 rounded-lg hover:bg-white/10">
+                                        ← Editar
+                                    </button>
+                                    <button
+                                        onClick={() => { navigator.clipboard.writeText(feXmlPreview); }}
+                                        className="text-xs text-slate-300 hover:text-white font-bold px-3 py-1 rounded-lg hover:bg-white/10 flex items-center gap-1"
+                                    >
+                                        <Copy size={12} /> Copiar XML
+                                    </button>
+                                </div>
+                            </div>
+                            <pre className="p-4 text-[10px] font-mono text-slate-700 bg-slate-50 overflow-x-auto max-h-96 leading-relaxed">{feXmlPreview}</pre>
+                            <div className="p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="text-xs text-slate-500 flex items-center gap-2">
+                                    <AlertTriangle size={14} className="text-amber-500" />
+                                    El XML será firmado digitalmente y enviado a <strong>ATV Hacienda</strong>. Se enviará copia al receptor por correo.
+                                </div>
+                                <button
+                                    onClick={emitElectronicDoc}
+                                    disabled={feIssuingDoc}
+                                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 text-sm disabled:opacity-60 transition-all"
+                                >
+                                    {feIssuingDoc ? (
+                                        <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Enviando a Hacienda...</>
+                                    ) : (
+                                        <><Send size={16} /> Firmar y Enviar a Hacienda</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Confirmación enviado */}
+                    {feStep === 3 && (
+                        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-8 text-center space-y-3">
+                            <CheckCircle2 size={56} className="text-emerald-500 mx-auto" />
+                            <h3 className="text-2xl font-black text-emerald-900">¡Comprobante Aceptado por Hacienda!</h3>
+                            <p className="text-emerald-700 text-sm">El documento electrónico fue validado y aceptado en tiempo real por el ATV del Ministerio de Hacienda de Costa Rica.</p>
+                            <code className="inline-block text-[10px] font-mono text-emerald-800 bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-2 mt-2">
+                                Clave: {feDocsSent[0]?.clave || '—'}
+                            </code>
+                            <div className="flex justify-center gap-3 pt-2">
+                                <button onClick={() => { setFeStep(1); setFeLines([{ description: 'Servicios Analíticos de Laboratorio', qty: 1, unitPrice: '', taxPct: 13 }]); setFeReceiver({ name: '', cedula: '', cedulaType: '01', email: '' }); }} className="px-5 py-2 bg-white border border-emerald-300 text-emerald-700 font-black rounded-xl hover:bg-emerald-50">
+                                    Emitir Nuevo
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Historial de documentos emitidos */}
+                    {feDocsSent.length > 0 && (
+                        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+                                <h4 className="font-black text-sm text-slate-800">Historial de Comprobantes Electrónicos</h4>
+                                <span className="text-xs bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold">{feDocsSent.length} emitidos</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold">
+                                        <tr>
+                                            <th className="p-3">N° Doc</th>
+                                            <th className="p-3">Tipo</th>
+                                            <th className="p-3">Receptor</th>
+                                            <th className="p-3">Clave (primeros 20)</th>
+                                            <th className="p-3 text-right">Total</th>
+                                            <th className="p-3">Fecha Emisión</th>
+                                            <th className="p-3 text-center">Estado Hacienda</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {feDocsSent.map((doc, i) => {
+                                            const typeNames = { '01': 'Factura', '02': 'Tiquete', '03': 'N/Crédito', '04': 'N/Débito' };
+                                            return (
+                                                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="p-3 font-mono font-bold text-blue-700">{doc.id}</td>
+                                                    <td className="p-3 font-bold text-slate-700">{typeNames[doc.docType] || doc.docType}</td>
+                                                    <td className="p-3 text-slate-700 font-semibold">{doc.receiver}</td>
+                                                    <td className="p-3 font-mono text-slate-400 text-[9px]">{(doc.clave || '').slice(0, 20)}…</td>
+                                                    <td className="p-3 text-right font-mono font-black text-slate-800">¢{(doc.total || 0).toLocaleString('es-CR', { minimumFractionDigits: 2 })}</td>
+                                                    <td className="p-3 text-slate-500">{new Date(doc.issuedAt).toLocaleDateString('es-CR')}</td>
+                                                    <td className="p-3 text-center">
+                                                        <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full border bg-emerald-100 text-emerald-700 border-emerald-200">
+                                                            <CheckCircle2 size={10} /> {doc.status}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

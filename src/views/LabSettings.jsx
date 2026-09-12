@@ -20,7 +20,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
         if (!base.telephones) base.telephones = '+506 22348837, +506 22345862, +506 22246541';
         if (!base.whatsapp) base.whatsapp = '71382750';
         if (!base.email) base.email = 'laboratorio@microlabscr.com';
-        if (!base.emailReports) base.emailReports = 'reportes@microlabscr.com';
+        if (!base.emailReports) base.emailReports = 'resultados@microlabscr.com';
         if (!base.emailBilling) base.emailBilling = 'fe@microlabscr.com';
 
         if (!base.branches || base.branches.length === 0) {
@@ -37,7 +37,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     telephones: '+506 22348837, +506 22345862, +506 22246541',
                     whatsapp: '71382750',
                     email: 'laboratorio@microlabscr.com',
-                    emailReports: 'reportes@microlabscr.com',
+                    emailReports: 'resultados@microlabscr.com',
                     emailBilling: 'fe@microlabscr.com',
                     website: 'www.microlabscr.com',
                     directorName: 'Dr. Roldan Ajún Chaverri',
@@ -392,7 +392,7 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                             <FormInput label="Teléfonos de Atención Central" value={info.telephones || ''} onChange={e => setInfo({ ...info, telephones: e.target.value })} placeholder="+506 22348837, +506 22345862, +506 22246541" />
                             <FormInput label="WhatsApp Central" value={info.whatsapp || ''} onChange={e => setInfo({ ...info, whatsapp: e.target.value })} placeholder="71382750" />
                             <FormInput label="Correo Central / General" value={info.email || ''} onChange={e => setInfo({ ...info, email: e.target.value })} placeholder="laboratorio@microlabscr.com" />
-                            <FormInput label="Correo de Informes y Formularios" value={info.emailReports || ''} onChange={e => setInfo({ ...info, emailReports: e.target.value })} placeholder="reportes@microlabscr.com" />
+                            <FormInput label="Correo de Resultados e Informes" value={info.emailReports || ''} onChange={e => setInfo({ ...info, emailReports: e.target.value })} placeholder="resultados@microlabscr.com" />
                             <div className="md:col-span-2">
                                 <FormInput label="Correo de Facturas Electrónicas y Gastos Externos" value={info.emailBilling || ''} onChange={e => setInfo({ ...info, emailBilling: e.target.value })} placeholder="fe@microlabscr.com" />
                             </div>

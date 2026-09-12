@@ -45,6 +45,9 @@ import { TopBar } from './layouts/TopBar';
 import { MobileNav } from './layouts/MobileNav';
 import { DemoRunner } from './components/DemoRunner';
 import { VersionUpdateNotifier } from './components/VersionUpdateNotifier';
+import { CommandPalette } from './components/CommandPalette';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 // Lazy load views
 const LoginView = lazy(() => import('./views/LoginView').then(m => ({ default: m.LoginView })));
@@ -81,6 +84,7 @@ const EquipmentView = lazy(() => import('./views/EquipmentView').then(m => ({ de
 const CAPAView = lazy(() => import('./views/CAPAView').then(m => ({ default: m.CAPAView })));
 const FieldSamplingView = lazy(() => import('./views/FieldSamplingView').then(m => ({ default: m.FieldSamplingView })));
 const BatchProcessingView = lazy(() => import('./views/BatchProcessingView').then(m => ({ default: m.BatchProcessingView })));
+const ColdChainView = lazy(() => import('./views/ColdChainView').then(m => ({ default: m.ColdChainView })));
 
 const RequestViewWrapper = ({ requests, analyses, db, user, labInfo, navigateTo, ViewComponent }) => {
     const _unusedComponent = ViewComponent;
@@ -167,10 +171,11 @@ const routeRoleMap = {
     batch: ['admin', 'director_tecnico', 'analyst'],
     storage: ['admin', 'director_tecnico', 'analyst'],
     environmental: ['admin', 'director_tecnico', 'analyst'],
-    referrals: ['admin', 'director_tecnico', 'analyst']
+    referrals: ['admin', 'director_tecnico', 'analyst'],
+    cold_chain: ['admin', 'director_tecnico', 'analyst'],
 };
 
-const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
+const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCommandPalette, onOpenShortcuts }) => {
     const location = useLocation();
     const view = location.pathname.substring(1) || 'home';
     
@@ -184,13 +189,23 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
         return <Navigate to="/client_portal" replace />;
     }
 
+    const openPalette = onOpenCommandPalette || (() => window.dispatchEvent(new CustomEvent('open-command-palette')));
+    const openShortcuts = onOpenShortcuts || (() => window.dispatchEvent(new CustomEvent('open-shortcuts')));
+
     // Check module permission per user role
     if (routeRoleMap[view] && !routeRoleMap[view].includes(userRole)) {
         return (
             <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
                 <Sidebar user={user} userRole={userRole} navigateTo={navigateTo} view={view} labInfo={labInfo} />
                 <div className="flex-1 flex flex-col overflow-hidden">
-                    <TopBar user={user} userRole={userRole} navigateTo={navigateTo} labInfo={labInfo} />
+                    <TopBar 
+                        user={user} 
+                        userRole={userRole} 
+                        navigateTo={navigateTo} 
+                        labInfo={labInfo} 
+                        onOpenCommandPalette={openPalette}
+                        onOpenShortcuts={openShortcuts}
+                    />
                     <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
                         <RestrictedAccess navigateTo={navigateTo} />
                     </main>
@@ -203,7 +218,14 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
         <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
             <Sidebar user={user} userRole={userRole} navigateTo={navigateTo} view={view} labInfo={labInfo} />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <TopBar user={user} userRole={userRole} navigateTo={navigateTo} labInfo={labInfo} />
+                <TopBar 
+                    user={user} 
+                    userRole={userRole} 
+                    navigateTo={navigateTo} 
+                    labInfo={labInfo} 
+                    onOpenCommandPalette={openPalette}
+                    onOpenShortcuts={openShortcuts}
+                />
                 <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8">
                     <div className="w-full max-w-7xl mx-auto">
                         <Suspense fallback={<LoadingSpinner />}>
@@ -213,6 +235,7 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo }) => {
                 </main>
                 <MobileNav navigateTo={navigateTo} view={view} userRole={userRole} />
             </div>
+            <PWAInstallBanner />
         </div>
     );
 };
@@ -311,7 +334,7 @@ const AppContent = () => {
         telephones: '+506 22348837, +506 22345862, +506 22246541',
         whatsapp: '71382750',
         email: 'laboratorio@microlabscr.com',
-        emailReports: 'reportes@microlabscr.com',
+        emailReports: 'resultados@microlabscr.com',
         emailBilling: 'fe@microlabscr.com',
         address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
         directorName: 'Dr. Roldan Ajún Chaverri',
@@ -331,7 +354,7 @@ const AppContent = () => {
                 telephones: '+506 22348837, +506 22345862, +506 22246541',
                 whatsapp: '71382750',
                 email: 'laboratorio@microlabscr.com',
-                emailReports: 'reportes@microlabscr.com',
+                emailReports: 'resultados@microlabscr.com',
                 emailBilling: 'fe@microlabscr.com',
                 website: 'www.microlabscr.com',
                 directorName: 'Dr. Roldan Ajún Chaverri',
@@ -416,6 +439,86 @@ const AppContent = () => {
             navigate(`/${viewName}`, { state });
         }
     };
+
+    const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+    const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
+
+    useEffect(() => {
+        const handleOpenPalette = () => setIsCommandPaletteOpen(true);
+        const handleOpenShortcuts = () => setIsShortcutsModalOpen(true);
+
+        window.addEventListener('open-command-palette', handleOpenPalette);
+        window.addEventListener('open-shortcuts', handleOpenShortcuts);
+
+        const handleGlobalKeyDown = (e) => {
+            const activeEl = document.activeElement;
+            const isInput = activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName);
+
+            // Ctrl + K or Cmd + K -> Open Command Palette
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+                e.preventDefault();
+                setIsCommandPaletteOpen(prev => !prev);
+                return;
+            }
+
+            // ? key -> Open Shortcuts modal (only if not typing in form field)
+            if (e.key === '?' && !isInput) {
+                e.preventDefault();
+                setIsShortcutsModalOpen(true);
+                return;
+            }
+
+            // Alt + N -> New Clinical Patient
+            if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+                e.preventDefault();
+                navigateTo('new_request', null, { mode: 'clinical' });
+                return;
+            }
+
+            // Alt + I -> New Industrial Sample
+            if (e.altKey && (e.key === 'i' || e.key === 'I')) {
+                e.preventDefault();
+                navigateTo('new_request', null, { mode: 'industrial' });
+                return;
+            }
+
+            // Alt + D -> Orders Dashboard
+            if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+                e.preventDefault();
+                navigateTo('dashboard');
+                return;
+            }
+
+            // Alt + H -> Home
+            if (e.altKey && (e.key === 'h' || e.key === 'H')) {
+                e.preventDefault();
+                navigateTo('home');
+                return;
+            }
+
+            // Alt + R -> Results Review
+            if (e.altKey && (e.key === 'r' || e.key === 'R')) {
+                e.preventDefault();
+                navigateTo('results_review');
+                return;
+            }
+
+            // Alt + B -> Billing
+            if (e.altKey && (e.key === 'b' || e.key === 'B')) {
+                e.preventDefault();
+                navigateTo('billing');
+                return;
+            }
+        };
+
+        window.addEventListener('keydown', handleGlobalKeyDown);
+
+        return () => {
+            window.removeEventListener('open-command-palette', handleOpenPalette);
+            window.removeEventListener('open-shortcuts', handleOpenShortcuts);
+            window.removeEventListener('keydown', handleGlobalKeyDown);
+        };
+    }, []);
 
     useEffect(() => {
         const initAuth = async () => {
@@ -673,7 +776,7 @@ const AppContent = () => {
                 {/* Internal App Routes with Layout */}
                 <Route path="/" element={<Navigate to="/home" replace />} />
                 
-                <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} user={user} userRole={userRole} /></LayoutWrapper>} />
+                <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} inventory={[]} user={user} userRole={userRole} /></LayoutWrapper>} />
                 <Route path="/dashboard" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><Dashboard requests={requests} navigateTo={navigateTo} clients={clients} /></LayoutWrapper>} />
                 
                 <Route path="/new_request" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestForm db={db} user={user} navigateTo={navigateTo} availableAnalyses={analyses} clients={clients} requests={requests} labInfo={labInfo} /></LayoutWrapper>} />
@@ -688,6 +791,8 @@ const AppContent = () => {
                 <Route path="/equipment" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><EquipmentView db={db} user={user} /></LayoutWrapper>} />
                 <Route path="/capa" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><CAPAView db={db} user={user} /></LayoutWrapper>} />
                 <Route path="/storage" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><StorageMapView db={db} user={user} requests={requests} /></LayoutWrapper>} />
+                <Route path="/cold_chain" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ColdChainView db={db} user={user} requests={requests} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/cold-chain" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ColdChainView db={db} user={user} requests={requests} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/environmental" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><EnvironmentalMonitoring /></LayoutWrapper>} />
                 <Route path="/qc" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QCView db={db} user={user} /></LayoutWrapper>} />
                 <Route path="/client_settings" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ClientSettings db={db} clients={clients} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
@@ -713,6 +818,16 @@ const AppContent = () => {
                 {/* Catch-all */}
                 <Route path="*" element={<Navigate to="/home" replace />} />
             </Routes>
+            <CommandPalette 
+                isOpen={isCommandPaletteOpen} 
+                onClose={() => setIsCommandPaletteOpen(false)} 
+                navigateTo={navigateTo} 
+                requests={requests} 
+            />
+            <KeyboardShortcutsModal 
+                isOpen={isShortcutsModalOpen} 
+                onClose={() => setIsShortcutsModalOpen(false)} 
+            />
             <DemoRunner />
             <VersionUpdateNotifier />
         </ErrorBoundary>

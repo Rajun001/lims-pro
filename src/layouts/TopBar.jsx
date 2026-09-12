@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Users, FlaskConical, Settings, Play, Sparkles, Activity, ShieldCheck } from 'lucide-react';
+import { 
+    Bell, Users, FlaskConical, Settings, Play, Sparkles, Activity, 
+    ShieldCheck, Search, Command, Keyboard, PlusCircle 
+} from 'lucide-react';
 import { Logo } from '../components/UI';
 import { systemWatchdog } from '../utils/systemWatchdog';
 
-export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
+export const TopBar = ({ user, navigateTo, labInfo, userRole, onOpenCommandPalette, onOpenShortcuts }) => {
     const [showNotifications, setShowNotifications] = useState(false);
     const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
     const [watchdogStatus, setWatchdogStatus] = useState({ api: 'ONLINE', analyzers: 'STANDBY' });
@@ -39,34 +42,75 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
     };
 
     return (
-        <header className="bg-white border-b h-16 flex items-center justify-between px-6 z-10 shrink-0 print:hidden relative">
-            <div className="md:hidden flex items-center gap-2 cursor-pointer" onClick={() => navigateTo('home')}>
-                <Logo url={labInfo?.logoUrl} variant="icon" className="h-8 w-8" />
-                <h1 className="font-bold text-slate-800">LIMS</h1>
-            </div>
-            <div className="hidden md:block"></div> {/* Spacer for desktop */}
+        <header className="bg-white border-b h-16 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0 print:hidden relative gap-2 sm:gap-4">
             <div className="flex items-center gap-3">
+                <div className="md:hidden flex items-center gap-2 cursor-pointer" onClick={() => navigateTo('home')}>
+                    <Logo url={labInfo?.logoUrl} variant="icon" className="h-8 w-8" />
+                    <h1 className="font-bold text-slate-800">LIMS</h1>
+                </div>
+
+                {/* Global Command Palette / Search Bar Trigger */}
+                <button 
+                    onClick={onOpenCommandPalette}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-500 hover:text-slate-800 transition-all text-xs font-medium w-36 sm:w-60 md:w-72 lg:w-80 shadow-2xs group cursor-pointer"
+                    title="Buscar muestra o ejecutar comandos (Ctrl + K)"
+                >
+                    <Search size={15} className="text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+                    <span className="flex-1 text-left truncate text-slate-400 group-hover:text-slate-600">
+                        Buscar muestra...
+                    </span>
+                    <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono text-[10px] text-slate-500 font-bold shadow-2xs shrink-0">
+                        <Command size={10} className="inline mr-0.5" />K
+                    </kbd>
+                </button>
+
+                {/* Quick Add Patient Button */}
+                {['admin', 'director_tecnico', 'billing_agent', 'analyst'].includes(userRole) && (
+                    <button
+                        onClick={() => navigateTo('new_request', null, { mode: 'clinical' })}
+                        className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs border border-indigo-200/70 transition-colors shadow-2xs cursor-pointer"
+                        title="Ingreso Rápido de Paciente (Alt + N)"
+                    >
+                        <PlusCircle size={14} />
+                        <span>+ Paciente</span>
+                    </button>
+                )}
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+                {/* Keyboard Shortcuts Help Button */}
+                <button
+                    onClick={onOpenShortcuts}
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-indigo-600 transition-colors cursor-pointer"
+                    title="Atajos de Teclado (?)"
+                >
+                    <Keyboard size={18} />
+                </button>
+
                 {/* E2E Demo Trigger Button */}
                 <button
                     onClick={triggerDemo}
-                    className="hover:scale-105 active:scale-95 transition-all bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5"
+                    className="hidden xl:flex hover:scale-105 active:scale-95 transition-all bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-sm cursor-pointer items-center gap-1.5"
                     title="Iniciar Demo Automático del Sistema"
                 >
                     <Play size={12} className="fill-white" />
-                    <span>Demo Automático</span>
+                    <span>Demo</span>
                 </button>
 
                 {/* Connectivity Status Indicator */}
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-300 ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-300 ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                     <span className={`w-2 h-2 rounded-full ${isOnline ? (watchdogStatus.api === 'ONLINE' ? 'bg-emerald-500' : 'bg-emerald-400 animate-pulse') : 'bg-amber-500 animate-pulse'}`}></span>
-                    <span>
-                        {isOnline ? (watchdogStatus.api === 'ONLINE' ? 'En Línea (API Local OK)' : 'En Línea (Cloud)') : 'Sin Conexión (Autoguardado)'}
+                    <span className="hidden md:inline">
+                        {isOnline ? (watchdogStatus.api === 'ONLINE' ? 'En Línea (Local OK)' : 'En Línea (Cloud)') : 'Sin Conexión'}
+                    </span>
+                    <span className="md:hidden">
+                        {isOnline ? 'OK' : 'Offline'}
                     </span>
                 </div>
 
                 <div className="relative">
-                    <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors relative" title="Notificaciones">
-                        <Bell size={20} />
+                    <button onClick={() => setShowNotifications(!showNotifications)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors relative cursor-pointer" title="Notificaciones">
+                        <Bell size={19} />
                         {unreadCount > 0 && <span className="absolute top-1 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>}
                     </button>
 
@@ -94,14 +138,14 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole }) => {
 
                 {userRole === 'admin' && (
                     <>
-                        <button onClick={() => navigateTo('crm')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Directorio CRM"><Users size={20} /></button>
-                        <button onClick={() => navigateTo('analysis_settings')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Análisis"><FlaskConical size={20} /></button>
-                        <button onClick={() => navigateTo('lab_settings')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Configuración"><Settings size={20} /></button>
+                        <button onClick={() => navigateTo('crm')} className="hidden sm:block p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer" title="Directorio CRM"><Users size={19} /></button>
+                        <button onClick={() => navigateTo('analysis_settings')} className="hidden sm:block p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer" title="Análisis"><FlaskConical size={19} /></button>
+                        <button onClick={() => navigateTo('lab_settings')} className="hidden sm:block p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors cursor-pointer" title="Configuración"><Settings size={19} /></button>
                     </>
                 )}
                 {user && (
-                    <div className="ml-3 pl-3 border-l flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm" title={`Operador: ${user.uid.substring(0, 6)}`}>
+                    <div className="ml-1 sm:ml-2 pl-2 sm:pl-3 border-l flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs" title={`Operador: ${user.uid.substring(0, 6)}`}>
                             {user.uid.substring(0, 2).toUpperCase()}
                         </div>
                     </div>
