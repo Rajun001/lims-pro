@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { 
     ShieldAlert, Download, CheckCircle2, ServerCrash, HardDrive, Trash2, 
     Sparkles, Activity, ShieldCheck, RefreshCw, Radio, Network, 
-    Laptop, Database, ExternalLink, CloudUpload, AlertTriangle, Check
+    Laptop, Database, ExternalLink, CloudUpload, AlertTriangle, Check, Bell
 } from 'lucide-react';
 import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { RestrictedAccess } from '../components/UI';
 import { runIntegralMultiModelSystemAudit } from '../services/aiService';
+import PushNotificationCenter from '../components/PushNotificationCenter';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -215,6 +216,9 @@ export const SystemDiagnosticsView = ({ db, user, requests, clients, userRole, n
                 </button>
                 <button onClick={() => setActiveTab('respaldos')} className={`flex-1 min-w-[170px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'respaldos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <HardDrive size={18} /> Garantía de Datos (Backup)
+                </button>
+                <button onClick={() => setActiveTab('push_notifications')} className={`flex-1 min-w-[170px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'push_notifications' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <Bell size={18} /> Notificaciones Push
                 </button>
             </div>
 
@@ -576,6 +580,12 @@ export const SystemDiagnosticsView = ({ db, user, requests, clients, userRole, n
                                 </button>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === 'push_notifications' && (
+                    <div className="p-6 overflow-auto">
+                        <PushNotificationCenter />
                     </div>
                 )}
             </div>
