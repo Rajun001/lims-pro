@@ -782,7 +782,7 @@ const AppContent = () => {
                 <Route path="/client_portal" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <ClientRoute user={user} userRole={userRole}>
-                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} />
+                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} user={user} />
                         </ClientRoute>
                     </Suspense>
                 } />

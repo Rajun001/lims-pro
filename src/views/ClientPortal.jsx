@@ -777,7 +777,7 @@ const CLINICAL_RESULTS_MOCK = [
     { id: 'MC-2026-0508', date: '08/05/2026', analysis: 'Hemograma Completo', status: 'Aprobado', lab: 'Sede Central', details: 'Hemoglobina: 14 g/dL\nPlaquetas: 250,000 /uL', patientName: 'Luis Rojas', paymentStatus: 'Pendiente', sampleType: 'Clínica' }
 ];
 
-export const ClientPortal = ({ navigateTo, userRole, requests }) => {
+export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
     const [previewId, setPreviewId] = useState(null);
     const [activeTab, setActiveTab] = useState('resultados');
     const [quoteDesc, setQuoteDesc] = useState('');
@@ -794,20 +794,48 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
             ? (isEn ? 'Physician Portal' : 'Portal Médico') 
             : (isEn ? 'Patient Portal' : 'Portal Paciente');
 
-    const welcomeName = isCompany ? 'Distribuidora Alimenticia S.A.' : isDoctor ? 'Dr. Roberto Vargas' : 'Juan Pérez';
+    const welcomeName = user?.displayName || (
+        isCompany 
+            ? (user?.email && !user.email.includes('offline') ? user.email.split('@')[0].toUpperCase() : 'Distribuidora Alimenticia S.A.') 
+            : isDoctor 
+                ? (user?.email && !user.email.includes('offline') ? `Dr. ${user.email.split('@')[0]}` : 'Dr. Roberto Vargas') 
+                : (user?.email && !user.email.includes('offline') ? user.email.split('@')[0] : 'Juan Pérez')
+    );
 
     const [paidSampleIds, setPaidSampleIds] = useState([]);
 
     const resultsList = useMemo(() => {
         let baseList = [];
         if (requests && requests.length > 0) {
+            const userEmail = (user?.email || '').toLowerCase();
+            const userUid = user?.uid || '';
+            const userDisplay = (user?.displayName || '').toLowerCase();
+            const isSpecificUser = user && userUid !== 'offline-user' && userEmail && !userEmail.includes('offline');
+
             const filteredReqs = requests.filter(r => {
+                // If it's a specific authenticated client, isolate only their relevant clinical/industrial records
+                if (isSpecificUser) {
+                    const reqClientEmail = (r.clientEmail || r.email || '').toLowerCase();
+                    const reqPatientName = (r.patientName || r.clientName || '').toLowerCase();
+                    const reqDoctorName = (r.doctorName || r.referralDoctor || '').toLowerCase();
+
+                    if (isDoctor) {
+                        return (reqDoctorName && userDisplay && reqDoctorName.includes(userDisplay)) || reqClientEmail === userEmail;
+                    } else if (isCompany) {
+                        return (reqPatientName && userDisplay && reqPatientName.includes(userDisplay)) || reqClientEmail === userEmail;
+                    } else {
+                        return (reqPatientName && userDisplay && reqPatientName.includes(userDisplay)) || reqClientEmail === userEmail;
+                    }
+                }
+
+                // Default/Demo categorization
                 if (isCompany) {
                     return r.clientType === 'Industria' || r.sampleType === 'Alimentos' || r.sampleType === 'Agua / Hielo' || r.sampleType === 'Superficie' || r.sampleType === 'Agua Residual' || r.sampleType === 'Aire / Ambiental';
                 } else {
                     return r.clientType === 'Clínica' || r.sampleType === 'Clínica' || (!r.clientType && !r.sampleType);
                 }
             });
+
             if (filteredReqs.length > 0) {
                 baseList = filteredReqs.map(r => ({
                     id: r.id,
@@ -824,11 +852,11 @@ export const ClientPortal = ({ navigateTo, userRole, requests }) => {
                 }));
             }
         }
-        if (baseList.length === 0) {
+        if (baseList.length === 0 && (!user || user?.uid === 'offline-user')) {
             baseList = isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK;
         }
         return baseList.map(r => paidSampleIds.includes(r.id) ? { ...r, paymentStatus: 'Pagado' } : r);
-    }, [requests, isCompany, paidSampleIds]);
+    }, [requests, isCompany, isDoctor, user, paidSampleIds]);
 
     // Payment and Checkout States
     const [checkoutSample, setCheckoutSample] = useState(null);
