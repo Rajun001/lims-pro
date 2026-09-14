@@ -508,6 +508,36 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             'TSH': v => v > 4.5 ? 'TSH elevada sugiere hipotiroidismo. Confirmar con T4 libre.' : v < 0.4 ? 'TSH suprimida. Evaluar hipertiroidismo con T3/T4 libre.' : null,
         };
 
+        // Sugerencias de Análisis Complementarios (LIMS-AI Proactivo)
+        const complementarySuggestions = [];
+        const testCodes = results.map(r => (r.testCode || '').toUpperCase());
+
+        if (testCodes.includes('GLU')) {
+            const gluVal = parseFloat(results.find(r => r.testCode?.toUpperCase() === 'GLU')?.value);
+            if (gluVal > 100 && !testCodes.includes('HBA1C')) {
+                complementarySuggestions.push('Hemoglobina Glicosilada (HbA1c) y Perfil Lipídico para estadificación metabólica');
+            }
+        }
+        if (testCodes.includes('CREA')) {
+            const creaVal = parseFloat(results.find(r => r.testCode?.toUpperCase() === 'CREA')?.value);
+            if (creaVal > 1.2 && !testCodes.includes('EGO') && !testCodes.includes('ORINA')) {
+                complementarySuggestions.push('Examen General de Orina (EGO) y Microalbuminuria en 24h para evaluación nefrológica');
+            }
+        }
+        if (testCodes.includes('AST') || testCodes.includes('ALT')) {
+            const astVal = parseFloat(results.find(r => r.testCode?.toUpperCase() === 'AST')?.value || 0);
+            const altVal = parseFloat(results.find(r => r.testCode?.toUpperCase() === 'ALT')?.value || 0);
+            if ((astVal > 40 || altVal > 40) && !testCodes.includes('GGT') && !testCodes.includes('FA')) {
+                complementarySuggestions.push('Fosfatasa Alcalina (FA), GGT y Bilirrubinas Total/Fraccionadas para panel hepático completo');
+            }
+        }
+        if (testCodes.includes('HGB')) {
+            const hgbVal = parseFloat(results.find(r => r.testCode?.toUpperCase() === 'HGB')?.value);
+            if (hgbVal < 12 && !testCodes.includes('FERRITINA')) {
+                complementarySuggestions.push('Ferritina Sérica, Capacidad Total de Fijación de Hierro (TIBC) y Frotis de Sangre Periférica');
+            }
+        }
+
         const specificNotes = [];
         results.forEach(res => {
             if (!res.value || !res.testCode) return;
@@ -516,6 +546,11 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         });
 
         if (specificNotes.length > 0) lines.push(...specificNotes);
+
+        if (complementarySuggestions.length > 0) {
+            lines.push(`💡 Sugerencias LIMS-AI de Análisis Complementarios:\n` + complementarySuggestions.map(s => `• ${s}`).join('\n'));
+        }
+
         lines.push('Estos hallazgos deben correlacionarse con la historia clínica y examen físico del paciente. Este reporte no constituye diagnóstico médico.');
         return lines.join('\n\n');
     };
