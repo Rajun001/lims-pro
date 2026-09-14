@@ -3,7 +3,7 @@ import {
     FlaskConical, ShieldCheck, KeyRound, Smartphone, ArrowRight, ArrowLeft, 
     UserPlus, LogIn, Lock, Mail, User, Phone, Calendar, Building2, 
     FileBadge, Check, AlertCircle, Eye, EyeOff, HelpCircle, X, ShieldAlert,
-    Stethoscope
+    Stethoscope, CheckCircle2, Search, RefreshCw, BadgeCheck
 } from 'lucide-react';
 
 import { 
@@ -16,16 +16,19 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { Logo } from '../components/UI';
 import { getApiUrl } from '../utils/api';
+import { lookupCivilRegistry } from '../utils/civilRegistry';
 
 export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     // Mode: 'login' or 'register'
     const [authMode, setAuthMode] = useState('login');
 
-    // Login States
-    const [loginType, setLoginType] = useState('staff'); // 'staff' or 'client'
+    // Primary Portal Selector: 'client' (external) or 'staff' (Microlabs internal)
+    const [loginType, setLoginType] = useState('client'); // default to Client Portal
+    const [clientProfile, setClientProfile] = useState('patient'); // 'patient' | 'company' | 'doctor'
+    
+    // Login Credentials
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [clientProfile, setClientProfile] = useState('patient'); // 'patient' | 'company' | 'doctor'
     
     // 2FA States
     const [step, setStep] = useState('credentials'); // 'credentials' | '2fa'
@@ -33,8 +36,6 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     const [generatedCode, setGeneratedCode] = useState('');
 
     // Registration States
-    const [regType, setRegType] = useState('client'); // 'client' or 'staff'
-    const [regProfile, setRegProfile] = useState('patient'); // 'patient' | 'company' | 'doctor'
     const [regStaffRole, setRegStaffRole] = useState('analyst'); // 'analyst' | 'billing_agent' | 'director_tecnico'
     
     // Registration Form Fields
@@ -54,6 +55,11 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     const [staffAuthCode, setStaffAuthCode] = useState('');
     const [acceptTerms, setAcceptTerms] = useState(false);
     
+    // Civil Registry (TSE) Verification States
+    const [verifyingDni, setVerifyingDni] = useState(false);
+    const [dniVerified, setDniVerified] = useState(false);
+    const [dniError, setDniError] = useState('');
+
     // UI visibility toggles
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -87,6 +93,33 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     }, [regPassword]);
 
     const passwordsMatch = regPassword.length > 0 && regPassword === regConfirmPassword;
+
+    // Verify Costa Rica DNI with TSE Civil Registry
+    const handleVerifyDni = async () => {
+        const clean = (identification || '').replace(/\D/g, '');
+        if (clean.length !== 9) {
+            setDniError("La cédula física de Costa Rica debe contener exactamente 9 dígitos (ej. 1-1234-0567).");
+            setDniVerified(false);
+            return;
+        }
+        setVerifyingDni(true);
+        setDniError('');
+        try {
+            const citizen = await lookupCivilRegistry(clean);
+            if (citizen) {
+                setFullName(citizen.name || '');
+                if (citizen.birthDate) setBirthDate(citizen.birthDate);
+                if (citizen.gender) setGender(citizen.gender === 'Femenino' ? 'F' : 'M');
+                setIdentification(citizen.document || clean);
+                setDniVerified(true);
+            }
+        } catch (err) {
+            setDniError(err.message || "No se pudo verificar la cédula en el padrón.");
+            setDniVerified(false);
+        } finally {
+            setVerifyingDni(false);
+        }
+    };
 
     // Quick Login Demo Handler
     const handleQuickLogin = (role) => {
@@ -198,7 +231,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                         setUser({ uid: foundLocal.uid, email: foundLocal.email, displayName: foundLocal.fullName });
                     }
                     setUserRole(foundLocal.role);
-                    if (foundLocal.role.startsWith('client_')) {
+                    if (foundLocal.role.startsWith('client_') || foundLocal.role === 'patient' || foundLocal.role === 'client') {
                         navigateTo('client_portal');
                     } else {
                         navigateTo('home');
@@ -215,8 +248,6 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (!userDocSnap.exists()) {
-                    // Si el usuario existe en Firebase Auth pero aún no tiene doc en Firestore
-                    // (o fue registrado externamente), asignamos un rol predeterminado seguro
                     const defaultRole = loginType === 'staff' ? 'analyst' : `client_${clientProfile}`;
                     await setDoc(userDocRef, {
                         uid: loggedUser.uid,
@@ -226,7 +257,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                         isActive: true
                     }, { merge: true });
                     setUserRole(defaultRole);
-                    if (defaultRole.startsWith('client_')) {
+                    if (defaultRole.startsWith('client_') || defaultRole === 'client') {
                         navigateTo('client_portal');
                     } else {
                         navigateTo('home');
@@ -237,7 +268,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                 const role = userDocSnap.data().role;
                 setUserRole(role);
                 
-                if (role.startsWith('client_')) {
+                if (role && (role.startsWith('client_') || role === 'client' || role === 'patient')) {
                     navigateTo('client_portal');
                 } else {
                     navigateTo('home');
@@ -293,34 +324,60 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
             return;
         }
 
+        if (!/[A-Z]/.test(regPassword) || !/[a-z]/.test(regPassword) || !/[0-9]/.test(regPassword)) {
+            setAuthError("La contraseña debe incluir mayúsculas, minúsculas y al menos un número.");
+            return;
+        }
+
         if (regPassword !== regConfirmPassword) {
             setAuthError("Las contraseñas no coinciden. Por favor, verifica ambas casillas.");
             return;
         }
 
         if (!acceptTerms) {
-            setAuthError("Debe aceptar los términos de privacidad y tratamiento de datos para continuar.");
+            setAuthError("Debe aceptar los términos de confidencialidad y tratamiento de datos para continuar.");
             return;
         }
 
-        // 2. Staff Authorization Security Check
+        // 2. Client / Staff Validation & Role Segregation
         let assignedRole = 'client_patient';
-        if (regType === 'staff') {
+        if (loginType === 'staff') {
             const institutionalToken = 'MICROLABS-2026';
             if (!staffAuthCode || staffAuthCode.trim().toUpperCase() !== institutionalToken) {
-                setAuthError("Código de Autorización Institucional inválido. Por políticas de seguridad sanitaria (ISO 17025 / 15189), el personal interno debe ingresar el código proporcionado por la Dirección del Laboratorio.");
+                setAuthError("Código de Autorización Institucional inválido. Por normativas de seguridad sanitaria (ISO 17025 / 15189), el personal interno debe ingresar la clave proporcionada por la Dirección del Laboratorio.");
                 return;
             }
             assignedRole = regStaffRole;
         } else {
-            assignedRole = `client_${regProfile}`;
+            // Maximum Zero-Trust: clients can NEVER be assigned staff roles
+            assignedRole = `client_${clientProfile}`;
+            
+            // Validate client-specific documents
+            if (clientProfile === 'patient') {
+                const cleanDni = (identification || '').replace(/\D/g, '');
+                if (cleanDni.length !== 9) {
+                    setAuthError("Por favor ingrese una cédula nacional válida de 9 dígitos.");
+                    return;
+                }
+            } else if (clientProfile === 'company') {
+                const cleanJur = (identification || '').replace(/\D/g, '');
+                if (cleanJur.length !== 10) {
+                    setAuthError("La cédula jurídica debe contener exactamente 10 dígitos (ej. 3-101-123456).");
+                    return;
+                }
+            } else if (clientProfile === 'doctor') {
+                if (!medicalCode) {
+                    setAuthError("El código de incorporación al Colegio de Médicos es requerido.");
+                    return;
+                }
+            }
         }
 
         setIsSubmitting(true);
 
-        const displayName = regType === 'staff' 
+        const displayName = loginType === 'staff' 
             ? fullName 
-            : (regProfile === 'company' ? companyName : fullName);
+            : (clientProfile === 'company' ? companyName : fullName);
 
         const registrationPayload = {
             fullName: displayName,
@@ -336,7 +393,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
             gender: gender || '',
             licenseNumber: licenseNumber || '',
             authCode: staffAuthCode,
-            clientProfile: regProfile
+            clientProfile: clientProfile
         };
 
         try {
@@ -364,21 +421,19 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                     licenseNumber: licenseNumber || medicalCode || '',
                     createdAt: serverTimestamp(),
                     isActive: true,
-                    profileType: regType === 'staff' ? 'staff' : regProfile
+                    profileType: loginType === 'staff' ? 'staff' : clientProfile
                 });
             } catch (firebaseErr) {
                 console.warn("Registro en Firebase Auth no completado o en modo offline:", firebaseErr.code || firebaseErr.message);
 
-                // Si el correo ya existe en Firebase
                 if (firebaseErr.code === 'auth/email-already-in-use') {
                     throw new Error("El correo electrónico ingresado ya está registrado. Por favor, inicia sesión o recupera tu contraseña.");
                 }
 
-                // Si es un error de configuración de Firebase en entorno local, creamos UID local para no bloquear la prueba
                 createdUid = 'usr-' + Date.now();
             }
 
-            // Sincronizar en base de datos local (localStorage) para persistencia transparente e inmediata
+            // Sincronizar en base de datos local (localStorage) para persistencia
             const localUsers = JSON.parse(localStorage.getItem('lims_local_registered_users') || '[]');
             const newLocalUser = {
                 uid: createdUid,
@@ -394,7 +449,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
             localUsers.push(newLocalUser);
             localStorage.setItem('lims_local_registered_users', JSON.stringify(localUsers));
 
-            // Notificar a la API Express si está activa
+            // Notificar al backend Express si está activo
             try {
                 const API_URL = getApiUrl();
                 await fetch(`${API_URL}/api/auth/public-register`, {
@@ -418,7 +473,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
             setAuthSuccess("¡Cuenta creada exitosamente! Ingresando al sistema...");
 
             setTimeout(() => {
-                if (assignedRole.startsWith('client_')) {
+                if (assignedRole.startsWith('client_') || assignedRole === 'client' || assignedRole === 'patient') {
                     navigateTo('client_portal');
                 } else {
                     navigateTo('home');
@@ -448,15 +503,12 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
         try {
             await sendPasswordResetEmail(auth, forgotEmail);
             setForgotSuccess(true);
-        } catch (err) {
-            console.warn("Error al enviar correo de recuperación:", err);
-            if (err.code === 'auth/user-not-found') {
-                setForgotError("No existe ninguna cuenta registrada con este correo electrónico.");
-            } else if (err.code === 'auth/configuration-not-found') {
-                // Mensaje instructivo si el servicio de email no está habilitado en la consola de Firebase
-                setForgotSuccess(true);
+        } catch (error) {
+            console.error("Error al enviar correo de recuperación:", error);
+            if (error.code === 'auth/user-not-found') {
+                setForgotError("No encontramos ninguna cuenta registrada con este correo.");
             } else {
-                setForgotError(err.message || "Error al enviar la solicitud de recuperación.");
+                setForgotError(error.message || "Error al procesar la solicitud.");
             }
         } finally {
             setForgotLoading(false);
@@ -466,41 +518,119 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     const handleBackToCredentials = () => {
         setStep('credentials');
         setOtpCode('');
-        setAuthError('');
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4 selection:bg-blue-500 selection:text-white">
-            <div className="bg-white w-full max-w-lg rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.45)] p-6 sm:p-8 transform transition-all animate-fade-in relative border border-slate-100">
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex items-center justify-center p-4 selection:bg-teal-500 selection:text-white">
+            <div className="bg-white w-full max-w-lg rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.55)] p-6 sm:p-8 transform transition-all animate-fade-in relative border border-slate-100 overflow-hidden">
                 
                 {/* Header & Logo */}
                 <div className="flex flex-col items-center justify-center mb-5 text-center">
-                    <Logo variant="full" className="w-48 h-16 mb-2" />
+                    <Logo variant="full" className="w-48 h-14 mb-2" />
                     <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
-                        {authMode === 'login' ? 'Acceso al Sistema LIMS' : 'Registro Seguro de Usuario'}
+                        {loginType === 'client' ? 'Portal de Pacientes & Empresas' : 'Acceso Corporativo Microlabs'}
                     </h1>
-                    <p className="text-slate-500 text-xs sm:text-sm mt-1 max-w-sm">
-                        {authMode === 'login' 
-                            ? 'Gestión analítica de laboratorio, microbiología y entrega de resultados' 
-                            : 'Crea tu cuenta institucional o de cliente con protección de datos'}
+                    <p className="text-slate-500 text-xs mt-1 max-w-sm">
+                        {loginType === 'client' 
+                            ? 'Consulta segura de resultados de laboratorio, cotizaciones y trazabilidad' 
+                            : 'Gestión analítica de laboratorio, microbiología y dirección técnica'}
                     </p>
                 </div>
 
-                {/* Primary Mode Switcher (Login vs Registro) */}
+                {/* ========================================================================= */}
+                {/* SELECTOR MAESTRO DE PORTAL: CLIENTES vs PERSONAL DE MICROLABS              */}
+                {/* ========================================================================= */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100/90 rounded-2xl mb-5 shadow-inner border border-slate-200/80">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setLoginType('client');
+                            setAuthMode('login');
+                            setStep('credentials');
+                            setAuthError('');
+                            setAuthSuccess('');
+                        }}
+                        className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                            loginType === 'client'
+                                ? 'bg-white text-teal-700 shadow-sm border border-slate-200/60'
+                                : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                    >
+                        <User size={15} className={loginType === 'client' ? 'text-teal-600' : 'text-slate-400'} />
+                        <span>Portal Clientes</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setLoginType('staff');
+                            setAuthMode('login');
+                            setStep('credentials');
+                            setAuthError('');
+                            setAuthSuccess('');
+                        }}
+                        className={`py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                            loginType === 'staff'
+                                ? 'bg-slate-900 text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                    >
+                        <ShieldAlert size={15} className={loginType === 'staff' ? 'text-amber-400' : 'text-slate-400'} />
+                        <span>Personal Microlabs</span>
+                    </button>
+                </div>
+
+                {/* Subperfiles para el Portal de Clientes */}
+                {loginType === 'client' && (
+                    <div className="flex gap-2 mb-4 p-1 bg-teal-50/60 rounded-xl border border-teal-100">
+                        <button 
+                            type="button" 
+                            onClick={() => { setClientProfile('patient'); setDniVerified(false); }} 
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${clientProfile === 'patient' ? 'bg-teal-600 text-white shadow-xs' : 'text-teal-800 hover:bg-teal-100/70'}`}
+                        >
+                            <User size={13} /> Paciente
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => { setClientProfile('company'); setDniVerified(false); }} 
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${clientProfile === 'company' ? 'bg-teal-600 text-white shadow-xs' : 'text-teal-800 hover:bg-teal-100/70'}`}
+                        >
+                            <Building2 size={13} /> Empresa
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => { setClientProfile('doctor'); setDniVerified(false); }} 
+                            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${clientProfile === 'doctor' ? 'bg-teal-600 text-white shadow-xs' : 'text-teal-800 hover:bg-teal-100/70'}`}
+                        >
+                            <Stethoscope size={13} /> Médico
+                        </button>
+                    </div>
+                )}
+
+                {/* Banner de Seguridad para Personal Microlabs */}
+                {loginType === 'staff' && (
+                    <div className="mb-4 p-2.5 bg-slate-900 text-white rounded-xl text-xs flex items-center gap-2 border border-slate-800">
+                        <ShieldAlert size={16} className="text-amber-400 shrink-0" />
+                        <span className="text-[11px] text-slate-300">
+                            Área Restringida: Exclusivo personal técnico, analistas y dirección de Microlabs.
+                        </span>
+                    </div>
+                )}
+
+                {/* Selector Iniciar Sesión vs Crear Cuenta */}
                 <div className="grid grid-cols-2 bg-slate-100 p-1 rounded-xl mb-5 shadow-inner">
                     <button
                         type="button"
                         onClick={() => { setAuthMode('login'); setStep('credentials'); setAuthError(''); setAuthSuccess(''); }}
-                        className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${authMode === 'login' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${authMode === 'login' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
                     >
-                        <LogIn size={15} /> Iniciar Sesión
+                        <LogIn size={14} /> Iniciar Sesión
                     </button>
                     <button
                         type="button"
                         onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }}
-                        className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${authMode === 'register' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                        className={`py-2 text-xs sm:text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${authMode === 'register' ? 'bg-white text-slate-800 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
                     >
-                        <UserPlus size={15} /> Crear Cuenta
+                        <UserPlus size={14} /> {loginType === 'client' ? 'Registrarme' : 'Registrar Staff'}
                     </button>
                 </div>
 
@@ -523,123 +653,80 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                 {/* ========================================================================= */}
                 {authMode === 'login' && (
                     step === 'credentials' ? (
-                        <>
-                            {/* Selector Personal vs Cliente */}
-                            <div className="flex bg-slate-100/80 p-1 rounded-lg mb-4 border border-slate-200/50">
-                                <button
-                                    type="button"
-                                    onClick={() => setLoginType('staff')}
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${loginType === 'staff' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Personal LIMS (Interno)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setLoginType('client')}
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${loginType === 'client' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                                >
-                                    Acceso Externo (Clientes)
-                                </button>
+                        <form onSubmit={handleLogin} className="space-y-4 text-left">
+                            <div className="space-y-1.5">
+                                <label className="block text-xs font-bold text-slate-700">Correo Electrónico</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <Mail size={16} />
+                                    </div>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all text-xs sm:text-sm text-slate-800 placeholder-slate-400"
+                                        placeholder={loginType === 'staff' ? "analista@microlabscr.com" : "contacto@correo.com"}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Subperfiles de clientes externos */}
-                            {loginType === 'client' && (
-                                <div className="flex gap-2 mb-4">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setClientProfile('patient')} 
-                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border ${clientProfile === 'patient' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-xs font-bold text-slate-700">Contraseña</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setForgotEmail(email); setShowForgotModal(true); }}
+                                        className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
                                     >
-                                        Paciente
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setClientProfile('company')} 
-                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border ${clientProfile === 'company' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        Empresa
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setClientProfile('doctor')} 
-                                        className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border ${clientProfile === 'doctor' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                    >
-                                        Médico
+                                        ¿Olvidaste tu contraseña?
                                     </button>
                                 </div>
-                            )}
-
-                            <form onSubmit={handleLogin} className="space-y-4 text-left">
-                                <div className="space-y-1.5">
-                                    <label className="block text-xs font-bold text-slate-700">Correo Electrónico</label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                            <Mail size={16} />
-                                        </div>
-                                        <input
-                                            type="email"
-                                            required
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-xs sm:text-sm text-slate-800 placeholder-slate-400"
-                                            placeholder={loginType === 'staff' ? "analista@microlabs.com" : "contacto@correo.com"}
-                                        />
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <Lock size={16} />
                                     </div>
+                                    <input
+                                        type={showLoginPassword ? "text" : "password"}
+                                        required
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all text-xs sm:text-sm text-slate-800 placeholder-slate-400 font-mono"
+                                        placeholder="••••••••"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
                                 </div>
+                            </div>
 
-                                <div className="space-y-1.5">
-                                    <div className="flex justify-between items-center">
-                                        <label className="block text-xs font-bold text-slate-700">Contraseña</label>
-                                        <button
-                                            type="button"
-                                            onClick={() => { setForgotEmail(email); setShowForgotModal(true); }}
-                                            className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                                        >
-                                            ¿Olvidaste tu contraseña?
-                                        </button>
-                                    </div>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                                            <Lock size={16} />
-                                        </div>
-                                        <input
-                                            type={showLoginPassword ? "text" : "password"}
-                                            required
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-xs sm:text-sm text-slate-800 placeholder-slate-400 font-mono"
-                                            placeholder="••••••••"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowLoginPassword(!showLoginPassword)}
-                                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
-                                        >
-                                            {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <button 
-                                    type="submit" 
-                                    disabled={isSubmitting}
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 mt-3 cursor-pointer text-xs sm:text-sm disabled:opacity-50"
-                                >
-                                    {isSubmitting ? (
-                                        <span>Iniciando sesión...</span>
-                                    ) : (
-                                        <>
-                                            {loginType === 'staff' ? 'Ingresar al Sistema' : 'Continuar al Portal'} 
-                                            {loginType === 'client' ? <ArrowRight size={16} /> : <LogIn size={16} />}
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-                        </>
+                            <button 
+                                type="submit" 
+                                disabled={isSubmitting}
+                                className={`w-full text-white font-bold py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 mt-3 cursor-pointer text-xs sm:text-sm disabled:opacity-50 ${
+                                    loginType === 'client' 
+                                        ? 'bg-teal-600 hover:bg-teal-700' 
+                                        : 'bg-slate-900 hover:bg-slate-800'
+                                }`}
+                            >
+                                {isSubmitting ? (
+                                    <span>Validando credenciales...</span>
+                                ) : (
+                                    <>
+                                        {loginType === 'staff' ? 'Ingresar al LIMS Operativo' : 'Acceder al Portal de Clientes'} 
+                                        {loginType === 'client' ? <ArrowRight size={16} /> : <LogIn size={16} />}
+                                    </>
+                                )}
+                            </button>
+                        </form>
                     ) : (
                         /* 2FA Step for External Clients */
                         <form onSubmit={handleLogin} className="space-y-4 animate-slide-in-right text-left">
-                            <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                            <div className="w-12 h-12 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center mx-auto mb-2">
                                 <ShieldCheck size={26} />
                             </div>
                             <h2 className="text-center font-bold text-slate-800 text-base">Verificación en Dos Pasos (2FA)</h2>
@@ -647,17 +734,17 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                 Para garantizar la confidencialidad de tus expedientes de salud, verifica tu identidad con el código temporal.
                             </p>
 
-                            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-left">
+                            <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl text-left">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">Simulación SMS / WhatsApp Activa</span>
+                                    <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse"></span>
+                                    <span className="text-[10px] font-bold text-teal-800 uppercase tracking-wider">Simulación SMS / WhatsApp Activa</span>
                                 </div>
-                                <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-emerald-300">
-                                    <span className="font-mono text-base font-black text-emerald-700 tracking-widest">{generatedCode || '123456'}</span>
+                                <div className="flex items-center justify-between bg-white px-3 py-1.5 rounded-lg border border-teal-300">
+                                    <span className="font-mono text-base font-black text-teal-800 tracking-widest">{generatedCode || '123456'}</span>
                                     <button
                                         type="button"
                                         onClick={() => setOtpCode(generatedCode || '123456')}
-                                        className="text-[10px] font-bold bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-1 rounded cursor-pointer transition-colors"
+                                        className="text-[10px] font-bold bg-teal-100 hover:bg-teal-200 text-teal-900 px-2 py-1 rounded cursor-pointer transition-colors"
                                     >
                                         Autocompletar
                                     </button>
@@ -676,7 +763,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                         maxLength="6"
                                         value={otpCode}
                                         onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-center text-xl tracking-[0.4em] font-bold text-slate-700 font-mono"
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-teal-500 outline-none text-center text-xl tracking-[0.4em] font-bold text-slate-700 font-mono"
                                         placeholder="000000"
                                     />
                                 </div>
@@ -686,7 +773,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                 <button 
                                     type="submit" 
                                     disabled={otpCode.length < 6 || isSubmitting} 
-                                    className="w-full bg-indigo-600 disabled:bg-indigo-300 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer text-xs sm:text-sm"
+                                    className="w-full bg-teal-600 disabled:bg-teal-300 hover:bg-teal-700 text-white font-bold py-3 rounded-xl shadow-md transition-all flex justify-center items-center gap-2 cursor-pointer text-xs sm:text-sm"
                                 >
                                     <KeyRound size={16} /> Verificar Código y Entrar
                                 </button>
@@ -703,96 +790,61 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                 )}
 
                 {/* ========================================================================= */}
-                {/* 2. MODO REGISTRO ADECUADO Y SEGURO                                        */}
+                {/* 2. MODO REGISTRO SEGURO Y SEGREGADO                                       */}
                 {/* ========================================================================= */}
                 {authMode === 'register' && (
                     <div className="space-y-4 text-left animate-fade-in">
-                        {/* Selector de Tipo de Registro: Clientes vs Personal LIMS */}
-                        <div className="flex bg-slate-100/80 p-1 rounded-lg border border-slate-200/50">
-                            <button
-                                type="button"
-                                onClick={() => setRegType('client')}
-                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${regType === 'client' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                                <User size={14} /> Clientes / Externos
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setRegType('staff')}
-                                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all flex items-center justify-center gap-1.5 ${regType === 'staff' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-500 hover:text-slate-700'}`}
-                            >
-                                <ShieldCheck size={14} /> Personal LIMS (Staff)
-                            </button>
-                        </div>
-
-                        {/* Subselector para Clientes */}
-                        {regType === 'client' && (
-                            <div className="flex gap-2">
-                                <button 
-                                    type="button" 
-                                    onClick={() => setRegProfile('patient')} 
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center justify-center gap-1 ${regProfile === 'patient' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    <User size={13} /> Paciente
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setRegProfile('company')} 
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center justify-center gap-1 ${regProfile === 'company' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    <Building2 size={13} /> Empresa
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setRegProfile('doctor')} 
-                                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border flex items-center justify-center gap-1 ${regProfile === 'doctor' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
-                                >
-                                    <Stethoscope size={13} /> Médico
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Formulario de Registro Dinámico */}
+                        
                         <form onSubmit={handleRegister} className="space-y-3.5">
                             
-                            {/* Campos específicos según el perfil */}
-                            {regType === 'client' && regProfile === 'patient' && (
+                            {/* A) PACIENTE CLIENTE */}
+                            {loginType === 'client' && clientProfile === 'patient' && (
                                 <>
+                                    {/* Cédula con Verificación TSE */}
                                     <div className="space-y-1">
-                                        <label className="block text-[11px] font-bold text-slate-700">Nombre Completo *</label>
+                                        <label className="block text-[11px] font-bold text-slate-700">
+                                            Cédula Costarricense (9 dígitos) *
+                                        </label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="1-1234-0567"
+                                                value={identification}
+                                                onChange={(e) => { setIdentification(e.target.value); setDniVerified(false); }}
+                                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500 font-mono"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleVerifyDni}
+                                                disabled={verifyingDni}
+                                                className="px-3 py-2 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                                            >
+                                                {verifyingDni ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                                                <span>Verificar TSE</span>
+                                            </button>
+                                        </div>
+                                        {dniError && <p className="text-[10px] text-rose-600 font-semibold">{dniError}</p>}
+                                        {dniVerified && (
+                                            <p className="text-[10px] text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 p-1 rounded border border-emerald-200">
+                                                <BadgeCheck size={13} /> Identidad verificada en Padrón Electoral
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Nombre Completo */}
+                                    <div className="space-y-1">
+                                        <label className="block text-[11px] font-bold text-slate-700">Nombre Completo del Paciente *</label>
                                         <input
                                             type="text"
                                             required
                                             placeholder="Ej. María Elena Soto Jiménez"
                                             value={fullName}
                                             onChange={(e) => setFullName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-1">
-                                            <label className="block text-[11px] font-bold text-slate-700">Cédula / DNI / Pasaporte *</label>
-                                            <input
-                                                type="text"
-                                                required
-                                                placeholder="1-1234-0567"
-                                                value={identification}
-                                                onChange={(e) => setIdentification(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="block text-[11px] font-bold text-slate-700">Teléfono / WhatsApp *</label>
-                                            <input
-                                                type="tel"
-                                                required
-                                                placeholder="+506 8888-9999"
-                                                value={phone}
-                                                onChange={(e) => setPhone(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                        </div>
-                                    </div>
+
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="space-y-1">
                                             <label className="block text-[11px] font-bold text-slate-700">Fecha de Nacimiento</label>
@@ -800,7 +852,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                                 type="date"
                                                 value={birthDate}
                                                 onChange={(e) => setBirthDate(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                             />
                                         </div>
                                         <div className="space-y-1">
@@ -808,18 +860,31 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             <select
                                                 value={gender}
                                                 onChange={(e) => setGender(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                             >
                                                 <option value="F">Femenino</option>
                                                 <option value="M">Masculino</option>
-                                                <option value="Otro">Otro / No especificar</option>
+                                                <option value="Otro">Otro</option>
                                             </select>
                                         </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="block text-[11px] font-bold text-slate-700">Teléfono / WhatsApp *</label>
+                                        <input
+                                            type="tel"
+                                            required
+                                            placeholder="+506 8888-9999"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
+                                        />
                                     </div>
                                 </>
                             )}
 
-                            {regType === 'client' && regProfile === 'company' && (
+                            {/* B) EMPRESA / B2B */}
+                            {loginType === 'client' && clientProfile === 'company' && (
                                 <>
                                     <div className="space-y-1">
                                         <label className="block text-[11px] font-bold text-slate-700">Razón Social / Empresa *</label>
@@ -829,19 +894,19 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             placeholder="Ej. Distribuidora Alimenticia del Valle S.A."
                                             value={companyName}
                                             onChange={(e) => setCompanyName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
                                         <div className="space-y-1">
-                                            <label className="block text-[11px] font-bold text-slate-700">Cédula Jurídica / CIF *</label>
+                                            <label className="block text-[11px] font-bold text-slate-700">Cédula Jurídica (10 dígitos) *</label>
                                             <input
                                                 type="text"
                                                 required
                                                 placeholder="3-101-123456"
                                                 value={identification}
                                                 onChange={(e) => setIdentification(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500 font-mono"
                                             />
                                         </div>
                                         <div className="space-y-1">
@@ -852,24 +917,25 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                                 placeholder="+506 2222-3333"
                                                 value={phone}
                                                 onChange={(e) => setPhone(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                             />
                                         </div>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="block text-[11px] font-bold text-slate-700">Contacto Responsable / Gestor Calidad</label>
+                                        <label className="block text-[11px] font-bold text-slate-700">Contacto / Gestor de Calidad</label>
                                         <input
                                             type="text"
                                             placeholder="Ej. Ing. Carlos Mendoza (Encargado Inocuidad)"
                                             value={contactName}
                                             onChange={(e) => setContactName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
                                 </>
                             )}
 
-                            {regType === 'client' && regProfile === 'doctor' && (
+                            {/* C) MÉDICO COLEGIADO */}
+                            {loginType === 'client' && clientProfile === 'doctor' && (
                                 <>
                                     <div className="space-y-1">
                                         <label className="block text-[11px] font-bold text-slate-700">Nombre Profesional con Título *</label>
@@ -879,7 +945,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             placeholder="Ej. Dr. Roberto Vargas Jiménez"
                                             value={fullName}
                                             onChange={(e) => setFullName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
@@ -891,36 +957,36 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                                 placeholder="MED-8452"
                                                 value={medicalCode}
                                                 onChange={(e) => setMedicalCode(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500 font-mono"
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="block text-[11px] font-bold text-slate-700">Especialidad / Clínica</label>
+                                            <label className="block text-[11px] font-bold text-slate-700">Especialidad</label>
                                             <input
                                                 type="text"
-                                                placeholder="Medicina Interna / Clínica Central"
+                                                placeholder="Medicina Interna"
                                                 value={specialty}
                                                 onChange={(e) => setSpecialty(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                             />
                                         </div>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="block text-[11px] font-bold text-slate-700">Teléfono / WhatsApp *</label>
+                                        <label className="block text-[11px] font-bold text-slate-700">Teléfono Profesional *</label>
                                         <input
                                             type="tel"
                                             required
                                             placeholder="+506 8765-4321"
                                             value={phone}
                                             onChange={(e) => setPhone(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
                                 </>
                             )}
 
-                            {/* Campos específicos para Personal LIMS (Staff) */}
-                            {regType === 'staff' && (
+                            {/* D) PERSONAL INTERNO DE MICROLABS */}
+                            {loginType === 'staff' && (
                                 <>
                                     <div className="space-y-1">
                                         <label className="block text-[11px] font-bold text-slate-700">Nombre Completo del Colaborador *</label>
@@ -930,7 +996,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             placeholder="Ej. Lic. Ana Sofía Morales"
                                             value={fullName}
                                             onChange={(e) => setFullName(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-slate-800"
                                         />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
@@ -939,39 +1005,34 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             <select
                                                 value={regStaffRole}
                                                 onChange={(e) => setRegStaffRole(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-slate-800 font-medium"
                                             >
                                                 <option value="analyst">Analista Clínico / Microbiólogo</option>
-                                                <option value="billing_agent">Facturación y Recepción</option>
+                                                <option value="billing_agent">Facturación & Recepción</option>
                                                 <option value="director_tecnico">Dirección Técnica</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="block text-[11px] font-bold text-slate-700">Nº Colegiatura / Registro</label>
+                                            <label className="block text-[11px] font-bold text-slate-700">Nº Colegiatura</label>
                                             <input
                                                 type="text"
-                                                placeholder="Ej. CQCR-1049"
+                                                placeholder="CQCR-1049"
                                                 value={licenseNumber}
                                                 onChange={(e) => setLicenseNumber(e.target.value)}
-                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-slate-800 font-mono"
                                             />
                                         </div>
                                     </div>
 
-                                    {/* Código de Autorización Institucional Requerido para Staff */}
-                                    <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5">
-                                        <div className="flex items-center justify-between">
-                                            <label className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
-                                                <ShieldAlert size={14} className="text-amber-700" />
-                                                Código de Autorización Institucional *
-                                            </label>
-                                            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                                                Token LIMS
-                                            </span>
-                                        </div>
+                                    {/* Token Obligatorio para Personal */}
+                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+                                        <label className="text-[11px] font-bold text-amber-900 flex items-center justify-between">
+                                            <span>Código de Autorización Institucional *</span>
+                                            <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono">Requerido</span>
+                                        </label>
                                         <p className="text-[10px] text-amber-800 leading-snug">
                                             Por normativas de seguridad sanitaria (ISO 17025 / 15189), el personal interno debe ingresar la clave proporcionada por Dirección Técnica. 
-                                            <span className="font-bold ml-1">(Para pruebas: MICROLABS-2026)</span>
+                                            <span className="font-bold ml-1">(Clave de prueba: MICROLABS-2026)</span>
                                         </p>
                                         <input
                                             type="text"
@@ -995,10 +1056,10 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                     <input
                                         type="email"
                                         required
-                                        placeholder={regType === 'staff' ? "nombre.apellido@microlabs.com" : "micorreo@empresa.com"}
+                                        placeholder={loginType === 'staff' ? "colaborador@microlabscr.com" : "micorreo@empresa.com"}
                                         value={regEmail}
                                         onChange={(e) => setRegEmail(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                     />
                                 </div>
                             </div>
@@ -1014,7 +1075,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             placeholder="Mínimo 8 caracteres"
                                             value={regPassword}
                                             onChange={(e) => setRegPassword(e.target.value)}
-                                            className="w-full px-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                            className="w-full px-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500 font-mono"
                                         />
                                         <button
                                             type="button"
@@ -1038,7 +1099,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             className={`w-full px-3 pr-8 py-2 bg-slate-50 border rounded-lg text-xs outline-none focus:ring-2 font-mono ${
                                                 regConfirmPassword.length > 0 
                                                     ? (passwordsMatch ? 'border-emerald-400 focus:ring-emerald-500' : 'border-rose-400 focus:ring-rose-500')
-                                                    : 'border-slate-200 focus:ring-blue-500'
+                                                    : 'border-slate-200 focus:ring-teal-500'
                                             }`}
                                         />
                                         <button
@@ -1077,17 +1138,17 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                 </div>
                             )}
 
-                            {/* Consentimiento de Datos Personales / Políticas Sanitarias */}
+                            {/* Consentimiento Legal y Confidencialidad */}
                             <label className="flex items-start gap-2 text-[11px] text-slate-600 pt-1 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     required
                                     checked={acceptTerms}
                                     onChange={(e) => setAcceptTerms(e.target.checked)}
-                                    className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    className="mt-0.5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                                 />
                                 <span>
-                                    Acepto los <strong className="text-slate-800">Términos de Servicio</strong> y el consentimiento informado de confidencialidad para el tratamiento seguro de datos clínicos e industriales según la normativa de salud.
+                                    Acepto las <strong className="text-slate-800">Políticas de Confidencialidad y Protección de Datos Médicos (Ley 8968)</strong> para el tratamiento y entrega de análisis clínicos e industriales.
                                 </span>
                             </label>
 
@@ -1095,7 +1156,11 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 mt-2 cursor-pointer text-xs sm:text-sm disabled:opacity-50"
+                                className={`w-full text-white font-bold py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2 mt-2 cursor-pointer text-xs sm:text-sm disabled:opacity-50 ${
+                                    loginType === 'client' 
+                                        ? 'bg-teal-600 hover:bg-teal-700' 
+                                        : 'bg-slate-900 hover:bg-slate-800'
+                                }`}
                             >
                                 {isSubmitting ? (
                                     <span>Registrando cuenta segura...</span>
@@ -1123,29 +1188,29 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                 <X size={18} />
                             </button>
 
-                            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-3">
+                            <div className="w-12 h-12 bg-teal-50 text-teal-700 rounded-full flex items-center justify-center mb-3">
                                 <KeyRound size={24} />
                             </div>
 
                             <h3 className="text-lg font-bold text-slate-800">Restablecer Contraseña</h3>
                             <p className="text-slate-500 text-xs mt-1 mb-4 leading-relaxed">
-                                Ingrese el correo electrónico asociado a su cuenta de LIMS. Le enviaremos un enlace seguro para restablecer su clave de acceso.
+                                Ingrese el correo electrónico asociado a su cuenta. Le enviaremos un enlace seguro para restablecer su clave de acceso.
                             </p>
 
                             {forgotSuccess ? (
                                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 space-y-2">
                                     <div className="flex items-center gap-2 font-bold text-xs">
-                                        <Check size={16} /> Enlace de Restablecimiento Enviado
+                                        <Check size={16} /> Enlace Enviado Exitosamente
                                     </div>
                                     <p className="text-[11px] leading-relaxed">
-                                        Si la cuenta existe, se ha enviado un correo con instrucciones para renovar su contraseña de forma segura. Por favor revise su bandeja de entrada o carpeta de spam.
+                                        Por favor revise su bandeja de entrada o carpeta de spam para renovar su contraseña.
                                     </p>
                                     <button
                                         type="button"
                                         onClick={() => { setShowForgotModal(false); setForgotSuccess(false); }}
                                         className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition-colors cursor-pointer"
                                     >
-                                        Entendido, volver
+                                        Volver al Inicio
                                     </button>
                                 </div>
                             ) : (
@@ -1164,7 +1229,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                             placeholder="ejemplo@correo.com"
                                             value={forgotEmail}
                                             onChange={(e) => setForgotEmail(e.target.value)}
-                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500"
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-teal-500"
                                         />
                                     </div>
 
@@ -1179,7 +1244,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                                         <button
                                             type="submit"
                                             disabled={forgotLoading}
-                                            className="flex-1 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                                            className="flex-1 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
                                         >
                                             {forgotLoading ? 'Enviando...' : 'Enviar Enlace'}
                                         </button>
@@ -1191,104 +1256,100 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                 )}
 
                 {/* ========================================================================= */}
-                {/* 4. PANEL DE ACCESO RÁPIDO PARA PRUEBAS (DEMO / MODO LOCAL)               */}
+                {/* 4. PANEL DE ACCESO RÁPIDO PARA PRUEBAS (FILTRADO POR PORTAL)              */}
                 {/* ========================================================================= */}
                 <div className="mt-5 pt-3 border-t border-slate-100">
                     <button
                         type="button"
                         onClick={() => setShowDemoAccess(!showDemoAccess)}
-                        className="w-full flex items-center justify-between px-3.5 py-2 bg-blue-50/80 hover:bg-blue-100/70 rounded-xl text-blue-700 font-semibold text-xs transition-all border border-blue-100/50 cursor-pointer"
+                        className="w-full flex items-center justify-between px-3.5 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-700 font-semibold text-xs transition-all border border-slate-200/60 cursor-pointer"
                     >
                         <span className="flex items-center gap-2">
                             <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-600"></span>
                             </span>
-                            ¿Probando el LIMS? Usar Accesos Demo (Modo Local)
+                            Accesos Rápidos Demo ({loginType === 'client' ? 'Portal Clientes' : 'Personal LIMS'})
                         </span>
                         <span>{showDemoAccess ? '▲' : '▼'}</span>
                     </button>
                     
                     {showDemoAccess && (
-                        <div className="mt-2.5 p-3.5 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3 animate-fade-in text-left">
+                        <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 animate-fade-in text-left">
                             <p className="text-[11px] text-slate-500 leading-normal">
-                                Para probar sin conexión a Firebase, haz clic en un rol. Esto autocompletará las credenciales "offline" y podrás iniciar sesión directamente.
+                                Seleccione un perfil para simular el inicio de sesión inmediato con permisos segregados:
                             </p>
                             
-                            <div className="space-y-1.5">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Personal LIMS (Vistas Internas)</div>
-                                <div className="grid grid-cols-2 gap-1.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('admin'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-blue-50/50 hover:text-blue-700 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Administrador</span>
-                                        <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">Admin</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('director_tecnico'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-blue-50/50 hover:text-blue-700 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Dir. Técnico</span>
-                                        <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">DT</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('analyst'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-blue-50/50 hover:text-blue-700 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Analista</span>
-                                        <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">User</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('billing_agent'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-blue-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-blue-50/50 hover:text-blue-700 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Facturación</span>
-                                        <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase">Bill</span>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-1.5 pt-2 border-t border-slate-200/60">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Acceso Externo (Clientes)</div>
+                            {loginType === 'client' ? (
                                 <div className="grid grid-cols-3 gap-1.5">
                                     <button
                                         type="button"
                                         onClick={() => { setAuthMode('login'); handleQuickLogin('client_patient'); }}
-                                        className="px-2 py-1.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all text-center shadow-2xs cursor-pointer"
+                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
                                     >
                                         Paciente
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => { setAuthMode('login'); handleQuickLogin('client_company'); }}
-                                        className="px-2 py-1.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all text-center shadow-2xs cursor-pointer"
+                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
                                     >
                                         Empresa
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => { setAuthMode('login'); handleQuickLogin('client_doctor'); }}
-                                        className="px-2 py-1.5 bg-white border border-slate-200 hover:border-indigo-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-700 transition-all text-center shadow-2xs cursor-pointer"
+                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
                                     >
                                         Médico
                                     </button>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-1.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAuthMode('login'); handleQuickLogin('admin'); }}
+                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
+                                    >
+                                        <span>Administrador</span>
+                                        <span className="text-[9px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded uppercase">Master</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAuthMode('login'); handleQuickLogin('director_tecnico'); }}
+                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
+                                    >
+                                        <span>Dir. Técnico</span>
+                                        <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">DT</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAuthMode('login'); handleQuickLogin('analyst'); }}
+                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
+                                    >
+                                        <span>Analista Lab</span>
+                                        <span className="text-[9px] font-bold bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded uppercase">Lab</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setAuthMode('login'); handleQuickLogin('billing_agent'); }}
+                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
+                                    >
+                                        <span>Facturación</span>
+                                        <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded uppercase">Caja</span>
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 {/* Footer Security Badge */}
-                <div className="mt-5 pt-4 border-t border-slate-100">
-                    <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                        <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
+                <div className="mt-5 pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <ShieldCheck size={16} className="text-teal-600 shrink-0" />
                         <span className="text-center leading-tight">
-                            Cifrado TLS/AES-256 de punto a punto • Cumplimiento Normativo ISO 17025 / 15189
+                            Cifrado Grado Clínico TLS/AES-256 • Cumplimiento Normativo ISO 17025 / 15189
                         </span>
                     </div>
                 </div>

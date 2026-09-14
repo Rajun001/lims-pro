@@ -145,22 +145,32 @@ const RequestViewWrapper = ({ requests, analyses, db, user, labInfo, navigateTo,
     return <ViewComponent request={request} navigateTo={navigateTo} availableAnalyses={analyses} db={db} user={user} labInfo={labInfo} />;
 };
 
+const isClientRole = (role) => {
+    return role === 'client' || role === 'patient' || (typeof role === 'string' && role.startsWith('client_'));
+};
+
 const ClientRoute = ({ user, userRole, children }) => {
     if (!user) {
         return <Navigate to="/login" replace />;
     }
-    if (userRole && !userRole.startsWith('client_')) {
+    if (userRole && !isClientRole(userRole)) {
         return <Navigate to="/home" replace />;
     }
     return children;
 };
 
 const routeRoleMap = {
+    home: ['admin', 'director_tecnico', 'analyst', 'billing_agent'],
+    dashboard: ['admin', 'director_tecnico', 'analyst', 'billing_agent'],
+    new_request: ['admin', 'director_tecnico', 'analyst', 'billing_agent'],
+    crm: ['admin', 'director_tecnico', 'billing_agent'],
     accounting: ['admin'],
     audit: ['admin'],
     diagnostics: ['admin'],
     lab_settings: ['admin', 'director_tecnico'],
     analysis_settings: ['admin', 'director_tecnico'],
+    inventory: ['admin', 'director_tecnico'],
+    equipment: ['admin', 'director_tecnico'],
     qc: ['admin', 'director_tecnico'],
     capa: ['admin', 'director_tecnico'],
     billing: ['admin', 'director_tecnico', 'billing_agent'],
@@ -173,6 +183,10 @@ const routeRoleMap = {
     environmental: ['admin', 'director_tecnico', 'analyst'],
     referrals: ['admin', 'director_tecnico', 'analyst'],
     cold_chain: ['admin', 'director_tecnico', 'analyst'],
+    'cold-chain': ['admin', 'director_tecnico', 'analyst'],
+    bulk_upload: ['admin', 'director_tecnico', 'analyst'],
+    manual_form: ['admin', 'director_tecnico', 'analyst'],
+    'field-sampling': ['admin', 'director_tecnico', 'analyst'],
 };
 
 const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCommandPalette, onOpenShortcuts }) => {
@@ -185,7 +199,7 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCo
     }
 
     // Redirect client role users to the client portal if they try to access internal views
-    if (userRole && userRole.startsWith('client_')) {
+    if (userRole && isClientRole(userRole)) {
         return <Navigate to="/client_portal" replace />;
     }
 
@@ -774,7 +788,11 @@ const AppContent = () => {
                 } />
 
                 {/* Internal App Routes with Layout */}
-                <Route path="/" element={<Navigate to="/home" replace />} />
+                <Route path="/" element={
+                    !user ? <Navigate to="/login" replace /> :
+                    isClientRole(userRole) ? <Navigate to="/client_portal" replace /> :
+                    <Navigate to="/home" replace />
+                } />
                 
                 <Route path="/home" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><HomeDashboard navigateTo={navigateTo} requests={requests} inventory={[]} user={user} userRole={userRole} /></LayoutWrapper>} />
                 <Route path="/dashboard" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><Dashboard requests={requests} navigateTo={navigateTo} clients={clients} /></LayoutWrapper>} />
