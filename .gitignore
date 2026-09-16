@@ -46,3 +46,5 @@ cloudflared.exe
 scratch/
 repair_state.json
 *.msi
+*.reg
+
