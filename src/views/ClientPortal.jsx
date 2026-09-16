@@ -1229,8 +1229,10 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
             {/* Topbar for client */}
             <div className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
                 <div className="flex items-center gap-3">
-                    <div className="bg-blue-600 p-2 rounded-lg"><FlaskConical size={20} className="text-white" /></div>
-                    <span className="font-bold text-lg tracking-wide">Microlabs | {portalName}</span>
+                    <div className="bg-white/95 px-2.5 py-1 rounded-xl shadow-sm border border-slate-700/50 flex items-center">
+                        <img src="/logo.png" alt="Microlabs" className="h-7 w-auto object-contain" />
+                    </div>
+                    <span className="font-bold text-base tracking-wide text-slate-200 hidden sm:inline">| {portalName}</span>
                 </div>
                 <div className="flex items-center gap-4">
                     <span className="text-sm text-slate-300 hidden md:inline">{t.welcome}, {welcomeName}</span>

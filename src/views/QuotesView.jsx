@@ -555,7 +555,7 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
             <div id="quote-pdf-template" className="bg-white p-8 absolute -left-[9999px] top-0 w-[800px] text-slate-800 hidden">
                 <div className="flex justify-between items-start border-b-2 border-indigo-600 pb-6 mb-6">
                     <div>
-                        <img src="https://www.microlabscr.com/s/misc/logo.jpg" alt="Microlabs Logo" className="h-16 object-contain mb-2" />
+                        <img src={labInfo?.logoUrl || "/logo.png"} alt="Microlabs Logo" className="h-16 object-contain mb-2" />
                         <p className="text-xs text-slate-800 font-bold">{labInfo?.name || 'Laboratorio Microlabs Químicos S.A.'}</p>
                         <p className="text-[11px] text-slate-600">{labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</p>
                         <p className="text-[11px] text-slate-600">Tels: {labInfo?.telephones || '+506 22348837 / 22345862 / 22246541'} | WhatsApp: {labInfo?.whatsapp || '71382750'}</p>

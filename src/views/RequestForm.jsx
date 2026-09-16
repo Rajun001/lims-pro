@@ -1225,7 +1225,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                         </div>
                     </div>
                     <div className="hidden md:block">
-                        <img src="https://www.microlabscr.com/s/misc/logo.jpg" alt="Logo" className="h-10 opacity-80 mix-blend-multiply" onError={(e) => e.target.style.display='none'} />
+                        <img src="/logo.png" alt="Logo" className="h-10 object-contain" onError={(e) => e.target.style.display='none'} />
                     </div>
                 </div>
 

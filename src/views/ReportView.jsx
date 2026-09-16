@@ -72,7 +72,7 @@ export const ReportView = ({ request, navigateTo, availableAnalyses, labInfo }) 
             <div className="bg-white w-full max-w-4xl p-12 shadow-lg" id="print-area">
                 <div className="border-b-2 border-slate-800 pb-6 mb-8 flex justify-between">
                     <div className="flex gap-4 items-center">
-                        <Logo url={labInfo?.logoUrl} className="h-16 w-16" />
+                        <Logo url={labInfo?.logoUrl} variant="full" className="h-16 w-44" />
                         <div>
                             <h1 className="text-2xl font-bold">{labInfo?.name}</h1>
                             <p className="text-slate-500">{labInfo?.address}</p>

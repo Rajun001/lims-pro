@@ -22,7 +22,7 @@ export const PreReportView = ({ request, navigateTo, labInfo }) => {
             <div className="bg-white p-8 print:p-0 rounded-2xl shadow-xl border border-slate-200 print:border-none print:shadow-none font-sans text-slate-800">
                 <div className="flex justify-between items-start mb-6 border-b border-slate-200 print:border-slate-800 pb-4">
                     <div>
-                        <Logo url={labInfo?.logoUrl} className="h-12 mb-2" />
+                        <Logo url={labInfo?.logoUrl} variant="full" className="h-14 w-44 mb-2 justify-start" />
                         <h2 className="text-xl font-bold text-slate-900 uppercase tracking-wide">Informe Preliminar de Laboratorio</h2>
                         <p className="text-xs text-slate-500 font-bold uppercase">Formulario Interno FOR-PRE-02 (Rev. 03)</p>
                     </div>
