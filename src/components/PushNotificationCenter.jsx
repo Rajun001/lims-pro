@@ -6,27 +6,24 @@ import {
 import NotificationService, { PUSH_TOPICS } from '../services/NotificationService';
 
 export default function PushNotificationCenter() {
-    const [isSupported, setIsSupported] = useState(true);
-    const [permission, setPermission] = useState('default');
-    const [isSubscribed, setIsSubscribed] = useState(false);
+    const [isSupported] = useState(() => NotificationService.isPushSupported());
+    const [permission, setPermission] = useState(() => NotificationService.getPushPermission());
+    const [isSubscribed, setIsSubscribed] = useState(() => {
+        return typeof localStorage !== 'undefined' ? localStorage.getItem('LIMS_PUSH_SUBSCRIBED') === 'true' : false;
+    });
     const [activeTopics, setActiveTopics] = useState(() => {
-        const saved = localStorage.getItem('LIMS_PUSH_TOPICS');
+        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('LIMS_PUSH_TOPICS') : null;
         return saved ? JSON.parse(saved) : Object.keys(PUSH_TOPICS);
     });
-    const [pushLogs, setPushLogs] = useState([]);
+    const [pushLogs, setPushLogs] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('LIMS_PUSH_LOGS') || '[]');
+        } catch {
+            return [];
+        }
+    });
     const [isSendingTest, setIsSendingTest] = useState(false);
     const [selectedTestTopic, setSelectedTestTopic] = useState('VALOR_CRITICO');
-
-    useEffect(() => {
-        setIsSupported(NotificationService.isPushSupported());
-        setPermission(NotificationService.getPushPermission());
-        setIsSubscribed(localStorage.getItem('LIMS_PUSH_SUBSCRIBED') === 'true');
-        loadLogs();
-    }, []);
-
-    useEffect(() => {
-        localStorage.setItem('LIMS_PUSH_TOPICS', JSON.stringify(activeTopics));
-    }, [activeTopics]);
 
     const loadLogs = () => {
         try {
@@ -36,6 +33,10 @@ export default function PushNotificationCenter() {
             setPushLogs([]);
         }
     };
+
+    useEffect(() => {
+        localStorage.setItem('LIMS_PUSH_TOPICS', JSON.stringify(activeTopics));
+    }, [activeTopics]);
 
     const handleToggleTopic = (topicKey) => {
         setActiveTopics(prev => 
@@ -129,12 +130,18 @@ export default function PushNotificationCenter() {
 
                     <div className="pt-2">
                         {!isSubscribed ? (
-                            <button
-                                onClick={handleSubscribe}
-                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
-                            >
-                                <Bell size={16} /> Activar Notificaciones Push
-                            </button>
+                            <>
+                                <button
+                                    onClick={handleSubscribe}
+                                    disabled={!isSupported}
+                                    className={`w-full py-3 ${isSupported ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer' : 'bg-slate-300 cursor-not-allowed'} text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition-all`}
+                                >
+                                    <Bell size={16} /> Activar Notificaciones Push
+                                </button>
+                                {!isSupported && (
+                                    <p className="text-[10px] text-amber-600 mt-1.5 text-center font-medium">Este navegador o entorno no soporta notificaciones Web Push.</p>
+                                )}
+                            </>
                         ) : (
                             <button
                                 onClick={handleUnsubscribe}

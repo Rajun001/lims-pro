@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Snowflake, Thermometer, AlertTriangle, CheckCircle2, Clock,
     Activity, Download, RefreshCw, Info, Zap, X
@@ -8,7 +8,7 @@ import {
     ReferenceLine, ResponsiveContainer, Legend
 } from 'recharts';
 import {
-    DEVICES, startSimulation, stopSimulation, stopAllSimulations,
+    DEVICES, startSimulation, stopAllSimulations,
     getHistory, getIncidents, seedDemoHistory
 } from '../services/ColdChainService';
 
@@ -127,37 +127,42 @@ function CustomTooltip({ active, payload, label }) {
 export const ColdChainView = () => {
     const [readings, setReadings]         = useState({});
     const [selectedDevice, setSelectedDevice] = useState(DEVICES[0].id);
-    const [chartData, setChartData]       = useState([]);
-    const [incidents, setIncidents]       = useState([]);
+    const [incidents, setIncidents]       = useState(() => {
+        seedDemoHistory();
+        return getIncidents();
+    });
     const [activeTab, setActiveTab]       = useState('monitor');
-    const [refreshKey, setRefreshKey]     = useState(0);
 
     const device = DEVICES.find(d => d.id === selectedDevice);
 
-    // Seed histórico demo la primera vez
-    useEffect(() => {
-        seedDemoHistory();
-        setIncidents(getIncidents());
-    }, []);
-
-    // Cargar gráfico cuando cambia dispositivo
-    useEffect(() => {
-        const history = getHistory(selectedDevice);
-        const formatted = [...history].reverse().slice(-96).map(r => ({
+    const getFormattedHistory = (devId, minOk, maxOk) => {
+        const history = getHistory(devId);
+        return [...history].reverse().slice(-96).map(r => ({
             ts: r.ts,
             temp: r.temp,
-            minOk: device.minOk,
-            maxOk: device.maxOk,
+            minOk,
+            maxOk,
         }));
-        setChartData(formatted);
-    }, [selectedDevice, refreshKey]);
+    };
+
+    const [chartData, setChartData]       = useState(() => {
+        const d0 = DEVICES[0];
+        return getFormattedHistory(d0.id, d0.minOk, d0.maxOk);
+    });
+    const [prevDevId, setPrevDevId]       = useState(DEVICES[0].id);
+
+    // Sincronizar historial al cambiar de dispositivo seleccionado
+    if (selectedDevice !== prevDevId && device) {
+        setPrevDevId(selectedDevice);
+        setChartData(getFormattedHistory(selectedDevice, device.minOk, device.maxOk));
+    }
 
     // Iniciar simulaciones para todos los dispositivos
     useEffect(() => {
         DEVICES.forEach(dev => {
             startSimulation(dev.id, (reading) => {
                 setReadings(prev => ({ ...prev, [dev.id]: reading }));
-                if (dev.id === selectedDevice) {
+                if (dev.id === selectedDevice && device) {
                     setChartData(prev => {
                         const updated = [...prev, { ts: reading.ts, temp: reading.temp, minOk: device.minOk, maxOk: device.maxOk }];
                         return updated.slice(-96);
@@ -169,18 +174,7 @@ export const ColdChainView = () => {
             }, 3000);
         });
         return () => stopAllSimulations();
-    }, []);
-
-    // Actualizar gráfico cuando cambia dispositivo seleccionado
-    useEffect(() => {
-        setChartData(prev => {
-            const history = getHistory(selectedDevice);
-            const formatted = [...history].reverse().slice(-96).map(r => ({
-                ts: r.ts, temp: r.temp, minOk: device.minOk, maxOk: device.maxOk,
-            }));
-            return formatted;
-        });
-    }, [selectedDevice]);
+    }, [selectedDevice, device]);
 
     const currentReading = readings[selectedDevice];
     const currentTemp = currentReading ? currentReading.temp : device.targetTemp;

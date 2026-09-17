@@ -189,10 +189,16 @@ Para maximizar la velocidad operativa en el laboratorio:
 
 | Atajo | Acción en LIMS-PRO |
 | :---: | :--- |
-| <kbd>Ctrl</kbd> + <kbd>K</kbd> | Abrir la **Paleta de Comandos Global** (busca pacientes, muestras y vistas al instante) |
-| <kbd>Ctrl</kbd> + <kbd>/</kbd> | Desplegar el modal de atajos de teclado |
+| <kbd>Ctrl</kbd> + <kbd>K</kbd> | Abrir la **Paleta de Comandos Global** (busca pacientes, órdenes y módulos al instante) |
+| <kbd>Alt</kbd> + <kbd>N</kbd> | Crear **Nuevo Ingreso Clínico** (pacientes particulares) |
+| <kbd>Alt</kbd> + <kbd>I</kbd> | Registrar **Nueva Muestra Industrial** (aguas, alimentos, superficies) |
+| <kbd>Alt</kbd> + <kbd>D</kbd> | Ir a la **Bandeja de Solicitudes y Muestras** (`Dashboard`) |
+| <kbd>Alt</kbd> + <kbd>H</kbd> | Volver al **Panel Principal de Control** (`Home`) |
+| <kbd>Alt</kbd> + <kbd>R</kbd> | Ir a **Revisión y Validación de Resultados** (`Results Review`) |
+| <kbd>Alt</kbd> + <kbd>B</kbd> | Ir al módulo de **Facturación y Comprobantes** (`Billing`) |
+| <kbd>?</kbd> | Desplegar la ventana interactiva con todos los atajos de teclado |
 | <kbd>Ctrl</kbd> + <kbd>P</kbd> | Imprimir el reporte o formulario activo |
-| <kbd>Esc</kbd> | Cerrar cualquier ventana emergente o modal activo |
+| <kbd>Esc</kbd> | Cerrar cualquier ventana emergente, modal o visor activo |
 
 ---
 *Manual elaborado para el personal técnico, administrativo y clientes de Laboratorio Microlabs Químicos S.A.*

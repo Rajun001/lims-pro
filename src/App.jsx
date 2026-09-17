@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, Navigate, useLocation } from 'react-router-dom';
 import { onSnapshot, collection, doc, query, orderBy, limit, getDoc } from 'firebase/firestore';
 import { signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
@@ -391,7 +391,7 @@ const AppContent = () => {
         prevPendingCountRef.current = pendingCount;
     }, [requests, isAuthReady, loading, addNotification]);
 
-    const navigateTo = async (viewName, id = null, state = null) => {
+    const navigateTo = useCallback(async (viewName, id = null, state = null) => {
         if (viewName === 'login') {
             try {
                 if (user) {
@@ -452,7 +452,7 @@ const AppContent = () => {
         } else {
             navigate(`/${viewName}`, { state });
         }
-    };
+    }, [user, userRole, navigate]);
 
     const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
     const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
@@ -532,7 +532,7 @@ const AppContent = () => {
             window.removeEventListener('open-shortcuts', handleOpenShortcuts);
             window.removeEventListener('keydown', handleGlobalKeyDown);
         };
-    }, []);
+    }, [navigateTo]);
 
     useEffect(() => {
         const initAuth = async () => {

@@ -18,20 +18,20 @@ export default function SINPEPaymentModal({ isOpen, onClose, invoice, onPaymentS
     const [senderBank, setSenderBank] = useState('BAC Credomatic');
     const [bankAuth, setBankAuth] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
+    const [activeInvoiceKey, setActiveInvoiceKey] = useState(null);
     
     const canvasRef = useRef(null);
 
-    // Inicializar referencia al abrir
-    useEffect(() => {
-        if (isOpen && invoice) {
-            const ref = generateReferenceNumber('001');
-            setReference(ref);
-            setTimeLeft(900);
-            setStep(1);
-            setBankAuth('');
-            setSenderPhone('');
-        }
-    }, [isOpen, invoice]);
+    // Inicializar referencia al abrir con factura nueva
+    const currentKey = isOpen && invoice ? `${invoice.id || invoice.number || 'INV'}` : null;
+    if (currentKey && currentKey !== activeInvoiceKey) {
+        setActiveInvoiceKey(currentKey);
+        setReference(generateReferenceNumber('001'));
+        setTimeLeft(900);
+        setStep(1);
+        setBankAuth('');
+        setSenderPhone('');
+    }
 
     // Timer regresivo de 15 minutos
     useEffect(() => {

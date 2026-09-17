@@ -87,8 +87,6 @@ export function updateTransactionStatus(reference, status, bankAuth = null) {
  * Datos iniciales demo para visualización inmediata
  */
 function getSeedTransactions() {
-    const today = new Date();
-    const dStr = today.toLocaleDateString('es-CR');
     return [
         {
             id: 'TX-9482A',

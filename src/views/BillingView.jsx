@@ -25,12 +25,11 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
     const [feDocType, setFeDocType] = useState('01'); // 01=Factura, 02=Tiquete, 03=NdC, 04=NdD
     const [feReceiver, setFeReceiver] = useState({ name: '', cedula: '', cedulaType: '01', email: '' });
     const [feLines, setFeLines] = useState([{ description: 'Servicios Analíticos de Laboratorio', qty: 1, unitPrice: '', taxPct: 13 }]);
-    const [feActivity, setFeActivity] = useState('851000'); // código CIIU Laboratorio
+    const feActivity = '851000'; // código CIIU Laboratorio
     const [feDocsSent, setFeDocsSent] = useState(() => {
         const saved = localStorage.getItem('lims_fe_docs');
         try { return saved ? JSON.parse(saved) : []; } catch { return []; }
     });
-    const [showFeModal, setShowFeModal] = useState(false);
     const [feXmlPreview, setFeXmlPreview] = useState('');
     const [feIssuingDoc, setFeIssuingDoc] = useState(false);
     const [feStep, setFeStep] = useState(1); // 1=form 2=preview 3=sent
@@ -49,8 +48,7 @@ export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceL
         const date = day + month + year; // ddmmyy (6)
         const cedula = '310144450'.padStart(12, '0'); // cédula jurídica (12)
         const branch = '001'; // sucursal (3)
-        const terminal = '001'; // terminal (5 en la norma, usamos 001 + relleno)
-        const terminalFull = '00001'; // (5)
+        const terminalFull = '00001'; // terminal (5 en la norma)
         const docTypeStr = docType; // 01-13 (2)
         const consecutiveStr = String(consecutive).padStart(10, '0'); // (10)
         const situacion = '1'; // 1=Normal, 2=Contingencia, 3=SinInternet

@@ -101,7 +101,7 @@ self.addEventListener('push', function(event) {
 
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  event.waitUntil(clients.openWindow((event.notification.data && event.notification.data.url) || '/'));
+  event.waitUntil(self.clients.openWindow((event.notification.data && event.notification.data.url) || '/'));
 });
 
 self.addEventListener('message', function(event) {

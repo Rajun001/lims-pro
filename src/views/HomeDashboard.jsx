@@ -110,7 +110,6 @@ export const HomeDashboard = ({ navigateTo, requests = [], inventory = [], userR
     // ============================================================
     const metrics = useMemo(() => {
         const now = new Date();
-        const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
         const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
         const fourteenDaysAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
 
@@ -456,15 +455,18 @@ export const HomeDashboard = ({ navigateTo, requests = [], inventory = [], userR
                     { label: 'Calidad QC', icon: Activity, color: 'purple', route: 'qc' },
                     { label: 'Auditoría', icon: History, color: 'amber', route: 'audit' },
                     { label: userRole === 'billing_agent' ? 'Facturación' : 'Cotizaciones', icon: userRole === 'billing_agent' ? Wallet : Calculator, color: 'rose', route: userRole === 'billing_agent' ? 'billing' : 'quotes' },
-                ].map(({ label, icon: Icon, color, route }) => (
-                    <button key={label} onClick={() => navigateTo(route)}
-                        className={`group bg-white p-4 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-${color}-200 transition-all flex flex-col items-center text-center gap-2`}>
-                        <div className={`w-10 h-10 bg-${color}-50 text-${color}-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                            <Icon size={20} />
-                        </div>
-                        <span className="font-bold text-slate-700 text-xs">{label}</span>
-                    </button>
-                ))}
+                ].map(item => {
+                    const ActionIcon = item.icon;
+                    return (
+                        <button key={item.label} onClick={() => navigateTo(item.route)}
+                            className={`group bg-white p-4 rounded-2xl shadow-sm hover:shadow-md border border-slate-100 hover:border-${item.color}-200 transition-all flex flex-col items-center text-center gap-2`}>
+                            <div className={`w-10 h-10 bg-${item.color}-50 text-${item.color}-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                                <ActionIcon size={20} />
+                            </div>
+                            <span className="font-bold text-slate-700 text-xs">{item.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* ===== GRÁFICAS ===== */}
