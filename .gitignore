@@ -34,6 +34,7 @@ temp_pdfs/
 # SQLite and Backups
 *.db-shm
 *.db-wal
+api/dev.db
 api/prisma/backups/
 api/prisma/dev.db-shm
 api/prisma/dev.db-wal
@@ -47,4 +48,10 @@ scratch/
 repair_state.json
 *.msi
 *.reg
+
+# Temporary test artifacts
+scripts/*.png
+scripts/*.pdf
+scripts/*.html
+
 

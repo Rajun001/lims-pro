@@ -11,6 +11,7 @@ import whatsappBotRoutes from './whatsappBot.routes.js';
 import authRoutes from './auth.routes.js';
 import reportsRoutes from './reports.routes.js';
 import ecosystemRoutes from './ecosystem.routes.js';
+import publicWebRoutes from './publicWeb.routes.js';
 
 const apiRouter = Router();
 
@@ -27,5 +28,6 @@ apiRouter.use(whatsappBotRoutes);
 apiRouter.use(authRoutes);
 apiRouter.use(reportsRoutes);
 apiRouter.use(ecosystemRoutes);
+apiRouter.use(publicWebRoutes);
 
 export default apiRouter;

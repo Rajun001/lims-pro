@@ -5,6 +5,166 @@ import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.
 
 const router = Router();
 
+// Listado General de Informes de Laboratorio (con paginación y búsqueda)
+router.get('/reports', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+    const skip = (page - 1) * limit;
+    const search = req.query.search ? String(req.query.search).trim() : '';
+    const type = req.query.type;
+    const status = req.query.status;
+
+    const where = {};
+    if (type) where.reportType = type;
+    if (status) where.status = status;
+    if (search) {
+      where.OR = [
+        { reportNumber: { contains: search } },
+        { industrialSample: { sampleDescription: { contains: search } } },
+        { industrialSample: { matrixType: { contains: search } } },
+        { industrialSample: { contract: { client: { companyName: { contains: search } } } } }
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.report.count({ where }),
+      prisma.report.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: 'desc' },
+        include: {
+          industrialSample: {
+            include: {
+              contract: {
+                include: { client: true }
+              },
+              tests: true
+            }
+          },
+          clinicalOrder: {
+            include: {
+              sample: { include: { patient: true } },
+              tests: true
+            }
+          },
+          technicalDirector: {
+            select: { id: true, fullName: true, email: true }
+          },
+          signature: true
+        }
+      })
+    ]);
+
+    const formatted = items.map(r => {
+      const isIndustrial = r.reportType === 'INDUSTRIAL_COA';
+      const clientName = isIndustrial
+        ? (r.industrialSample?.contract?.client?.companyName || 'Cliente Industrial')
+        : (r.clinicalOrder?.sample?.patient ? `${r.clinicalOrder.sample.patient.firstName} ${r.clinicalOrder.sample.patient.lastName}` : 'Paciente');
+      
+      const matrix = isIndustrial ? r.industrialSample?.matrixType : r.clinicalOrder?.sample?.sampleType;
+      const testCount = isIndustrial ? (r.industrialSample?.tests?.length || 0) : (r.clinicalOrder?.tests?.length || 0);
+
+      return {
+        id: r.id,
+        reportNumber: r.reportNumber,
+        reportType: r.reportType,
+        status: r.status,
+        clientName,
+        matrix: matrix || 'N/A',
+        testCount,
+        signedAt: r.signedAt || r.createdAt,
+        hasPdf: Boolean(r.pdfUrl),
+        pdfUrl: r.pdfUrl,
+        createdAt: r.createdAt
+      };
+    });
+
+    res.json({
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      items: formatted
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar informes: ' + err.message });
+  }
+});
+
+// Detalle Completo de un Informe de Laboratorio (por ID numérico o reportNumber / número de estimate)
+router.get('/reports/details/:id', async (req, res) => {
+  const param = String(req.params.id || '').trim();
+  const numericId = parseInt(param);
+  try {
+    const whereClause = !isNaN(numericId) && String(numericId) === param
+      ? { OR: [{ id: numericId }, { reportNumber: param }] }
+      : { reportNumber: param };
+
+    const report = await prisma.report.findFirst({
+      where: whereClause,
+      include: {
+        industrialSample: {
+          include: {
+            contract: { include: { client: true } },
+            tests: true
+          }
+        },
+        clinicalOrder: {
+          include: {
+            sample: { include: { patient: true } },
+            tests: true
+          }
+        },
+        technicalDirector: {
+          select: { id: true, fullName: true, email: true }
+        },
+        signature: true
+      }
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: 'Informe no encontrado' });
+    }
+
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener detalle del informe: ' + err.message });
+  }
+});
+
+// Actualizar o adjuntar elementos probatorios / fotografías de cultivos a un informe
+router.put('/reports/:id/evidence', async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { evidencePhotos } = req.body;
+  try {
+    const photosString = typeof evidencePhotos === 'string' ? evidencePhotos : JSON.stringify(evidencePhotos || []);
+    const updated = await prisma.report.update({
+      where: { id },
+      data: { evidencePhotos: photosString }
+    });
+    res.json({ message: 'Evidencias fotográficas actualizadas con éxito.', report: updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al actualizar evidencias fotográficas: ' + err.message });
+  }
+});
+
+// Descarga Directa del PDF Oficial
+router.get('/reports/details/:id/pdf', async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const report = await prisma.report.findUnique({ where: { id } });
+    if (!report || !report.pdfUrl) {
+      return res.status(404).json({ error: 'El informe no cuenta con PDF físico asociado.' });
+    }
+
+    res.sendFile(report.pdfUrl);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al descargar PDF: ' + err.message });
+  }
+});
+
 // Endpoint Público de Verificación por QR (No requiere autenticación previa)
 router.get('/reports/verify/:reportNumber', async (req, res) => {
   const { reportNumber } = req.params;

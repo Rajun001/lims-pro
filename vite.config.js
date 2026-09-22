@@ -33,6 +33,15 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    watch: {
+      ignored: [
+        '**/public/certs/**',
+        '**/api/**',
+        '**/*.db*',
+        '**/*.sqlite*',
+        '**/Desktop/**'
+      ]
+    },
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:3001',

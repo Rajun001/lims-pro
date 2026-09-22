@@ -85,18 +85,74 @@ const CAPAView = lazy(() => import('./views/CAPAView').then(m => ({ default: m.C
 const FieldSamplingView = lazy(() => import('./views/FieldSamplingView').then(m => ({ default: m.FieldSamplingView })));
 const BatchProcessingView = lazy(() => import('./views/BatchProcessingView').then(m => ({ default: m.BatchProcessingView })));
 const ColdChainView = lazy(() => import('./views/ColdChainView').then(m => ({ default: m.ColdChainView })));
+const ReportsExplorerView = lazy(() => import('./views/ReportsExplorerView').then(m => ({ default: m.ReportsExplorerView })));
+const PublicWebsiteView = lazy(() => import('./views/PublicWebsiteView').then(m => ({ default: m.PublicWebsiteView })));
+
+const mapSqlReportToRequest = (sqlReport) => {
+    const isInd = sqlReport.reportType === 'INDUSTRIAL_COA';
+    const sample = isInd ? sqlReport.industrialSample : null;
+    const client = sample?.contract?.client;
+    const tests = isInd ? (sample?.tests || []) : (sqlReport.clinicalOrder?.tests || []);
+
+    const analyzerResults = tests.map(t => ({
+        testCode: t.parameterName || t.testCode,
+        value: t.quantitativeResult !== null && t.quantitativeResult !== undefined ? String(t.quantitativeResult) : (t.qualitativeResult || t.calculatedResult || 'Normal'),
+        unit: isInd ? (t.quantitativeResult !== null ? 'UFC/g' : '') : (t.unit || ''),
+        status: 'released',
+        compliance: t.compliance || 'CONFORME',
+        isoStandardRef: t.isoStandardRef,
+        specificationLimit: t.specificationLimit
+    }));
+
+    let evidence = [];
+    if (sqlReport.evidencePhotos) {
+        try {
+            evidence = typeof sqlReport.evidencePhotos === 'string' ? JSON.parse(sqlReport.evidencePhotos) : sqlReport.evidencePhotos;
+        } catch {
+            evidence = [];
+        }
+    }
+
+    return {
+        id: sqlReport.reportNumber,
+        numericId: sqlReport.id,
+        reportNumber: sqlReport.reportNumber,
+        clientName: isInd ? (client?.companyName || 'Cliente Industrial') : `${sqlReport.clinicalOrder?.sample?.patient?.firstName || ''} ${sqlReport.clinicalOrder?.sample?.patient?.lastName || ''}`.trim() || 'Paciente',
+        clientContactName: client?.contactName || 'Responsable de Calidad',
+        clientType: isInd ? 'industrial' : 'clinical',
+        sampleType: isInd ? (sample?.matrixType || 'Alimento Procesado') : (sqlReport.clinicalOrder?.sample?.sampleType || 'Suero'),
+        sampleDescription: sample?.barcode ? `${sample.matrixType} (Lote ${sample.lotNumber || 'S/L'})` : '1. BAÑO HOMBRES',
+        samplingProtocol: sample?.samplingProtocol || 'SMEWW / ISO 7218',
+        receptionTempC: sample?.receptionTempC || 4.2,
+        sampledBy: 'SOLICITANTE',
+        requestDate: { seconds: Math.floor(new Date(sqlReport.createdAt || sqlReport.signedAt || Date.now()).getTime() / 1000) },
+        status: sqlReport.status === 'ISSUED' ? 'Completado' : sqlReport.status,
+        signedByName: sqlReport.technicalDirector?.fullName || 'Dr. Roldan Ajún Chaverri',
+        signedByCode: '802',
+        signedAt: sqlReport.signedAt,
+        analyzerResults,
+        evidencePhotos: evidence,
+        technicalObservations: sqlReport.technicalObservations,
+        pdfUrl: sqlReport.pdfUrl,
+        isSqlReport: true
+    };
+};
 
 const RequestViewWrapper = ({ requests, analyses, db, user, labInfo, navigateTo, ViewComponent }) => {
     const _unusedComponent = ViewComponent;
     const { id } = useParams();
     const [fetchedRequest, setFetchedRequest] = useState(null);
-    const [fetching, setFetching] = useState(false);
+    const [fetching, setFetching] = useState(() => {
+        const found = requests.find(r => r.id === id);
+        if (found || (id && id.startsWith('MC-2026-'))) return false;
+        return true;
+    });
 
     const request = useMemo(() => {
         const found = requests.find(r => r.id === id);
         if (found) return found;
         if (id && id.startsWith('MC-2026-')) {
-            const mockDateSeconds = 1779926400; // Mock date for MC-2026
+            const mockDateSeconds = 1779926400;
             return {
                 id,
                 clientName: 'Cliente Mock (Simulación)',
@@ -110,19 +166,46 @@ const RequestViewWrapper = ({ requests, analyses, db, user, labInfo, navigateTo,
 
     useEffect(() => {
         const found = requests.find(r => r.id === id);
-        if (found || (id && id.startsWith('MC-2026-')) || !db) return;
+        if (found || (id && id.startsWith('MC-2026-'))) {
+            return;
+        }
 
-        Promise.resolve().then(() => setFetching(true));
-        const docRef = doc(db, `artifacts/${appId}/public/data/requests`, id);
-        getDoc(docRef).then((snap) => {
-            if (snap.exists()) {
-                setFetchedRequest({ id: snap.id, ...snap.data() });
-            }
-            setFetching(false);
-        }).catch((err) => {
-            console.error("Error fetching request by ID:", err);
-            setFetching(false);
-        });
+        let isMounted = true;
+        const trySqlApi = () => {
+            fetch(`/api/reports/details/${id}`)
+                .then(res => res.ok ? res.json() : null)
+                .then(sqlData => {
+                    if (!isMounted) return;
+                    if (sqlData) {
+                        setFetchedRequest(mapSqlReportToRequest(sqlData));
+                    }
+                    setFetching(false);
+                })
+                .catch(() => {
+                    if (isMounted) setFetching(false);
+                });
+        };
+
+        if (db) {
+            const docRef = doc(db, `artifacts/${appId}/public/data/requests`, id);
+            getDoc(docRef).then((snap) => {
+                if (!isMounted) return;
+                if (snap.exists()) {
+                    setFetchedRequest({ id: snap.id, ...snap.data() });
+                    setFetching(false);
+                } else {
+                    trySqlApi();
+                }
+            }).catch(() => {
+                if (isMounted) trySqlApi();
+            });
+        } else {
+            trySqlApi();
+        }
+
+        return () => {
+            isMounted = false;
+        };
     }, [requests, id, db]);
 
     if (fetching) {
@@ -764,6 +847,21 @@ const AppContent = () => {
         <ErrorBoundary>
             <Routes>
                 {/* Auth & External Routes */}
+                <Route path="/web" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicWebsiteView navigateTo={navigateTo} labInfo={labInfo} />
+                    </Suspense>
+                } />
+                <Route path="/microlabscr" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicWebsiteView navigateTo={navigateTo} labInfo={labInfo} />
+                    </Suspense>
+                } />
+                <Route path="/sitio-web" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicWebsiteView navigateTo={navigateTo} labInfo={labInfo} />
+                    </Suspense>
+                } />
                 <Route path="/verify/:id" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <PublicVerificationView />
@@ -782,7 +880,7 @@ const AppContent = () => {
                 <Route path="/client_portal" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <ClientRoute user={user} userRole={userRole}>
-                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} user={user} />
+                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} user={user} labInfo={labInfo} />
                         </ClientRoute>
                     </Suspense>
                 } />
@@ -803,6 +901,7 @@ const AppContent = () => {
                 <Route path="/report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={ReportView} /></LayoutWrapper>} />
                 <Route path="/pre_report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={PreReportView} /></LayoutWrapper>} />
                 <Route path="/final_report/:id" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RequestViewWrapper requests={requests} analyses={analyses} db={db} user={user} labInfo={labInfo} navigateTo={navigateTo} ViewComponent={FinalReportView} /></LayoutWrapper>} />
+                <Route path="/reports" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ReportsExplorerView navigateTo={navigateTo} userRole={userRole} user={user} /></LayoutWrapper>} />
                 
                 <Route path="/audit" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AuditView db={db} userRole={userRole} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/inventory" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><InventoryView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />

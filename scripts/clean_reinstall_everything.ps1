@@ -1,3 +1,4 @@
+
 # Script de Limpieza Absoluta y Reinstalación de Chrome Remote Desktop
 # LIMS Microlabs - Host: Reportes | PIN: 123456
 
@@ -53,7 +54,7 @@ New-Item -ItemType Directory -Path $pgDir -Force | Out-Null
 icacls --% "C:\ProgramData\Google\Chrome Remote Desktop" /grant Administrators:(OI)(CI)F /grant SYSTEM:(OI)(CI)F /grant Users:(OI)(CI)F /grant Everyone:(OI)(CI)F /t /c 2>&1 | Out-Null
 
 # 5. Ejecutar Reinstalación MSI de Chrome Remote Desktop Host
-$msiPath = "C:\lims-microlabs\chromeremotedesktophost.msi"
+$msiPath = if (Test-Path "C:\lims-microlabs\installers\chromeremotedesktophost.msi") { "C:\lims-microlabs\installers\chromeremotedesktophost.msi" } else { "C:\lims-microlabs\chromeremotedesktophost.msi" }
 if (Test-Path $msiPath) {
     Write-CleanLog "[5/7] Reinstalando Host desde MSI oficial ($msiPath)..."
     Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /qn /norestart" -Wait -ErrorAction SilentlyContinue

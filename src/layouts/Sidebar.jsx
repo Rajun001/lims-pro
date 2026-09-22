@@ -5,7 +5,7 @@ import {
     Microscope, Factory, Truck, Wrench, ShieldAlert, Navigation, Layers,
     UserPlus, Building2, CheckCircle2, Send, FileSpreadsheet, Settings,
     FileCheck2, SlidersHorizontal, Home, Thermometer, Stethoscope, 
-    CreditCard, TrendingUp, Search
+    CreditCard, TrendingUp, Search, Award, Globe
 } from 'lucide-react';
 import { Logo } from '../components/UI';
 import versionData from '../version.json';
@@ -166,8 +166,16 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                     /* ========================================================================= */
                     <>
                         {/* Panel Principal */}
-                        <div className="mb-4">
+                        <div className="mb-4 space-y-0.5">
                             <NavItem view="home" currentView={view} navigateTo={navigateTo} icon={Home} label="Panel General (Inicio)" />
+                            <NavItem 
+                                view="web" 
+                                currentView={view} 
+                                navigateTo={navigateTo} 
+                                icon={Globe} 
+                                label="Web Pública (microlabscr)" 
+                                badge="2026" 
+                            />
                         </div>
 
                         {/* PASO 1: CLIENTES Y EMPRESAS (Comercial / Admisión / Facturación / Dirección) */}
@@ -220,10 +228,18 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                             </NavGroup>
                         )}
 
-                        {/* PASO 4: CONTROL DE CALIDAD Y VALIDACIÓN (Exclusivo DT y Admin) */}
-                        {['admin', 'director_tecnico'].includes(userRole) && (
+                        {/* PASO 4: CONTROL DE CALIDAD Y VALIDACIÓN (Exclusivo DT, Admin y Analistas) */}
+                        {['admin', 'director_tecnico', 'analyst'].includes(userRole) && (
                             <NavGroup step="Paso 4" title="Validación & Calidad" color="text-purple-400">
                                 <NavItem view="qc" currentView={view} navigateTo={navigateTo} icon={CheckCircle2} label="Control de Calidad (QC)" />
+                                <NavItem 
+                                    view="qc_proficiencia" 
+                                    currentView={view === 'qc' ? 'qc_proficiencia' : ''} 
+                                    navigateTo={() => navigateTo('qc', null, { tab: 'proficiencia' })} 
+                                    icon={Award} 
+                                    label="Exámenes Proficiencia" 
+                                    badge="LGC 2026" 
+                                />
                                 <NavItem view="storage" currentView={view} navigateTo={navigateTo} icon={Snowflake} label="Mapeo & Freezer" />
                                 <NavItem view="cold_chain" currentView={view} navigateTo={navigateTo} icon={Thermometer} label="Cadena de Frío (IoT)" badge="Nuevo" />
                                 <NavItem view="capa" currentView={view} navigateTo={navigateTo} icon={ShieldAlert} label="Aseguramiento ISO (CAPA)" />
@@ -231,8 +247,9 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                         )}
 
                         {/* PASO 5: EMISIÓN, ENVIOS E INFORMES (Facturación, DT y Admin) */}
-                        {['admin', 'director_tecnico', 'billing_agent'].includes(userRole) && (
+                        {['admin', 'director_tecnico', 'billing_agent', 'analyst'].includes(userRole) && (
                             <NavGroup step="Paso 5" title="Emisión & Envíos" color="text-rose-400">
+                                <NavItem view="reports" currentView={view} navigateTo={navigateTo} icon={FileCheck2} label="Informes & Certificados" badge="ISO 17025" />
                                 <NavItem view="billing" currentView={view} navigateTo={navigateTo} icon={Send} label="Envíos & Facturación" />
                                 {userRole === 'admin' && (
                                     <NavItem view="accounting" currentView={view} navigateTo={navigateTo} icon={Wallet} label="Contabilidad & Cobros" />

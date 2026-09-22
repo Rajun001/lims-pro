@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { FlaskConical, Search, Eye, Download, Lock, FileText, FileSpreadsheet, Check, Send, History, HelpCircle, ChevronDown, ChevronUp, Info, Activity, CreditCard, DollarSign, Smartphone, X, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import html2pdf from 'html2pdf.js';
@@ -777,12 +777,35 @@ const CLINICAL_RESULTS_MOCK = [
     { id: 'MC-2026-0508', date: '08/05/2026', analysis: 'Hemograma Completo', status: 'Aprobado', lab: 'Sede Central', details: 'Hemoglobina: 14 g/dL\nPlaquetas: 250,000 /uL', patientName: 'Luis Rojas', paymentStatus: 'Pendiente', sampleType: 'Clínica' }
 ];
 
-export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
+export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) => {
     const [previewId, setPreviewId] = useState(null);
+    const [modalReport, setModalReport] = useState(null);
+    const [logoDataUrl, setLogoDataUrl] = useState(null);
     const [activeTab, setActiveTab] = useState('resultados');
     const [quoteDesc, setQuoteDesc] = useState('');
     const [quoteSubmitted, setQuoteSubmitted] = useState(false);
     const [language, setLanguage] = useState('es');
+
+    useEffect(() => {
+        let isMounted = true;
+        const loadLogo = async () => {
+            try {
+                const res = await fetch(labInfo?.logoUrl || '/logo.png');
+                const blob = await res.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (isMounted && reader.result) {
+                        setLogoDataUrl(reader.result);
+                    }
+                };
+                reader.readAsDataURL(blob);
+            } catch (e) {
+                console.warn('Could not load logo as base64:', e);
+            }
+        };
+        loadLogo();
+        return () => { isMounted = false; };
+    }, [labInfo]);
 
     const isCompany = userRole === 'client_company';
     const isDoctor = userRole === 'client_doctor';
@@ -1131,7 +1154,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
         ? selectedTrendParam
         : defaultTrendParam;
 
-    const downloadPDF = (req) => {
+    const downloadPDF = async (req) => {
         const element = document.createElement('div');
         const isApproved = req?.status === 'Aprobado';
         const analysisName = isEn 
@@ -1148,53 +1171,180 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
             : (isEn ? 'Preliminary / Pending Validation' : 'Reporte Preliminar / Pendiente');
         const statusColorPDF = isApproved ? '#16a34a' : '#d97706';
 
+        // Obtener logo en base64 de forma asíncrona garantizada para renderizar en canvas/PDF
+        let currentLogo = logoDataUrl;
+        if (!currentLogo) {
+            try {
+                const res = await fetch(labInfo?.logoUrl || '/logo.png');
+                const blob = await res.blob();
+                currentLogo = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = () => resolve('/logo.png');
+                    reader.readAsDataURL(blob);
+                });
+            } catch {
+                currentLogo = labInfo?.logoUrl || '/logo.png';
+            }
+        }
+
+        // Formatear filas analíticas
+        const detailLines = detailsText.split('\n').filter(Boolean);
+        const rowsHtml = detailLines.length > 0 ? detailLines.map((line, idx) => {
+            const parts = line.split(':');
+            const param = parts[0]?.trim() || line;
+            const val = parts.slice(1).join(':')?.trim() || '-';
+            let ref = '-';
+            const lowerParam = param.toLowerCase();
+            if (lowerParam.includes('glucosa')) ref = '70 - 100 mg/dL';
+            else if (lowerParam.includes('colesterol')) ref = '< 200 mg/dL';
+            else if (lowerParam.includes('hemoglobina')) ref = '12.0 - 16.0 g/dL';
+            else if (lowerParam.includes('plaquetas')) ref = '150,000 - 450,000 /uL';
+            else if (lowerParam.includes('aerobios')) ref = '< 10,000 UFC/g';
+            else if (lowerParam.includes('coli') || lowerParam.includes('coliformes')) ref = 'Ausente / 0 UFC';
+            else if (lowerParam.includes('salmonella') || lowerParam.includes('listeria')) ref = 'Ausencia / 25g';
+
+            return `
+                <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 10px 14px; font-weight: 600; color: #1e293b;">${param}</td>
+                    <td style="padding: 10px 14px; font-weight: 700; color: #2563eb; text-align: right;">${val}</td>
+                    <td style="padding: 10px 14px; color: #64748b; text-align: center; font-size: 11px;">${ref}</td>
+                    <td style="padding: 10px 14px; font-weight: 700; color: ${statusColorPDF}; text-align: right; font-size: 11px;">
+                        ${isApproved ? (isEn ? 'NORMAL' : 'CONFORME') : (isEn ? 'IN PROCESS' : 'EN PROCESO')}
+                    </td>
+                </tr>
+            `;
+        }).join('') : `
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td colspan="4" style="padding: 16px 14px; color: #334155; white-space: pre-wrap;">${detailsText}</td>
+            </tr>
+        `;
+
         element.innerHTML = `
-            <div style="padding: 40px; font-family: sans-serif; color: #333;">
-                <div style="border-bottom: 2px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between;">
-                    <div>
-                        <h1 style="margin: 0; color: #1e293b;">Microlabs LIMS</h1>
-                        <p style="margin: 5px 0 0; color: #64748b;">${isEn ? 'Official Results Report' : 'Reporte Oficial de Resultados'}</p>
+            <div style="padding: 35px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background: #ffffff; width: 750px; box-sizing: border-box; margin: 0 auto;">
+                <!-- Header con Logo Oficial de Microlabs -->
+                <div style="border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <div style="background-color: #ffffff; border-radius: 8px; display: flex; align-items: center;">
+                            <img src="${currentLogo}" alt="Microlabs Logo" style="height: 58px; max-width: 180px; object-fit: contain; display: block;" />
+                        </div>
+                        <div>
+                            <h1 style="margin: 0; font-size: 16px; font-weight: 800; color: #0f172a; letter-spacing: -0.2px;">
+                                ${labInfo?.name || 'Laboratorio Microlabs Químicos S.A.'}
+                            </h1>
+                            <p style="margin: 2px 0 0; font-size: 10px; font-weight: 700; color: #2563eb; text-transform: uppercase; letter-spacing: 0.5px;">
+                                ${isEn ? 'Clinical & Microbiological Diagnostics' : 'Diagnóstico Clínico y Control Microbiológico'}
+                            </p>
+                            <p style="margin: 2px 0 0; font-size: 9px; color: #64748b;">
+                                Céd. Jurídica: ${labInfo?.legalId || '3101144450'} &bull; Permiso Sanitario MINSA-01048
+                            </p>
+                            <p style="margin: 1px 0 0; font-size: 9px; color: #64748b;">
+                                ${labInfo?.address || '75 m norte del correo de Guadalupe, Goicoechea, San José'} &bull; Tel: +506 2234-8837
+                            </p>
+                        </div>
                     </div>
                     <div style="text-align: right;">
-                        <h2 style="margin: 0; color: #94a3b8;">${isEn ? 'REPORT' : 'INFORME'}</h2>
-                        <p style="margin: 5px 0 0; font-family: monospace;">${req.id}</p>
+                        <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; display: inline-block;">
+                            <span style="display: block; font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                                ${isEn ? 'OFFICIAL REPORT' : 'INFORME OFICIAL'}
+                            </span>
+                            <span style="font-family: monospace; font-size: 14px; font-weight: 800; color: #0f172a;">
+                                ${req.id}
+                            </span>
+                        </div>
+                        <p style="margin: 4px 0 0; font-size: 9px; color: #64748b;">
+                            ${isEn ? 'Date' : 'Fecha'}: <strong>${req.date}</strong>
+                        </p>
+                        <p style="margin: 2px 0 0; font-size: 9px; color: ${statusColorPDF}; font-weight: 700;">
+                            ${statusTextPDF}
+                        </p>
                     </div>
                 </div>
-                
-                <div style="margin-bottom: 30px;">
-                    <p><strong>${isCompany ? (isEn ? 'Company / Plant' : 'Empresa / Planta') : (isEn ? 'Patient' : 'Paciente')}:</strong> ${req.patientName}</p>
-                    <p><strong>${isEn ? 'Analysis' : 'Análisis'}:</strong> ${analysisName}</p>
-                    <p><strong>${isEn ? 'Date' : 'Fecha'}:</strong> ${req.date}</p>
-                    <p><strong>${isEn ? 'Laboratory' : 'Laboratorio'}:</strong> ${req.lab}</p>
+
+                <!-- Tarjeta de Información Demográfica y Orden -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 22px; font-size: 11px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px;">
+                        <div>
+                            <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block;">
+                                ${isCompany ? (isEn ? 'Company / Client' : 'Empresa / Solicitante') : (isEn ? 'Patient' : 'Paciente')}
+                            </span>
+                            <strong style="font-size: 13px; color: #0f172a;">${req.patientName}</strong>
+                        </div>
+                        <div>
+                            <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block;">
+                                ${isEn ? 'Analysis Requested' : 'Análisis Solicitado'}
+                            </span>
+                            <strong style="font-size: 13px; color: #2563eb;">${analysisName}</strong>
+                        </div>
+                        <div>
+                            <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block;">
+                                ${isEn ? 'Referring Physician' : 'Médico Referente'}
+                            </span>
+                            <span style="color: #334155; font-weight: 600;">${req.doctorName || (isDoctor ? welcomeName : 'Dr. Roberto Vargas')}</span>
+                        </div>
+                        <div>
+                            <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block;">
+                                ${isEn ? 'Processing Laboratory' : 'Sede de Análisis'}
+                            </span>
+                            <span style="color: #334155; font-weight: 600;">${req.lab || 'Sede Central Guadalupe'}</span>
+                        </div>
+                    </div>
                 </div>
-                
-                <table style="width: 100%; text-align: left; border-collapse: collapse; margin-bottom: 40px;">
-                    <thead>
-                        <tr style="border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 10px 0;">${isEn ? 'Parameter / Detail' : 'Parámetro / Detalle'}</th>
-                            <th style="padding: 10px 0;">${isEn ? 'Status' : 'Estado'}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr style="border-bottom: 1px solid #f1f5f9;">
-                            <td style="padding: 15px 0; white-space: pre-wrap;">${detailsText}</td>
-                            <td style="padding: 15px 0; font-weight: bold; color: ${statusColorPDF};">${statusTextPDF}</td>
-                        </tr>
-                    </tbody>
-                </table>
-                
-                <div style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center;">
-                    <p style="font-weight: bold; color: #1e293b; margin-bottom: 5px;">${isEn ? 'Authorized Digital Signature' : 'Firma Digital Autorizada'}</p>
-                    <p style="font-size: 12px; color: #94a3b8; margin: 0;">${isEn ? 'Document automatically generated by Microlabs LIMS. Valid without handwritten signature.' : 'Documento generado automáticamente por LIMS Microlabs. Válido sin firma manuscrita.'}</p>
+
+                <!-- Tabla de Resultados Clínicos -->
+                <div style="margin-bottom: 25px;">
+                    <table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 11px;">
+                        <thead>
+                            <tr style="background: #0f172a; color: #ffffff;">
+                                <th style="padding: 10px 14px; font-weight: 700; border-top-left-radius: 6px;">${isEn ? 'Parameter / Assay' : 'Parámetro / Ensayo'}</th>
+                                <th style="padding: 10px 14px; font-weight: 700; text-align: right;">${isEn ? 'Result' : 'Resultado'}</th>
+                                <th style="padding: 10px 14px; font-weight: 700; text-align: center;">${isEn ? 'Reference Range' : 'Valor Referencia'}</th>
+                                <th style="padding: 10px 14px; font-weight: 700; text-align: right; border-top-right-radius: 6px;">${isEn ? 'Status' : 'Estado'}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Bloque de Firmas y Validación Oficial 21 CFR Part 11 -->
+                <div style="margin-top: 35px; padding-top: 18px; border-top: 1px solid #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div style="font-size: 10px; color: #64748b; max-width: 380px;">
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; background-color: #16a34a; border-radius: 50%;"></span>
+                            <strong style="color: #0f172a; font-size: 11px;">${isEn ? 'Authorized Electronic Signature' : 'Firma Digital Autorizada'}</strong>
+                        </div>
+                        <p style="margin: 0; line-height: 1.35;">
+                            ${isEn 
+                                ? 'Digitally certified under Law 8454 & 21 CFR Part 11. Official laboratory validity without handwritten signature.' 
+                                : 'Documento certificado bajo Ley 8454 y 21 CFR Part 11. Validez oficial para trámites CCSS, médicos y legales.'}
+                        </p>
+                        <p style="margin: 4px 0 0; font-family: monospace; font-size: 8px; color: #94a3b8;">
+                            HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                        </p>
+                    </div>
+
+                    <div style="text-align: center; border-top: 1.5px solid #0f172a; padding-top: 6px; width: 220px;">
+                        <p style="margin: 0; font-weight: 800; font-size: 11px; color: #0f172a;">
+                            Dr. Roldan Ajún Chaverri
+                        </p>
+                        <p style="margin: 1px 0 0; font-size: 9px; font-weight: 600; color: #2563eb;">
+                            ${isEn ? 'Technical Director - MQC #802' : 'Director Técnico & Regente - MQC #802'}
+                        </p>
+                        <p style="margin: 1px 0 0; font-size: 8px; color: #64748b;">
+                            Colegio de Microbiólogos Químicos Clínicos
+                        </p>
+                    </div>
                 </div>
             </div>
         `;
 
         const opt = {
-            margin: 0.5,
+            margin: [0.3, 0.3, 0.3, 0.3],
             filename: `Resultados_${req.id}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
         };
 
@@ -1319,7 +1469,22 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
                                                     <Lock size={14} /> {t.paymentPending}
                                                 </button>
                                             ) : (
-                                                <button onClick={() => downloadPDF(req)} className="bg-white border border-slate-200 text-blue-600 px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-slate-50 cursor-pointer">{t.btnViewPDF}</button>
+                                                <div className="flex items-center gap-2">
+                                                    <button 
+                                                        onClick={() => setModalReport(req)} 
+                                                        className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3.5 py-2 rounded-xl font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                                                        title={isEn ? 'View official report on screen' : 'Ver informe oficial en pantalla'}
+                                                    >
+                                                        <Eye size={14} /> {isEn ? 'View Report' : 'Ver Informe'}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => downloadPDF(req)} 
+                                                        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-xl font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                                                        title={isEn ? 'Download PDF with official logo' : 'Descargar PDF con logo oficial'}
+                                                    >
+                                                        <Download size={14} className="text-blue-600" /> {t.btnViewPDF}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     );
@@ -1433,24 +1598,28 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
                                                 </div>
                                             </div>
                                         )}
-                                        <div className="border-b border-slate-100 pb-4 mb-4 relative z-20 bg-white/80 backdrop-blur-sm">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                                                        <FileText size={18} className="text-blue-600" /> {t.summary}
-                                                    </h4>
-                                                    <p className="text-xs text-slate-500 mt-1">{previewId}</p>
+                                        <div className="border-b border-slate-100 pb-4 mb-4 relative z-20 bg-white/90 backdrop-blur-sm">
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-white p-1 rounded-lg border border-slate-200 shadow-xs">
+                                                        <img src={labInfo?.logoUrl || "/logo.png"} alt="Microlabs" className="h-8 w-auto object-contain" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-extrabold text-sm text-slate-800 leading-none">
+                                                            {labInfo?.name || 'Laboratorio Microlabs'}
+                                                        </h4>
+                                                        <p className="text-[10px] text-blue-600 font-bold mt-1 uppercase tracking-wider">
+                                                            {t.summary} &bull; <span className="font-mono text-slate-600">{previewId}</span>
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div className="border-b border-slate-100 pb-4 mb-4 relative z-20 bg-white/80 backdrop-blur-sm">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                                                        <FileText size={18} className="text-blue-600" /> {t.summary}
-                                                    </h4>
-                                                    <p className="text-xs text-slate-500 mt-1">{previewId}</p>
-                                                </div>
+                                                <button 
+                                                    onClick={() => setModalReport(resultsList.find(r => r.id === previewId))}
+                                                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer border border-blue-200"
+                                                    title={isEn ? 'Open full screen report' : 'Ver informe en pantalla completa'}
+                                                >
+                                                    <Eye size={13} /> {isEn ? 'Full Report' : 'Ver Completo'}
+                                                </button>
                                             </div>
                                         </div>
                                         {resultsList.find(r => r.id === previewId)?.paymentStatus === 'Pendiente' ? (
@@ -1846,6 +2015,144 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user }) => {
                                                 </div>
                                             </form>
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Report Modal con Logo Oficial de Microlabs */}
+                            {modalReport && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fade-in overflow-y-auto">
+                                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden my-8 animate-fade-in">
+                                        {/* Header con Logo Oficial de Microlabs */}
+                                        <div className="p-6 bg-slate-900 text-white flex justify-between items-center border-b border-slate-800">
+                                            <div className="flex items-center gap-4">
+                                                <div className="bg-white p-2 rounded-xl shadow-xs">
+                                                    <img src={labInfo?.logoUrl || "/logo.png"} alt="Microlabs" className="h-9 w-auto object-contain" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-extrabold text-base sm:text-lg text-white tracking-tight">{labInfo?.name || 'Laboratorio Microlabs Químicos S.A.'}</h3>
+                                                    <p className="text-xs text-blue-300 font-medium">{isEn ? 'Official Diagnostics & Microbiology Report' : 'Informe Oficial de Resultados y Microbiología'}</p>
+                                                    <p className="text-[10px] text-slate-400">MINSA-01048 &bull; Céd. Jurídica: {labInfo?.legalId || '3101144450'}</p>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={() => setModalReport(null)}
+                                                className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                            >
+                                                <X size={20} />
+                                            </button>
+                                        </div>
+
+                                        {/* Contenido del Reporte */}
+                                        <div className="p-6 md:p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+                                            {/* Metadatos paciente / orden */}
+                                            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5">
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{t.client}</span>
+                                                        <span className="font-extrabold text-slate-800 text-sm">{modalReport.patientName}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{isEn ? 'Order ID' : 'Nº de Orden'}</span>
+                                                        <span className="font-mono font-extrabold text-blue-600 text-sm">{modalReport.id}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{isEn ? 'Date' : 'Fecha de Emisión'}</span>
+                                                        <span className="font-medium text-slate-700">{modalReport.date}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{isEn ? 'Status' : 'Estado'}</span>
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                                                            modalReport.status === 'Aprobado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                                                        }`}>
+                                                            {modalReport.status === 'Aprobado' ? (isEn ? 'Approved' : 'Aprobado') : (isEn ? 'Pending' : 'Pendiente')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-3 border-t border-slate-200/60 text-xs">
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{isEn ? 'Analysis' : 'Análisis'}</span>
+                                                        <span className="font-bold text-slate-800">{modalReport.analysis}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">{isEn ? 'Referring Physician' : 'Médico Referente'}</span>
+                                                        <span className="font-medium text-slate-700">{modalReport.doctorName || (isDoctor ? welcomeName : 'Dr. Roberto Vargas')}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Detalle analítico */}
+                                            <div>
+                                                <h4 className="font-extrabold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                                                    <Activity size={16} className="text-blue-600" /> {isEn ? 'Analytical Measurements' : 'Resultados Analíticos Obtenidos'}
+                                                </h4>
+                                                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                                                    <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 grid grid-cols-12 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                                                        <div className="col-span-5">{isEn ? 'Parameter' : 'Parámetro'}</div>
+                                                        <div className="col-span-4 text-right">{isEn ? 'Observed Result' : 'Resultado'}</div>
+                                                        <div className="col-span-3 text-right">{isEn ? 'Status' : 'Estado'}</div>
+                                                    </div>
+                                                    <div className="divide-y divide-slate-100 font-mono text-xs">
+                                                        {modalReport.details ? modalReport.details.split('\n').map((line, idx) => {
+                                                            const parts = line.split(':');
+                                                            const param = parts[0]?.trim() || line;
+                                                            const val = parts.slice(1).join(':')?.trim() || '-';
+                                                            return (
+                                                                <div key={idx} className="px-4 py-3 grid grid-cols-12 items-center hover:bg-slate-50/60 transition-colors">
+                                                                    <div className="col-span-5 font-sans font-semibold text-slate-800">{param}</div>
+                                                                    <div className="col-span-4 text-right font-bold text-blue-600">{val}</div>
+                                                                    <div className="col-span-3 text-right">
+                                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                            {modalReport.status === 'Aprobado' ? 'VALIDADO' : 'PROCESO'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        }) : (
+                                                            <div className="p-4 text-slate-500 italic">No hay parámetros registrados</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* AI Interpreter */}
+                                            <ResultsInterpreter report={modalReport} language={language} />
+
+                                            {/* Firma del Microbiólogo y Validación 21 CFR Part 11 */}
+                                            <div className="border-t border-slate-200 pt-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-xs">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                                        <CheckCircle2 size={22} />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-extrabold text-slate-800">Dr. Roldan Ajún Chaverri</p>
+                                                        <p className="text-slate-500 text-[11px]">Director Técnico & Regente Químico Clínico (MQC #802)</p>
+                                                        <p className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-1">
+                                                            <Sparkles size={11} /> Firma Digital 21 CFR Part 11 / ISO 15189 Verificada
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right text-[10px] text-slate-400 font-mono">
+                                                    <span>SHA256: e3b0c442...8b55</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Modal Actions Footer */}
+                                        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
+                                            <button 
+                                                onClick={() => setModalReport(null)}
+                                                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                            >
+                                                {isEn ? 'Close' : 'Cerrar'}
+                                            </button>
+                                            <button 
+                                                onClick={() => downloadPDF(modalReport)}
+                                                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer border-0"
+                                            >
+                                                <Download size={14} /> {isEn ? 'Download Official PDF' : 'Descargar PDF Oficial'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}

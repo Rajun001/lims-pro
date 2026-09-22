@@ -50,7 +50,7 @@ try {
 }
 
 # 4. Instalar / Reparar Host oficial desde MSI
-$msiPath = 'C:\lims-microlabs\chromeremotedesktophost.msi'
+$msiPath = if (Test-Path 'C:\lims-microlabs\installers\chromeremotedesktophost.msi') { 'C:\lims-microlabs\installers\chromeremotedesktophost.msi' } else { 'C:\lims-microlabs\chromeremotedesktophost.msi' }
 if (Test-Path $msiPath) {
     Log-Message '4. Reinstalando / Reparando Host oficial desde MSI...'
     $proc = Start-Process msiexec.exe -ArgumentList @('/i', $msiPath, '/qn', '/norestart') -PassThru -Wait

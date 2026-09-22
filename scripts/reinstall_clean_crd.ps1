@@ -25,7 +25,7 @@ Get-Process remoting_native_messaging_host -ErrorAction SilentlyContinue | Stop-
 Start-Sleep -Seconds 2
 
 # 2. Desinstalar MSI anterior si existe
-$msiPath = "C:\lims-microlabs\chromeremotedesktophost.msi"
+$msiPath = if (Test-Path "C:\lims-microlabs\installers\chromeremotedesktophost.msi") { "C:\lims-microlabs\installers\chromeremotedesktophost.msi" } else { "C:\lims-microlabs\chromeremotedesktophost.msi" }
 if (Test-Path $msiPath) {
     Write-ReinstallLog "2/5. Desinstalando versión anterior de Chrome Remote Desktop Host..."
     Start-Process msiexec.exe -ArgumentList "/x `"$msiPath`" /qn /norestart" -Wait -ErrorAction SilentlyContinue

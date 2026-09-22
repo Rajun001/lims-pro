@@ -6,7 +6,7 @@ echo    PROGRAMADOR DE ACTUALIZACIONES AUTOMATICAS (LIMS-PRO)
 echo =========================================================
 echo.
 
-set SCRIPT_PATH=%~dp0actualizar_sistema.bat
+set SCRIPT_PATH=C:\lims-microlabs\actualizar_sistema.bat
 
 echo Se creará una Tarea Programada en Windows para ejecutar:
 echo   %SCRIPT_PATH% --silent

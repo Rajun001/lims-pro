@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Thermometer, TestTube, PlusCircle, AlertOctagon, CheckCircle2, Download } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import { Activity, Thermometer, TestTube, PlusCircle, AlertOctagon, CheckCircle2, Download, Award } from 'lucide-react';
 import { collection, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { FormInput } from '../components/UI';
 import { LIMSSystemId } from '../services/firebase';
@@ -11,11 +12,19 @@ import { getApiUrl } from '../utils/api.js';
 import { evaluateWestgardRules, calculateStatistics } from '../utils/westgardRules.js';
 import { ShieldCheck, AlertTriangle, TrendingUp, Sparkles } from 'lucide-react';
 import { LeveyJenningsChart } from '../components/LeveyJenningsChart';
+import { ProficiencyTestingTab } from '../components/ProficiencyTestingTab';
 
 const API_URL = getApiUrl();
 
 export const QCView = ({ db, user }) => {
-    const [activeTab, setActiveTab] = useState('equipos');
+    const location = useLocation();
+    const [activeTab, setActiveTab] = useState(location?.state?.tab || 'equipos');
+
+    useEffect(() => {
+        if (location?.state?.tab) {
+            setActiveTab(location.state.tab);
+        }
+    }, [location?.state?.tab]);
     const [equipments, setEquipments] = useState([]);
     const [qcSamples, setQcSamples] = useState([]);
     const [selectedParam, setSelectedParam] = useState('');
@@ -210,16 +219,21 @@ export const QCView = ({ db, user }) => {
                 </div>
             </div>
 
-            <div className="flex bg-white rounded-xl shadow-sm p-1.5 gap-2 border border-slate-200 shrink-0">
-                <button onClick={() => setActiveTab('equipos')} className={`flex-1 py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'equipos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+            <div className="flex flex-wrap bg-white rounded-xl shadow-sm p-1.5 gap-2 border border-slate-200 shrink-0">
+                <button onClick={() => setActiveTab('equipos')} className={`flex-1 min-w-[160px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'equipos' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <Thermometer size={18} /> Equipos y Calibración
                 </button>
-                <button onClick={() => setActiveTab('control')} className={`flex-1 py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'control' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <button onClick={() => setActiveTab('control')} className={`flex-1 min-w-[160px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'control' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <TestTube size={18} /> Muestras de Control
                 </button>
-                <button onClick={() => setActiveTab('levey')} className={`flex-1 py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'levey' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <button onClick={() => setActiveTab('levey')} className={`flex-1 min-w-[160px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'levey' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
                     <TrendingUp size={18} /> Levey-Jennings
                     <span className="text-[9px] font-black bg-amber-400 text-white px-1.5 py-0.5 rounded-full">ISO</span>
+                </button>
+                <button onClick={() => setActiveTab('proficiencia')} className={`flex-1 min-w-[210px] py-2.5 font-bold rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === 'proficiencia' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>
+                    <Award size={18} className={activeTab === 'proficiencia' ? 'text-amber-300' : 'text-indigo-600'} /> 
+                    <span>Exámenes Proficiencia</span>
+                    <span className="text-[9px] font-black bg-gradient-to-r from-amber-400 to-amber-500 text-slate-900 px-2 py-0.5 rounded-full shadow-xs">LGC 2026</span>
                 </button>
             </div>
 
@@ -424,6 +438,10 @@ export const QCView = ({ db, user }) => {
                         </>
                     );
                 })()}
+
+                {activeTab === 'proficiencia' && (
+                    <ProficiencyTestingTab db={db} user={user} />
+                )}
             </div>
 
             {/* Modals */}

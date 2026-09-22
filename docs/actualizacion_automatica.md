@@ -25,8 +25,9 @@ Adicionalmente, cada ejecución registra su resultado en `logs/actualizaciones.l
 Para programar la actualización automática todas las madrugadas a las **3:00 AM** en un servidor Windows:
 - Ejecuta como Administrador el script:
   ```cmd
-  programar_actualizacion_windows.bat
+  scripts\maintenance\system\programar_actualizacion_windows.bat
   ```
+  (O desde el menú principal `panel_control.bat` -> opción 2)
 - O crea manualmente la tarea ejecutable:
   ```cmd
   schtasks /create /tn "LIMS_Pro_Auto_Update" /tr "\"C:\lims-microlabs\actualizar_sistema.bat\" --silent" /sc daily /st 03:00 /f

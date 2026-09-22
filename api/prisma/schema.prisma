@@ -362,6 +362,7 @@ model IndustrialTest {
   specificationLimit     String?          // "< 10 UFC/g", "Ausencia en 25g"
   compliance             String?          // "CONFORME", "NO_CONFORME", "SATISFACTORIO"
   microscopicObservation String?          // Observaciones técnicas de partículas/estructuras microscópicas
+  culturePlatePhoto      String?          // Foto o evidencia específica de este parámetro/cultivo
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
 
@@ -397,6 +398,7 @@ model Report {
   // Observaciones técnicas detalladas
   technicalObservations String?              // Hallazgos microscópicos, partículas o notas analíticas
   pdfUrl                String?              // URL o ruta al PDF generado
+  evidencePhotos        String?              // JSON stringificado con fotos probatorias, placas de cultivo y recepción
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
 
