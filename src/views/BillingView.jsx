@@ -7,12 +7,15 @@ import BillingAPI from '../services/BillingAPI';
 import { getApiUrl } from '../utils/api';
 import SINPEPaymentModal from '../components/SINPEPaymentModal';
 import { getTransactions } from '../services/SINPEService';
+import { OFFICIAL_BANK_ACCOUNTS, SINPE_MOVIL_INFO } from '../constants/bankAccounts';
 
 const API_URL = getApiUrl();
 
 export const BillingView = ({ requests = [], db, referenceLabs = [], _referenceLabTests = [], user }) => {
     const [activeTab, setActiveTab] = useState('receivable'); // 'receivable' | 'payable' | 'commissions' | 'hacienda' | 'sinpe'
     const [expandedLabId, setExpandedLabId] = useState(null);
+    const [copiedIban, setCopiedIban] = useState('');
+    const [showBankInfo, setShowBankInfo] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [qbSyncLog, setQbSyncLog] = useState(null);
     
@@ -435,6 +438,76 @@ ${feLines.map((l, i) => `    <LineaDetalle>
                         <span className="text-[8px] font-black bg-sky-600 text-white px-1.5 py-0.5 rounded-full">BCCR</span>
                     </button>
                 </div>
+            </div>
+
+            {/* Cuentas Bancarias Oficiales & IBAN para Cobranza */}
+            <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-4 shadow-sm">
+                <div className="flex flex-wrap justify-between items-center gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-white/10 rounded-xl">
+                            <Receipt size={22} className="text-blue-200" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-extrabold text-sm tracking-wide">Cuentas Bancarias Oficiales (IBAN) & SINPE Móvil</h3>
+                                <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">Verificado</span>
+                            </div>
+                            <p className="text-xs text-blue-200">
+                                Laboratorio Microlabs Químicos S.A. • Céd. Jurídica: <strong className="text-white">3-101-144450</strong>
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowBankInfo(!showBankInfo)}
+                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                        <span>{showBankInfo ? 'Ocultar Cuentas' : 'Ver Cuentas & IBANs'}</span>
+                        {showBankInfo ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                </div>
+
+                {showBankInfo && (
+                    <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 animate-fade-in text-xs">
+                        {OFFICIAL_BANK_ACCOUNTS.map(acc => (
+                            <div key={acc.id} className="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15 space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <span className="font-extrabold text-white text-[11px]">{acc.bankName}</span>
+                                    <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-blue-500/40 text-blue-100 font-bold">{acc.currency} ({acc.accountType})</span>
+                                </div>
+                                <div className="text-[10px] text-blue-200 font-mono">
+                                    Nº: {acc.accountNumber}
+                                </div>
+                                <div className="flex items-center justify-between pt-1">
+                                    <span className="font-mono text-[10px] text-emerald-300 font-bold truncate max-w-[200px]" title={acc.iban}>
+                                        {acc.iban}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(acc.iban);
+                                            setCopiedIban(acc.id);
+                                            setTimeout(() => setCopiedIban(''), 2500);
+                                        }}
+                                        className="text-[9px] font-bold px-2 py-0.5 bg-white/20 hover:bg-white/30 text-white rounded flex items-center gap-1 transition-all cursor-pointer"
+                                        title="Copiar IBAN"
+                                    >
+                                        {copiedIban === acc.id ? <CheckCircle2 size={10} className="text-emerald-300" /> : <Copy size={10} />}
+                                        <span>{copiedIban === acc.id ? '¡Listo!' : 'Copiar'}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        <div className="bg-sky-500/20 backdrop-blur-xs p-3 rounded-xl border border-sky-400/30 flex flex-col justify-between">
+                            <div>
+                                <span className="font-extrabold text-sky-200 text-[11px] block">📲 SINPE Móvil Oficial</span>
+                                <span className="text-base font-black text-white font-mono">{SINPE_MOVIL_INFO.displayPhone}</span>
+                                <p className="text-[10px] text-sky-200 mt-0.5">A nombre de: {SINPE_MOVIL_INFO.holder}</p>
+                            </div>
+                            <span className="text-[9px] text-sky-300 block mt-1">Comprobantes: {SINPE_MOVIL_INFO.notifyEmail}</span>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Financial Stats Dashboard */}

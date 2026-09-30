@@ -87,22 +87,54 @@ const BatchProcessingView = lazy(() => import('./views/BatchProcessingView').the
 const ColdChainView = lazy(() => import('./views/ColdChainView').then(m => ({ default: m.ColdChainView })));
 const ReportsExplorerView = lazy(() => import('./views/ReportsExplorerView').then(m => ({ default: m.ReportsExplorerView })));
 const PublicWebsiteView = lazy(() => import('./views/PublicWebsiteView').then(m => ({ default: m.PublicWebsiteView })));
+const ClientCRMView = lazy(() => import('./views/ClientCRMView').then(m => ({ default: m.ClientCRMView })));
+const RemindersScheduleView = lazy(() => import('./views/RemindersScheduleView').then(m => ({ default: m.RemindersScheduleView })));
 
 const mapSqlReportToRequest = (sqlReport) => {
     const isInd = sqlReport.reportType === 'INDUSTRIAL_COA';
+    const isClinical = sqlReport.reportType === 'CLINICAL' || !isInd;
     const sample = isInd ? sqlReport.industrialSample : null;
+    const clinicalOrder = sqlReport.clinicalOrder;
+    const clinicalSample = clinicalOrder?.sample;
+    const patient = clinicalSample?.patient;
     const client = sample?.contract?.client;
-    const tests = isInd ? (sample?.tests || []) : (sqlReport.clinicalOrder?.tests || []);
+    const tests = isInd ? (sample?.tests || []) : (clinicalOrder?.tests || []);
 
-    const analyzerResults = tests.map(t => ({
-        testCode: t.parameterName || t.testCode,
-        value: t.quantitativeResult !== null && t.quantitativeResult !== undefined ? String(t.quantitativeResult) : (t.qualitativeResult || t.calculatedResult || 'Normal'),
-        unit: isInd ? (t.quantitativeResult !== null ? 'UFC/g' : '') : (t.unit || ''),
-        status: 'released',
-        compliance: t.compliance || 'CONFORME',
-        isoStandardRef: t.isoStandardRef,
-        specificationLimit: t.specificationLimit
-    }));
+    const calculateAge = (dobString) => {
+        if (!dobString) return null;
+        const dob = new Date(dobString);
+        if (isNaN(dob.getTime())) return null;
+        const ageDiffMs = Date.now() - dob.getTime();
+        const ageDate = new Date(ageDiffMs);
+        return Math.abs(ageDate.getUTCFullYear() - 1970);
+    };
+
+    const analyzerResults = tests.map(t => {
+        const rawVal = t.quantitativeResult !== null && t.quantitativeResult !== undefined 
+            ? String(t.quantitativeResult) 
+            : (t.calculatedResult !== null && t.calculatedResult !== undefined 
+                ? String(t.calculatedResult) 
+                : (t.rawResult !== null && t.rawResult !== undefined 
+                    ? String(t.rawResult) 
+                    : (t.qualitativeResult || 'Normal')));
+
+        return {
+            id: t.id,
+            testCode: t.testCode || t.parameterName,
+            testName: t.testName || t.parameterName || t.testCode,
+            value: rawVal,
+            unit: isInd ? (t.quantitativeResult !== null ? 'UFC/g' : '') : (t.unit || ''),
+            referenceRange: t.appliedReferenceRange || '',
+            appliedReferenceRange: t.appliedReferenceRange || '',
+            flag: t.flag || 'NORMAL',
+            status: 'released',
+            compliance: (t.flag === 'HIGH' || t.flag === 'LOW') ? 'FUERA DE RANGO' : (t.compliance || 'CONFORME'),
+            isoStandardRef: t.isoStandardRef,
+            specificationLimit: t.specificationLimit,
+            technicalNotes: t.technicalNotes || '',
+            method: t.technicalNotes ? t.technicalNotes.replace(/^Metodolog[ií]a:\s*/i, '').trim() : ''
+        };
+    });
 
     let evidence = [];
     if (sqlReport.evidencePhotos) {
@@ -113,18 +145,33 @@ const mapSqlReportToRequest = (sqlReport) => {
         }
     }
 
+    const patientFullName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : '';
+
     return {
         id: sqlReport.reportNumber,
         numericId: sqlReport.id,
         reportNumber: sqlReport.reportNumber,
-        clientName: isInd ? (client?.companyName || 'Cliente Industrial') : `${sqlReport.clinicalOrder?.sample?.patient?.firstName || ''} ${sqlReport.clinicalOrder?.sample?.patient?.lastName || ''}`.trim() || 'Paciente',
-        clientContactName: client?.contactName || 'Responsable de Calidad',
+        reportType: sqlReport.reportType,
+        isClinical,
+        clientName: isInd ? (client?.companyName || 'Cliente Industrial') : (patientFullName || 'Paciente'),
+        patientName: patientFullName,
+        patientId: patient?.uniqueId || '',
+        patientCedula: patient?.uniqueId || '',
+        patientDob: patient?.dob || '',
+        patientAge: patient?.dob ? calculateAge(patient.dob) : null,
+        patientGender: patient?.gender === 'F' ? 'Femenino' : (patient?.gender === 'M' ? 'Masculino' : patient?.gender || 'N/D'),
+        patientPhone: patient?.phone || '',
+        clientContactName: isInd ? (client?.contactName || 'Responsable de Calidad') : (patientFullName || 'Paciente'),
         clientType: isInd ? 'industrial' : 'clinical',
-        sampleType: isInd ? (sample?.matrixType || 'Alimento Procesado') : (sqlReport.clinicalOrder?.sample?.sampleType || 'Suero'),
-        sampleDescription: sample?.barcode ? `${sample.matrixType} (Lote ${sample.lotNumber || 'S/L'})` : '1. BAÑO HOMBRES',
-        samplingProtocol: sample?.samplingProtocol || 'SMEWW / ISO 7218',
-        receptionTempC: sample?.receptionTempC || 4.2,
-        sampledBy: 'SOLICITANTE',
+        sampleType: isInd ? (sample?.matrixType || 'Alimento Procesado') : (clinicalSample?.sampleType || 'Suero Sanguíneo'),
+        sampleDescription: isInd 
+            ? (sample?.barcode ? `${sample.matrixType} (Lote ${sample.lotNumber || 'S/L'})` : '1. BAÑO HOMBRES')
+            : (clinicalSample?.sampleType || 'Suero / Química Sanguínea'),
+        samplingProtocol: isInd ? (sample?.samplingProtocol || 'SMEWW / ISO 7218') : 'Venopunción / Tubo Gel Separador (SST)',
+        receptionTempC: isInd ? (sample?.receptionTempC || 4.2) : null,
+        sampledBy: isInd ? 'SOLICITANTE' : 'Laboratorio Clínico MicroLabs',
+        analysisRequested: isInd ? 'Análisis Microbiológico de Alimentos / Aguas' : 'Perfil Lipídico Completo & Vitamina D',
+        analysisCode: isInd ? 'MICRO-IND' : 'QUIM-LIP-VIT',
         requestDate: { seconds: Math.floor(new Date(sqlReport.createdAt || sqlReport.signedAt || Date.now()).getTime() / 1000) },
         status: sqlReport.status === 'ISSUED' ? 'Completado' : sqlReport.status,
         signedByName: sqlReport.technicalDirector?.fullName || 'Dr. Roldan Ajún Chaverri',
@@ -312,9 +359,9 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCo
     }
 
     return (
-        <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
+        <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans print:h-auto print:overflow-visible print:bg-white print:block">
             <Sidebar user={user} userRole={userRole} navigateTo={navigateTo} view={view} labInfo={labInfo} />
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col overflow-hidden print:h-auto print:overflow-visible print:block">
                 <TopBar 
                     user={user} 
                     userRole={userRole} 
@@ -323,8 +370,8 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCo
                     onOpenCommandPalette={openPalette}
                     onOpenShortcuts={openShortcuts}
                 />
-                <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8">
-                    <div className="w-full max-w-7xl mx-auto">
+                <main className="flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-6 lg:p-8 print:p-0 print:m-0 print:bg-white print:h-auto print:overflow-visible print:block">
+                    <div className="w-full max-w-7xl mx-auto print:max-w-none print:w-full print:p-0 print:m-0">
                         <Suspense fallback={<LoadingSpinner />}>
                             {children}
                         </Suspense>
@@ -436,7 +483,7 @@ const AppContent = () => {
         address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
         directorName: 'Dr. Roldan Ajún Chaverri',
         directorCode: '802',
-        professional2Name: 'Dr. José Guillermo Ajún Jiménez',
+        professional2Name: 'M.Q.C. José Guillermo Ajún Jiménez',
         professional2Code: 'Reg. Trámite',
         branches: [
             {
@@ -919,6 +966,8 @@ const AppContent = () => {
                 <Route path="/accounting" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AccountingView navigateTo={navigateTo} userRole={userRole} /></LayoutWrapper>} />
                 <Route path="/billing" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><BillingView requests={requests} db={db} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} user={user} /></LayoutWrapper>} />
                 <Route path="/crm" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><CRMView db={db} clients={clients} user={user} requests={requests} /></LayoutWrapper>} />
+                <Route path="/client-crm" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ClientCRMView user={user} userRole={userRole} navigateTo={navigateTo} /></LayoutWrapper>} />
+                <Route path="/reminders" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><RemindersScheduleView user={user} userRole={userRole} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/quotes" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><QuotesView navigateTo={navigateTo} referenceLabs={referenceLabs} referenceLabTests={referenceLabTests} labInfo={labInfo} /></LayoutWrapper>} />
                 <Route path="/analyzer_inbox" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><AnalyzerInboxView db={db} user={user} navigateTo={navigateTo} /></LayoutWrapper>} />
                 <Route path="/results_review" element={<LayoutWrapper user={user} userRole={userRole} labInfo={labInfo} navigateTo={navigateTo}><ResultsReviewView db={db} user={user} requests={requests} analyses={analyses} labInfo={labInfo} navigateTo={navigateTo} /></LayoutWrapper>} />

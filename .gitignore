@@ -50,8 +50,14 @@ repair_state.json
 *.reg
 
 # Temporary test artifacts
+scripts/test_artifacts/
 scripts/*.png
 scripts/*.pdf
 scripts/*.html
+scripts/*.log
+scripts/*.txt
+scripts/*.cs
+scripts/qb_estimates_latest.json
+
 
 

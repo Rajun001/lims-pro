@@ -481,3 +481,26 @@ model AccessLog {
   @@index([timestamp])
   @@index([ip])
 }
+
+model ReminderSchedule {
+  id               Int       @id @default(autoincrement())
+  reminderType     String    // "INTERNAL_PENDING_ORDER", "INTERNAL_PENDING_SIGNATURE", "INTERNAL_INCUBATION_OVERDUE", "INTERNAL_EQUIPMENT_CALIBRATION", "EXTERNAL_CLIENT_RENEWAL", "EXTERNAL_PATIENT_READY", "EXTERNAL_PATIENT_FOLLOWUP"
+  targetAudience   String    // "INTERNAL_STAFF", "CORPORATE_CLIENT", "CLINICAL_PATIENT"
+  recipientName    String
+  recipientContact String?   // Teléfono WhatsApp o Correo electrónico
+  channel          String    @default("SYSTEM") // "WHATSAPP", "EMAIL", "SYSTEM"
+  title            String
+  message          String
+  dueDate          DateTime  @default(now())
+  status           String    @default("PENDING") // "PENDING", "SENT", "SNOOZED", "DISMISSED"
+  sentAt           DateTime?
+  entityReference  String?   // Código de informe, muestra, orden o equipo
+  priority         String    @default("NORMAL") // "LOW", "NORMAL", "HIGH", "URGENT"
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([targetAudience])
+  @@index([reminderType])
+}

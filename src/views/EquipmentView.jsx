@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Microscope, PlusCircle, Search, Edit, Trash2, Calendar, AlertTriangle, CheckCircle2, Wrench } from 'lucide-react';
+import { Microscope, PlusCircle, Search, Edit, Trash2, Calendar, AlertTriangle, CheckCircle2, Wrench, RefreshCcw } from 'lucide-react';
 import { collection, query, onSnapshot, doc, updateDoc, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { formatToCRDate } from '../utils/dateFormatter.js';
 import { useNotification } from '../contexts/NotificationContext';
+import { OFFICIAL_MICROLABS_EQUIPMENT } from '../constants/officialEquipment';
 
 export const EquipmentView = ({ db, user }) => {
     const [equipmentList, setEquipmentList] = useState([]);
@@ -30,13 +31,8 @@ export const EquipmentView = ({ db, user }) => {
             const loadLocalEquipment = () => {
                 let localEq = localStorage.getItem('lims_local_equipment');
                 if (!localEq) {
-                    const defaultEquipment = [
-                        { id: 'eq-1', name: 'Analizador Químico Fuji NX6000', brand: 'Fujifilm', model: 'NX6000', serialNumber: 'FNX-7762', status: 'Activo', location: 'Hematología y Química', lastMaintenance: '2026-02-15', nextMaintenance: '2026-08-15', calibrationDate: '2026-02-15' },
-                        { id: 'eq-2', name: 'Snibe Maglumi 800', brand: 'Snibe', model: '800', serialNumber: 'MAG-8812', status: 'Activo', location: 'Inmunología', lastMaintenance: '2026-03-01', nextMaintenance: '2026-09-01', calibrationDate: '2026-03-01' },
-                        { id: 'eq-3', name: 'Incubadora Microbiológica Memmert', brand: 'Memmert', model: 'IN30', serialNumber: 'MEM-0091', status: 'Activo', location: 'Microbiología', lastMaintenance: '2025-11-10', nextMaintenance: '2026-05-10', calibrationDate: '2025-11-10' }
-                    ];
-                    localStorage.setItem('lims_local_equipment', JSON.stringify(defaultEquipment));
-                    localEq = JSON.stringify(defaultEquipment);
+                    localStorage.setItem('lims_local_equipment', JSON.stringify(OFFICIAL_MICROLABS_EQUIPMENT));
+                    localEq = JSON.stringify(OFFICIAL_MICROLABS_EQUIPMENT);
                 }
                 setEquipmentList(JSON.parse(localEq));
             };
@@ -186,6 +182,24 @@ export const EquipmentView = ({ db, user }) => {
         return diffDays <= 15; // Alerta 15 días antes
     };
 
+    const handleRestoreOfficialEquipment = async () => {
+        if (window.confirm("¿Desea restaurar el parque completo de los 12 analizadores e instrumentos oficiales de Microlabs (Cobas c111, Mindray BC-5000, Maglumi X3, 3M MDS, IUL Flash&Go, etc.)?")) {
+            if (user?.uid === 'offline-user') {
+                localStorage.setItem('lims_local_equipment', JSON.stringify(OFFICIAL_MICROLABS_EQUIPMENT));
+                setEquipmentList(OFFICIAL_MICROLABS_EQUIPMENT);
+                addNotification("Parque de 12 equipos oficiales restaurado con éxito.", "success");
+            } else {
+                for (const eq of OFFICIAL_MICROLABS_EQUIPMENT) {
+                    await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/equipment`), {
+                        ...eq,
+                        createdAt: serverTimestamp()
+                    });
+                }
+                addNotification("Equipos oficiales cargados en la base de datos.", "success");
+            }
+        }
+    };
+
     return (
         <div className="space-y-6 animate-fade-in pb-12">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -193,14 +207,24 @@ export const EquipmentView = ({ db, user }) => {
                     <h2 className="text-2xl font-extrabold text-slate-800 flex items-center gap-2">
                         <Wrench className="text-indigo-600" /> Inventario de Equipos
                     </h2>
-                    <p className="text-slate-500 text-sm mt-1">Gestión de analizadores, mantenimientos y calibraciones.</p>
+                    <p className="text-slate-500 text-sm mt-1">Gestión de analizadores, mantenimientos y calibraciones oficiales de Microlabs.</p>
                 </div>
-                <button
-                    onClick={() => setShowModal(true)}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-all"
-                >
-                    <PlusCircle size={18} /> Registrar Equipo
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                        type="button"
+                        onClick={handleRestoreOfficialEquipment}
+                        className="bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        title="Restaurar el catálogo de 12 equipos oficiales de Microlabs"
+                    >
+                        <RefreshCcw size={15} /> <span>Restaurar Parque Oficial (12 Equipos)</span>
+                    </button>
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-indigo-700 shadow-sm flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                        <PlusCircle size={18} /> Registrar Equipo
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

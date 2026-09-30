@@ -95,14 +95,16 @@ chmod +x *.sh
 
 ---
 
-## 📚 Documentación y Guías
+## 📚 Documentación y Guías del Sistema
 
-Toda la documentación técnica y operativa está disponible en la carpeta [`docs/`](file:///c:/lims-microlabs/docs):
+Toda la documentación técnica, arquitectónica y operativa está centralizada y clasificada para fácil mantenimiento:
 
-1. 📘 [**Manual de Usuario y POEs Operativos**](file:///c:/lims-microlabs/docs/MANUAL_DE_USUARIO_LIMS.md): Protocolos estándar (POE-01 al POE-07) para recepción de muestras, QC, validación médica, facturación Hacienda v4.4 y contingencia offline.
-2. 🔄 [**Guía de Actualización Automática**](file:///c:/lims-microlabs/docs/actualizacion_automatica.md): Arquitectura de auto-actualización, tareas programadas en Windows y cron jobs.
-3. ☁️ [**Guía de Despliegue en Firebase Hosting**](file:///c:/lims-microlabs/docs/deploy.md): Pasos para publicar la aplicación SPA en la nube.
-4. 🍏 [**Configuración en Mac Mini (macOS)**](file:///c:/lims-microlabs/docs/MAC_MINI_SETUP.md): Configuración de entorno 24/7 y acceso LAN en servidores Apple Silicon.
+1. 🗺️ [**Mapa Integral del Sistema y Guía de Reparaciones**](file:///c:/lims-microlabs/docs/MAPA_DEL_SISTEMA.md): Directorio maestro con la ubicación exacta de cada componente, pantalla, constante normativa (RTCA), servicios de backend y guía rápida de solución de problemas.
+2. 🛠️ [**Catálogo de Scripts y Automatizaciones**](file:///c:/lims-microlabs/scripts/README.md): Clasificación de utilidades de QuickBooks QODBC, mantenimiento de Windows, migraciones y diagnósticos.
+3. 📘 [**Manual de Usuario y POEs Operativos**](file:///c:/lims-microlabs/docs/MANUAL_DE_USUARIO_LIMS.md): Protocolos estándar (POE-01 al POE-07) para recepción de muestras, QC, validación médica, facturación Hacienda v4.4 y contingencia offline.
+4. 🔄 [**Guía de Actualización Automática**](file:///c:/lims-microlabs/docs/actualizacion_automatica.md): Arquitectura de auto-actualización, tareas programadas en Windows y cron jobs.
+5. ☁️ [**Guía de Despliegue en Firebase Hosting**](file:///c:/lims-microlabs/docs/deploy.md): Pasos para publicar la aplicación SPA en la nube.
+6. 🍏 [**Configuración en Mac Mini (macOS)**](file:///c:/lims-microlabs/docs/MAC_MINI_SETUP.md): Configuración de entorno 24/7 y acceso LAN en servidores Apple Silicon.
 
 ---
 

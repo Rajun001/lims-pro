@@ -129,8 +129,14 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole, onOpenCommandPalet
                                     </div>
                                 ))}
                             </div>
-                            <div className="p-2 text-center border-t border-slate-100">
-                                <button onClick={() => setShowNotifications(false)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800">Cerrar</button>
+                            <div className="p-2.5 text-center border-t border-slate-100 flex items-center justify-between bg-slate-50">
+                                <button 
+                                    onClick={() => { setShowNotifications(false); navigateTo('reminders'); }} 
+                                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                                >
+                                    Ver Agenda & Alertas LIMS →
+                                </button>
+                                <button onClick={() => setShowNotifications(false)} className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer">Cerrar</button>
                             </div>
                         </div>
                     )}

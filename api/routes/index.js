@@ -12,6 +12,9 @@ import authRoutes from './auth.routes.js';
 import reportsRoutes from './reports.routes.js';
 import ecosystemRoutes from './ecosystem.routes.js';
 import publicWebRoutes from './publicWeb.routes.js';
+import crmRoutes from './crm.routes.js';
+import qbSyncRoutes from './qbSync.routes.js';
+import remindersRoutes from './reminders.routes.js';
 
 const apiRouter = Router();
 
@@ -29,5 +32,8 @@ apiRouter.use(authRoutes);
 apiRouter.use(reportsRoutes);
 apiRouter.use(ecosystemRoutes);
 apiRouter.use(publicWebRoutes);
+apiRouter.use(crmRoutes);
+apiRouter.use(qbSyncRoutes);
+apiRouter.use(remindersRoutes);
 
 export default apiRouter;

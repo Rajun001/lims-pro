@@ -3,7 +3,7 @@ import {
     FileText, Search, Filter, Calendar, ShieldCheck, Download, Eye, 
     ArrowRight, CheckCircle2, Clock, AlertCircle, Building2, FlaskConical,
     Sparkles, RefreshCw, FileCheck, Layers, ChevronLeft, ChevronRight,
-    Camera, Sliders
+    Camera, Sliders, Database, Upload
 } from 'lucide-react';
 import { LoadingSpinner } from '../components/UI';
 
@@ -17,7 +17,10 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalReports, setTotalReports] = useState(0);
+    const [reportCounts, setReportCounts] = useState({ totalIndustrial: 0, totalClinical: 0 });
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [syncingQB, setSyncingQB] = useState(false);
+    const [syncNotification, setSyncNotification] = useState(null);
 
     const pageSize = 15;
 
@@ -38,6 +41,12 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                     setReports(data.items || []);
                     setTotalPages(data.totalPages || 1);
                     setTotalReports(data.total || 0);
+                    if (data.counts) {
+                        setReportCounts({
+                            totalIndustrial: data.counts.totalIndustrial || 0,
+                            totalClinical: data.counts.totalClinical || 0
+                        });
+                    }
                 } else {
                     console.error("Error al consultar informes");
                 }
@@ -51,9 +60,92 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
         fetchReports();
     }, [currentPage, searchTerm, selectedType, selectedStatus, refreshTrigger]);
 
+    const handleSyncQB = async () => {
+        setSyncingQB(true);
+        setSyncNotification({ type: 'info', message: 'Sincronizando base de datos con QuickBooks (2024 a la fecha)...' });
+        try {
+            const res = await fetch('/api/qb/sync-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ maxReturned: 1000, fromDate: '2024-01-01' })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setSyncNotification({
+                    type: 'success',
+                    message: `¡Sincronización completada! ${data.imported || 0} nuevos estimados ingresados a la base de datos (${data.estimatesCount || 0} analizados).`
+                });
+                setRefreshTrigger(prev => prev + 1);
+            } else {
+                const fallbackRes = await fetch('/api/qb/import-json', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                const fallbackData = await fallbackRes.json();
+                if (fallbackRes.ok && fallbackData.success) {
+                    setSyncNotification({
+                        type: 'success',
+                        message: `Migración directa completada: ${fallbackData.imported || 0} estimados procesados (${fallbackData.clinicalReports || 0} clínicos, ${fallbackData.industrialReports || 0} industriales).`
+                    });
+                    setRefreshTrigger(prev => prev + 1);
+                } else {
+                    setSyncNotification({
+                        type: 'warning',
+                        message: data.message || fallbackData.message || 'QuickBooks está en uso interactivo. Puede cargar directamente un archivo JSON.'
+                    });
+                }
+            }
+        } catch (err) {
+            setSyncNotification({ type: 'error', message: `Error al sincronizar: ${err.message}` });
+        } finally {
+            setSyncingQB(false);
+        }
+    };
+
+    const handleFileJsonUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setSyncingQB(true);
+        setSyncNotification({ type: 'info', message: `Procesando archivo ${file.name}...` });
+        try {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const parsed = JSON.parse(event.target.result);
+                    const estimates = Array.isArray(parsed) ? parsed : (parsed.estimates || []);
+                    const res = await fetch('/api/qb/import-json', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ estimates })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        setSyncNotification({
+                            type: 'success',
+                            message: `¡Carga exitosa! ${data.imported || 0} estimados importados a BD (${data.clinicalReports || 0} clínicos, ${data.industrialReports || 0} industriales).`
+                        });
+                        setRefreshTrigger(prev => prev + 1);
+                    } else {
+                        setSyncNotification({ type: 'error', message: data.message || 'Error al procesar archivo JSON' });
+                    }
+                } catch (parseErr) {
+                    setSyncNotification({ type: 'error', message: `JSON no válido: ${parseErr.message}` });
+                } finally {
+                    setSyncingQB(false);
+                }
+            };
+            reader.readAsText(file);
+        } catch (err) {
+            setSyncNotification({ type: 'error', message: err.message });
+            setSyncingQB(false);
+        }
+    };
+
     // Matrices únicas para filtros rápidos
     const matrices = [
         'ALL',
+        'Suero Sanguíneo',
         'Agua Potable',
         'Alimento Procesado',
         'Superficie Inerte',
@@ -69,11 +161,32 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
 
     return (
         <div className="space-y-6 animate-fade-in pb-12">
+            {/* Notificación de Sincronización */}
+            {syncNotification && (
+                <div className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-sm ${
+                    syncNotification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                    syncNotification.type === 'warning' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                    syncNotification.type === 'error' ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                    'bg-sky-50 text-sky-800 border-sky-200'
+                }`}>
+                    <div className="flex items-center gap-2">
+                        <Sparkles size={16} className={syncNotification.type === 'success' ? 'text-emerald-600' : 'text-sky-600'} />
+                        <span>{syncNotification.message}</span>
+                    </div>
+                    <button 
+                        onClick={() => setSyncNotification(null)}
+                        className="text-slate-400 hover:text-slate-700 font-bold ml-4 cursor-pointer"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
             {/* Header del Centro de Informes & Certificados */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
                 <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+                    <div className="flex items-center gap-3 mb-1">
+                        <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
                             <FileText size={22} />
                         </span>
                         <h1 className="text-2xl font-black text-slate-800 tracking-tight">
@@ -81,12 +194,33 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                         </h1>
                     </div>
                     <p className="text-slate-500 text-xs sm:text-sm">
-                        Catálogo centralizado de Certificados de Análisis (CoA) ISO/IEC 17025:2017 e Informes Clínicos. 
-                        Histórico sincronizado con Estimaciones de QuickBooks ({totalReports.toLocaleString()} informes registrados).
+                        Catálogo centralizado de Certificados de Análisis (CoA) INTE/ISO/IEC 17025 (INTECO) e Informes Clínicos (INTE/ISO 15189). 
+                        Histórico directo en base de datos LIMS sincronizado con QuickBooks ({totalReports.toLocaleString()} registros).
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <button 
+                        onClick={handleSyncQB}
+                        disabled={syncingQB}
+                        className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                        title="Sincronizar base de datos con QuickBooks (2024 a la fecha)"
+                    >
+                        <Database size={14} className={syncingQB ? 'animate-spin' : ''} />
+                        <span>{syncingQB ? 'Sincronizando...' : 'Sincronizar QB (2024 a Hoy)'}</span>
+                    </button>
+
+                    <label className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
+                        <Upload size={14} />
+                        <span>Importar JSON</span>
+                        <input 
+                            type="file" 
+                            accept=".json" 
+                            onChange={handleFileJsonUpload} 
+                            className="hidden" 
+                        />
+                    </label>
+
                     <button 
                         onClick={() => setRefreshTrigger(prev => prev + 1)}
                         className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
@@ -100,7 +234,7 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                         className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
                     >
                         <Sparkles size={15} />
-                        <span>Ver Certificado Demo ISO 17025</span>
+                        <span>Ver Demo ISO 17025</span>
                     </button>
                 </div>
             </div>
@@ -119,7 +253,9 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
                     <div>
                         <span className="text-[11px] font-bold text-slate-400 uppercase block">Industriales (CoA)</span>
-                        <span className="text-2xl font-black text-emerald-600">1,223</span>
+                        <span className="text-2xl font-black text-emerald-600">
+                            {reportCounts.totalIndustrial > 0 ? reportCounts.totalIndustrial.toLocaleString() : '...'}
+                        </span>
                     </div>
                     <span className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
                         <Building2 size={20} />
@@ -128,7 +264,9 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                 <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
                     <div>
                         <span className="text-[11px] font-bold text-slate-400 uppercase block">Clínicos (ISO 15189)</span>
-                        <span className="text-2xl font-black text-indigo-600">79</span>
+                        <span className="text-2xl font-black text-indigo-600">
+                            {reportCounts.totalClinical > 0 ? reportCounts.totalClinical.toLocaleString() : '...'}
+                        </span>
                     </div>
                     <span className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
                         <FlaskConical size={20} />
@@ -231,7 +369,8 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                             </thead>
                             <tbody className="divide-y divide-slate-150">
                                 {filteredReports.map((r) => {
-                                    const isIndustrial = r.reportType === 'INDUSTRIAL_COA';
+                                    const isClinical = r.reportType === 'CLINICAL' || r.reportType === 'CLINICAL_HUMAN' || (r.matrix && r.matrix.toLowerCase().includes('suero'));
+                                    const isIndustrial = !isClinical;
                                     return (
                                         <tr key={r.id} className="hover:bg-slate-50/75 transition-colors group">
                                             <td className="p-3.5 pl-6">
@@ -246,7 +385,7 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                                                     )}
                                                 </div>
                                                 <span className="text-[9.5px] font-semibold text-slate-400 block mt-0.5">
-                                                    {isIndustrial ? 'Certificado CoA Industrial' : 'Informe Clínico'}
+                                                    {isClinical ? 'Informe Clínico ISO 15189' : 'Certificado CoA Industrial'}
                                                 </span>
                                             </td>
 
@@ -255,14 +394,18 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                                                     {isIndustrial ? (
                                                         <Building2 size={14} className="text-slate-400 shrink-0" />
                                                     ) : (
-                                                        <FlaskConical size={14} className="text-slate-400 shrink-0" />
+                                                        <FlaskConical size={14} className="text-indigo-500 shrink-0" />
                                                     )}
                                                     <span className="truncate max-w-[200px]">{r.clientName}</span>
                                                 </div>
                                             </td>
 
                                             <td className="p-3.5">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                                    isClinical 
+                                                        ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                                        : 'bg-slate-100 text-slate-700 border-slate-200/80'
+                                                }`}>
                                                     {r.matrix}
                                                 </span>
                                             </td>
@@ -292,11 +435,15 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                                                 <div className="flex items-center justify-end gap-1.5">
                                                     <button
                                                         onClick={() => navigateTo('final_report', r.reportNumber)}
-                                                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
-                                                        title="Abrir Certificado con Opciones y Evidencias"
+                                                        className={`flex items-center gap-1 px-3 py-1.5 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                                                            isClinical 
+                                                                ? 'bg-purple-600 hover:bg-purple-700' 
+                                                                : 'bg-indigo-600 hover:bg-indigo-700'
+                                                        }`}
+                                                        title={isClinical ? "Abrir Informe Clínico ISO 15189" : "Abrir Certificado con Opciones y Evidencias"}
                                                     >
                                                         <Eye size={13} />
-                                                        <span>Ver Certificado</span>
+                                                        <span>{isClinical ? 'Ver Informe Clínico' : 'Ver Certificado'}</span>
                                                     </button>
                                                     <a
                                                         href={`/verify/${r.reportNumber}`}

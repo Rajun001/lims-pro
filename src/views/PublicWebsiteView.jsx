@@ -162,10 +162,10 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
             {/* Top Announcement Bar */}
             <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-slate-900 border-b border-indigo-700/40 text-xs py-2 px-4 text-center flex flex-wrap items-center justify-center gap-2">
                 <span className="bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded text-[10px] uppercase tracking-wider">
-                    Acreditación 2026
+                    Calidad & Proficiencia 2026
                 </span>
                 <span className="text-slate-200">
-                    Microlabs Químicos S.A. evaluado por <strong>LGC AXIO PT (UK)</strong> · Dirección Técnica calificada como <strong>Evaluador Oficial ECA INTE/ISO-IEC 17025</strong>.
+                    Microlabs Químicos S.A. bajo directrices <strong>INTE/ISO/IEC 17025:2017 (INTECO)</strong> · Validez analítica certificada por <strong>LGC AXIO PT (UK)</strong> y <strong>AOAC</strong>.
                 </span>
                 <button 
                     onClick={() => {
@@ -217,7 +217,7 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                             Cotizador Online
                         </a>
                         <a href="#acreditaciones" onClick={() => setActiveSection('acreditaciones')} className="hover:text-white transition-colors flex items-center gap-1">
-                            <Award size={14} className="text-amber-400" /> Acreditaciones & ECA
+                            <Award size={14} className="text-amber-400" /> Calidad INTECO & PT
                         </a>
                     </nav>
 
@@ -252,7 +252,7 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                             </h1>
 
                             <p className="text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl font-normal">
-                                Ensayos microbiológicos de alta fidelidad para la industria de alimentos, aguas potables, residuales, monitoreo ambiental y química clínica, auditados bajo <strong>INTE/ISO-IEC 17025</strong> por Evaluador Oficial del <strong>ECA</strong> y validados con <strong>LGC AXIO PT (UK)</strong>, <strong>AOAC International</strong> y tecnología <strong>3M Molecular Detection</strong>.
+                                Ensayos microbiológicos de alta fidelidad para la industria de alimentos, aguas potables, residuales, monitoreo ambiental y química clínica, operando bajo la norma <strong>INTE/ISO/IEC 17025:2017 de INTECO</strong>, con aseguramiento de calidad certificado mediante Ensayos de Aptitud / Test de Proficiencia con <strong>LGC AXIO PT (UK)</strong>, <strong>AOAC International</strong> y tecnología <strong>3M Molecular Detection</strong>.
                             </p>
 
                             <div className="flex flex-wrap gap-4 pt-2">
@@ -673,10 +673,10 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                             <Award size={14} className="text-amber-400" /> Competencia Técnica & Respaldo Oficial
                         </span>
                         <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-                            Acreditaciones, Evaluador ECA & Métodos Normalizados
+                            Sistema de Calidad INTECO ISO 17025, Proficiencia & Métodos Normalizados
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                            Nuestra dirección técnica está calificada como <strong>Evaluador Oficial del Ente Costarricense de Acreditación (ECA)</strong> bajo la norma <strong>INTE/ISO-IEC 17025</strong>, con respaldo internacional de <strong>LGC AXIO PT (UK)</strong>, <strong>AOAC International</strong> y métodos validados <strong>3M Food Safety</strong>.
+                            Laboratorio con Sistema de Gestión de Calidad implementado bajo la norma <strong>INTE/ISO/IEC 17025:2017 de INTECO</strong>. La validez técnica está respaldada con Certificaciones de Test de Proficiencia internacional (<strong>LGC AXIO PT UK</strong>, <strong>AOAC International</strong>), métodos validados <strong>3M Food Safety</strong> y Dirección Técnica calificada en formación de evaluadores según INTE/ISO-IEC 17025.
                         </p>
                     </div>
 
@@ -684,7 +684,7 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                     <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                         {[
                             { id: 'all', label: 'Todas las Certificaciones (10)', icon: Sparkles },
-                            { id: 'eca', label: 'Evaluador Oficial ECA ISO 17025', icon: ShieldCheck, badge: 'Nota 100' },
+                            { id: 'eca', label: 'Formación Evaluadores ISO 17025', icon: ShieldCheck, badge: 'Nota 100' },
                             { id: 'pt', label: 'Proficiencia LGC / AOAC', icon: Award, badge: '2026 Vigente' },
                             { id: 'methods', label: 'Métodos Normalizados 3M / AOAC', icon: Microscope },
                             { id: 'regulatory', label: 'Habilitaciones SENASA / MEIC / CMQC', icon: Building }
@@ -721,14 +721,14 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                             {
                                 id: 'cert-eca-17025',
                                 category: 'eca',
-                                title: 'Evaluador de Laboratorios de Ensayo',
+                                title: 'Formación de Evaluadores de Laboratorio (ISO 17025)',
                                 standard: 'INTE/ISO-IEC 17025:2005',
                                 authority: 'Ente Costarricense de Acreditación (ECA)',
                                 holder: 'Dr. Roldan Ajún Chaverri',
                                 regCode: 'Reg. 2017-019-001 · Nota 100/100',
-                                badge: 'Evaluador Oficial ECA',
+                                badge: 'Formación ECA ISO 17025',
                                 badgeColor: 'bg-sky-500/20 text-sky-300 border-sky-400/40',
-                                description: 'Certificado de Aprobación en Formación de Evaluadores según INTE/ISO-IEC 17025 por el ECA. Acredita competencia como auditor y evaluador técnico en sistemas de gestión de calidad en laboratorios de ensayo.',
+                                description: 'Certificado de Aprobación en Formación de Evaluadores según INTE/ISO-IEC 17025 otorgado al Dr. Roldan Ajún Chaverri (Reg. 2017-019-001, Nota 100/100). Respalda la competencia técnica en diseño, auditoría interna e implementación del sistema de calidad bajo directrices INTECO.',
                                 src: '/certificates/eca_evaluador_iso17025.jpg',
                                 tags: ['ISO/IEC 17025', 'Nota 100/100', 'Auditoría Técnica'],
                                 highlighted: true

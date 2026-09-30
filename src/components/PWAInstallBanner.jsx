@@ -16,7 +16,7 @@ export function PWAInstallBanner() {
             {/* ── Indicador Online/Offline ── */}
             <div
                 title={isOnline ? 'Conectado' : 'Sin conexión — modo offline activo'}
-                className={`fixed bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border transition-all duration-500 ${
+                className={`fixed bottom-4 right-4 z-40 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border transition-all duration-500 print:hidden ${
                     isOnline
                         ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                         : 'bg-red-50 border-red-300 text-red-700 animate-pulse'

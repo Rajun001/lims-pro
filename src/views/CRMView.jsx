@@ -7,6 +7,7 @@ import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
 
 import { getApiUrl } from '../utils/api.js';
+import { PRELOADED_CORPORATE_CLIENTS } from '../constants/preloadedClients';
 
 const API_URL = getApiUrl();
 
@@ -453,6 +454,49 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
         }
     };
 
+    const handlePreloadCorporateClients = async () => {
+        if (!window.confirm("¿Desea cargar los 30 clientes industriales oficiales de Microlabs (Alimentos Prosalud, Taco Bell, AMPM, Spoon, Megasuper, Britt, etc.)?")) {
+            return;
+        }
+        const isOffline = user?.uid === 'offline-user';
+        let addedCount = 0;
+        try {
+            const localClients = isOffline ? JSON.parse(localStorage.getItem('lims_local_clients') || '[]') : [];
+            for (const client of PRELOADED_CORPORATE_CLIENTS) {
+                const exists = clients.some(c => (c.name || '').toLowerCase() === client.name.toLowerCase()) ||
+                               (isOffline && localClients.some(c => (c.name || '').toLowerCase() === client.name.toLowerCase()));
+                if (exists) continue;
+
+                const payload = {
+                    name: client.name,
+                    clientType: client.clientType,
+                    type: client.clientType,
+                    document: client.document,
+                    documentType: 'Cédula Jurídica',
+                    contacts: [{ id: Date.now() + Math.random(), name: 'Dpto. Calidad / Inocuidad', email: client.email, phone: client.phone, role: 'Facturación' }],
+                    phones: [{ id: Date.now() + Math.random(), number: client.phone, type: 'Oficina' }],
+                    status: 'Activo',
+                    createdAt: isOffline ? { seconds: Math.floor(Date.now() / 1000) } : serverTimestamp()
+                };
+
+                if (isOffline) {
+                    localClients.push({ id: 'client-local-' + Date.now() + '-' + addedCount, ...payload });
+                } else {
+                    await addDoc(collection(db, `artifacts/${LIMSSystemId}/public/data/clients`), payload);
+                }
+                addedCount++;
+            }
+
+            if (isOffline) {
+                localStorage.setItem('lims_local_clients', JSON.stringify(localClients));
+                window.dispatchEvent(new Event('lims_local_data_updated'));
+            }
+            addNotification(`Se precargaron ${addedCount} clientes industriales oficiales de Microlabs.`, "success");
+        } catch (err) {
+            console.error("Error al precargar clientes:", err);
+            addNotification("Error al cargar clientes institucionales.", "error");
+        }
+    };
 
     const handleEditClient = () => {
         if (!selectedClient) return;
@@ -828,6 +872,15 @@ export const CRMView = ({ db = firestoreDb, clients = [], user, requests = [] })
                     >
                         <FileSpreadsheet size={18} /> Importar QuickBooks (CSV)
                     </button>
+                    {activeCrmTab === 'Empresas' && (
+                        <button
+                            onClick={handlePreloadCorporateClients}
+                            className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all cursor-pointer text-sm"
+                            title="Pre-cargar 30 clientes industriales oficiales de Microlabs (Alimentos Prosalud, Taco Bell, AMPM, Spoon, etc.)"
+                        >
+                            <Building size={18} /> Pre-cargar Clientes Microlabs (30)
+                        </button>
+                    )}
                     <button
                         onClick={() => {
                             setEditingClientId(null);

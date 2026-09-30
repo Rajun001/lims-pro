@@ -2,6 +2,7 @@ import { Router } from 'express';
 import prisma from '../config/db.js';
 import { ReportGeneratorService } from '../services/reportGenerator.service.js';
 import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { fetchAndIngestSingleEstimate } from '../services/qbWatcher.service.js';
 
 const router = Router();
 
@@ -16,18 +17,26 @@ router.get('/reports', async (req, res) => {
     const status = req.query.status;
 
     const where = {};
-    if (type) where.reportType = type;
-    if (status) where.status = status;
+    if (type === 'CLINICAL' || type === 'CLINICAL_HUMAN') {
+      where.reportType = 'CLINICAL';
+    } else if (type === 'INDUSTRIAL_COA' || type === 'INDUSTRIAL') {
+      where.reportType = 'INDUSTRIAL_COA';
+    } else if (type && type !== 'ALL') {
+      where.reportType = type;
+    }
+    if (status && status !== 'ALL') where.status = status;
     if (search) {
       where.OR = [
         { reportNumber: { contains: search } },
-        { industrialSample: { sampleDescription: { contains: search } } },
         { industrialSample: { matrixType: { contains: search } } },
-        { industrialSample: { contract: { client: { companyName: { contains: search } } } } }
+        { industrialSample: { contract: { client: { companyName: { contains: search } } } } },
+        { clinicalOrder: { sample: { patient: { firstName: { contains: search } } } } },
+        { clinicalOrder: { sample: { patient: { lastName: { contains: search } } } } },
+        { clinicalOrder: { sample: { patient: { uniqueId: { contains: search } } } } }
       ];
     }
 
-    const [total, items] = await Promise.all([
+    const [total, items, totalIndustrial, totalClinical] = await Promise.all([
       prisma.report.count({ where }),
       prisma.report.findMany({
         where,
@@ -54,7 +63,9 @@ router.get('/reports', async (req, res) => {
           },
           signature: true
         }
-      })
+      }),
+      prisma.report.count({ where: { reportType: 'INDUSTRIAL_COA' } }),
+      prisma.report.count({ where: { reportType: { in: ['CLINICAL', 'CLINICAL_HUMAN'] } } })
     ]);
 
     const formatted = items.map(r => {
@@ -86,6 +97,11 @@ router.get('/reports', async (req, res) => {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+      counts: {
+        totalFiltered: total,
+        totalIndustrial,
+        totalClinical
+      },
       items: formatted
     });
   } catch (err) {
@@ -102,7 +118,7 @@ router.get('/reports/details/:id', async (req, res) => {
       ? { OR: [{ id: numericId }, { reportNumber: param }] }
       : { reportNumber: param };
 
-    const report = await prisma.report.findFirst({
+    let report = await prisma.report.findFirst({
       where: whereClause,
       include: {
         industrialSample: {
@@ -123,6 +139,11 @@ router.get('/reports/details/:id', async (req, res) => {
         signature: true
       }
     });
+
+    if (!report) {
+      // Just-in-Time (JIT): Intentar traer de QuickBooks si fue recién creado
+      report = await fetchAndIngestSingleEstimate(param);
+    }
 
     if (!report) {
       return res.status(404).json({ error: 'Informe no encontrado' });

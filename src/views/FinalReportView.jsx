@@ -5,13 +5,19 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { 
     ArrowLeft, Printer, Share2, Smartphone, Mail, Microscope, 
     ShieldCheck, Sliders, CheckSquare, Layers, Eye, FileText, 
-    TrendingUp, Sparkles, Camera, Check, Settings2
+    TrendingUp, Sparkles, Camera, Check, Settings2, Edit3, MessageCircle, RefreshCw
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Logo, BarcodeDisplay } from '../components/UI';
 import { ShareReportModal } from '../components/ShareReportModal';
 import { ReportEvidenceGallery } from '../components/ReportEvidenceGallery';
 import { defaultMicrobiologyEvidence } from '../constants/evidenceData.js';
+import { DualReportSignatureBlock } from '../components/ReportSignatures';
+import { MICROBIOLOGISTS_CATALOG, SIGNATURE_PRESETS } from '../constants/signatures';
+import { generateReportAIEvaluation } from '../services/aiService';
+import { AnalyticalSafetyGuard } from '../components/AnalyticalSafetyGuard';
+import { QualityLibraryModal } from '../components/QualityLibraryModal';
+import { MICROBIOLOGY_STANDARDS, findStandardByCommodity } from '../constants/microbiologyStandards';
 import versionData from '../version.json';
 
 const RangeIndicator = ({ value, min, max, reportLang }) => {
@@ -19,62 +25,109 @@ const RangeIndicator = ({ value, min, max, reportLang }) => {
     const minVal = parseFloat(min);
     const maxVal = parseFloat(max);
     
-    if (isNaN(val) || isNaN(minVal) || isNaN(maxVal) || minVal >= maxVal) {
+    if (isNaN(val) || (isNaN(minVal) && isNaN(maxVal))) {
         return null;
     }
 
-    const range = maxVal - minVal;
-    const viewMin = minVal - range * 0.25;
-    const viewMax = maxVal + range * 0.25;
-    const totalViewRange = viewMax - viewMin;
+    const effectiveMin = !isNaN(minVal) ? minVal : 0;
+    const effectiveMax = !isNaN(maxVal) ? maxVal : effectiveMin * 2;
+    if (effectiveMin >= effectiveMax) return null;
+
+    const span = effectiveMax - effectiveMin;
+    const isSingleThresholdMax = minVal === 0 || isNaN(minVal);
     
-    const normalStartPercent = ((minVal - viewMin) / totalViewRange) * 100;
-    const normalEndPercent = ((maxVal - viewMin) / totalViewRange) * 100;
+    // Virtual visual bounds to give comfortable margin
+    const viewMin = Math.max(0, effectiveMin - span * 0.35);
+    const viewMax = effectiveMax + span * 0.45;
+    const totalSpan = viewMax - viewMin;
+
+    const normalStartPercent = Math.max(0, Math.min(100, ((effectiveMin - viewMin) / totalSpan) * 100));
+    const normalEndPercent = Math.max(0, Math.min(100, ((effectiveMax - viewMin) / totalSpan) * 100));
     
-    let valPercent = ((val - viewMin) / totalViewRange) * 100;
-    valPercent = Math.max(0, Math.min(100, valPercent));
+    let valPercent = ((val - viewMin) / totalSpan) * 100;
+    valPercent = Math.max(2, Math.min(98, valPercent));
     
-    const isLow = val < minVal;
-    const isHigh = val > maxVal;
-    
-    let statusText = reportLang === 'es' ? 'Normal' : 'Normal';
-    let statusClass = 'text-emerald-600 bg-emerald-50 border-emerald-100';
-    if (isLow) {
-        statusText = reportLang === 'es' ? 'Bajo' : 'Low';
-        statusClass = 'text-blue-600 bg-blue-50 border-blue-100';
-    } else if (isHigh) {
-        statusText = reportLang === 'es' ? 'Alto' : 'High';
-        statusClass = 'text-red-600 bg-red-50 border-red-100';
-    }
-    
+    const isLow = !isSingleThresholdMax && val < effectiveMin;
+    const isHigh = val > effectiveMax;
+
     return (
-        <div className="w-full flex flex-col gap-1 mt-1.5 print:hidden select-none">
-            <div className="relative h-1.5 bg-slate-100 rounded-full border border-slate-200/60 overflow-hidden">
+        <div className="w-full max-w-[240px] flex flex-col gap-1 mt-1.5 select-none print:mt-1 print:max-w-[200px]">
+            {/* Visual Gauge Bar - Quest / Mayo Clinic standard */}
+            <div className="relative h-2 bg-slate-100 rounded-full border border-slate-300/80 overflow-hidden flex shadow-inner print:border-slate-400">
+                {/* Low Zone (if two-sided) */}
+                {!isSingleThresholdMax && (
+                    <div 
+                        className="h-full bg-sky-200/80 border-r border-sky-300"
+                        style={{ width: `${normalStartPercent}%` }}
+                        title="Bajo / Low"
+                    />
+                )}
+                {/* Optimal / Normal Zone */}
                 <div 
-                    className="absolute h-full bg-emerald-500/20"
-                    style={{
-                        left: `${normalStartPercent}%`,
-                        width: `${normalEndPercent - normalStartPercent}%`
+                    className="h-full bg-emerald-200/90 border-r border-emerald-300"
+                    style={{ 
+                        width: isSingleThresholdMax ? `${normalEndPercent}%` : `${normalEndPercent - normalStartPercent}%` 
                     }}
+                    title="Normal / Óptimo"
                 />
+                {/* Elevated Zone */}
                 <div 
-                    className={`absolute top-0 bottom-0 w-0.5 ${isLow ? 'bg-blue-500' : isHigh ? 'bg-red-500' : 'bg-emerald-500'}`}
-                    style={{ left: `${valPercent}%` }}
+                    className="h-full bg-rose-200/80 flex-1"
+                    title="Elevado / High"
                 />
+
+                {/* Marker Needle */}
+                <div 
+                    className="absolute top-0 bottom-0 -ml-1 w-2 flex items-center justify-center transition-all duration-300 z-10"
+                    style={{ left: `${valPercent}%` }}
+                >
+                    <div className={`w-2 h-2 rounded-full border shadow-sm ${
+                        isHigh ? 'bg-rose-600 border-white ring-2 ring-rose-400' :
+                        isLow ? 'bg-sky-600 border-white ring-2 ring-sky-400' :
+                        'bg-emerald-700 border-white ring-2 ring-emerald-400'
+                    }`} />
+                </div>
             </div>
-            <div className="relative h-3.5 flex justify-between text-[9px] font-semibold text-slate-400 font-mono px-0.5">
-                <span>Min: {minVal}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[7.5px] font-extrabold uppercase border ${statusClass}`}>
-                    {statusText} ({val})
+
+            {/* Scale Bounds & Status Indicator */}
+            <div className="flex justify-between items-center text-[7.5px] font-mono font-semibold text-slate-400 px-0.5 print:text-[7px]">
+                <span>{!isSingleThresholdMax ? effectiveMin : 0}</span>
+                <span className={`px-1 rounded text-[7px] font-extrabold uppercase ${
+                    isHigh ? 'text-rose-700 bg-rose-50 border border-rose-200' :
+                    isLow ? 'text-sky-700 bg-sky-50 border border-sky-200' :
+                    'text-emerald-700 bg-emerald-50 border border-emerald-200'
+                }`}>
+                    {isHigh ? (reportLang === 'es' ? '▲ ALTO' : '▲ HIGH') :
+                     isLow ? (reportLang === 'es' ? '▼ BAJO' : '▼ LOW') :
+                     (reportLang === 'es' ? '✓ NORMAL' : '✓ NORMAL')}
                 </span>
-                <span>Max: {maxVal}</span>
+                <span>{effectiveMax}</span>
             </div>
         </div>
     );
 };
 
+const parseMinMaxFromRange = (rangeStr) => {
+    if (!rangeStr || typeof rangeStr !== 'string') return { min: null, max: null };
+    const str = rangeStr.trim();
+    const dashMatch = str.match(/([0-9]+(?:\.[0-9]+)?)\s*-\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (dashMatch) {
+        return { min: parseFloat(dashMatch[1]), max: parseFloat(dashMatch[2]) };
+    }
+    const lessMatch = str.match(/<\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (lessMatch) {
+        return { min: 0, max: parseFloat(lessMatch[1]) };
+    }
+    const greaterMatch = str.match(/>\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (greaterMatch) {
+        const val = parseFloat(greaterMatch[1]);
+        return { min: val, max: val * 2.5 };
+    }
+    return { min: null, max: null };
+};
+
 const getHemogramSection = (testCode) => {
-    const code = testCode.toLowerCase();
+    const code = (testCode || '').toLowerCase();
     if (code.includes('wbc') || code.includes('neu') || code.includes('lym') || code.includes('mon') || code.includes('eos') || code.includes('bas')) {
         return 'white';
     }
@@ -88,12 +141,15 @@ const getHemogramSection = (testCode) => {
 };
 
 const getChemistrySection = (testCode) => {
-    const code = testCode.toLowerCase();
+    const code = (testCode || '').toLowerCase();
+    if (code.includes('colesterol') || code.includes('hdl') || code.includes('ldl') || code.includes('vldl') || code.includes('triglic') || code.includes('lipido') || code.includes('lip') || code.includes('ct/hdl') || code.includes('chol') || code.includes('castelli')) {
+        return 'lipids';
+    }
+    if (code.includes('vitamina') || code.includes('vit_') || code.includes('vit d') || code.includes('25-oh') || code.includes('clia') || code.includes('tsh') || code.includes('psa') || code.includes('hormon')) {
+        return 'special';
+    }
     if (code.includes('glucosa') || code.includes('glicemia') || code.includes('glu') || code.includes('gli')) {
         return 'general';
-    }
-    if (code.includes('colesterol') || code.includes('hdl') || code.includes('ldl') || code.includes('vldl') || code.includes('triglic') || code.includes('lipido') || code.includes('lip') || code.includes('ct/hdl')) {
-        return 'lipids';
     }
     if (code.includes('creatinina') || code.includes('urea') || code.includes('ureic') || code.includes('nu/') || code.includes('urom') || code.includes('úrico') || code.includes('urico') || code.includes('bun')) {
         return 'renal';
@@ -107,7 +163,7 @@ const getChemistrySection = (testCode) => {
     if (code.includes('sodio') || code.includes('potasio') || code.includes('cloro') || code.includes('cloruro') || code.includes('calcio') || code.includes('fosfor') || code.includes('fósfor') || code.includes('magnesio') || code.includes('na/') || code.includes('electrol') || code.includes('na/k') || code.includes('k+') || code.includes('na+')) {
         return 'electrolytes';
     }
-    return 'other';
+    return 'general';
 };
 
 const getUrinalysisSection = (testCode) => {
@@ -151,16 +207,18 @@ const checkValueBounds = (value, min, max) => {
 
 const groupResults = (results, type, reportLang) => {
     const sections = {};
-    const isHemogram = type.toLowerCase().includes('hemograma');
-    const isChemistry = type.toLowerCase().includes('química') || type.toLowerCase().includes('quimica') || type.toLowerCase().includes('bioquímico') || type.toLowerCase().includes('bioquimico');
-    const isUrinalysis = type.toLowerCase().includes('orina') || type.toLowerCase().includes('ego');
+    const lowerType = (type || '').toLowerCase();
+    const isHemogram = lowerType.includes('hemograma') || lowerType.includes('sangre total');
+    const isUrinalysis = lowerType.includes('orina') || lowerType.includes('ego');
+    const isChemistry = !isHemogram && !isUrinalysis;
     
     results.forEach(res => {
         let sectionKey = 'general';
         let sectionName = reportLang === 'es' ? 'Resultados Generales' : 'General Results';
+        const searchKey = `${res.testName || ''} ${res.testCode || ''}`.toLowerCase();
         
         if (isHemogram) {
-            const sec = getHemogramSection(res.testCode);
+            const sec = getHemogramSection(searchKey);
             if (sec === 'white') {
                 sectionKey = 'white';
                 sectionName = reportLang === 'es' ? 'Fórmula Blanca (BC-5000)' : 'White Blood Cells (BC-5000)';
@@ -172,16 +230,16 @@ const groupResults = (results, type, reportLang) => {
                 sectionName = reportLang === 'es' ? 'Análisis de Plaquetas' : 'Platelet Analysis';
             } else {
                 sectionKey = 'other';
-                sectionName = reportLang === 'es' ? 'Otros Parámetros' : 'Other Parameters';
+                sectionName = reportLang === 'es' ? 'Otros Parámetros Hematológicos' : 'Other Hematology Parameters';
             }
         } else if (isChemistry) {
-            const sec = getChemistrySection(res.testCode);
-            if (sec === 'general') {
-                sectionKey = 'general';
-                sectionName = reportLang === 'es' ? 'Química Sanguínea (NX600)' : 'Blood Chemistry (NX600)';
-            } else if (sec === 'lipids') {
+            const sec = getChemistrySection(searchKey);
+            if (sec === 'lipids') {
                 sectionKey = 'lipids';
-                sectionName = reportLang === 'es' ? 'Perfil de Lípidos (NX600)' : 'Lipid Profile (NX600)';
+                sectionName = reportLang === 'es' ? 'Perfil Lipídico & Riesgo Cardiovascular (NX600)' : 'Lipid Profile & CV Risk (NX600)';
+            } else if (sec === 'special') {
+                sectionKey = 'special';
+                sectionName = reportLang === 'es' ? 'Vitaminas & Pruebas Especiales (Maglumi X3 CLIA)' : 'Vitamins & Special Tests (Maglumi X3 CLIA)';
             } else if (sec === 'renal') {
                 sectionKey = 'renal';
                 sectionName = reportLang === 'es' ? 'Perfil Renal (NX600)' : 'Renal Profile (NX600)';
@@ -195,11 +253,11 @@ const groupResults = (results, type, reportLang) => {
                 sectionKey = 'electrolytes';
                 sectionName = reportLang === 'es' ? 'Electrólitos (NX600)' : 'Electrolytes (NX600)';
             } else {
-                sectionKey = 'other';
-                sectionName = reportLang === 'es' ? 'Otros Parámetros' : 'Other Parameters';
+                sectionKey = 'general';
+                sectionName = reportLang === 'es' ? 'Química Sanguínea General (NX600)' : 'General Blood Chemistry (NX600)';
             }
         } else if (isUrinalysis) {
-            const sec = getUrinalysisSection(res.testCode);
+            const sec = getUrinalysisSection(searchKey);
             if (sec === 'physical') {
                 sectionKey = 'physical';
                 sectionName = reportLang === 'es' ? 'Análisis Físico' : 'Physical Analysis';
@@ -309,6 +367,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const [chartTestName, setChartTestName] = useState('');
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [localQrUrl, setLocalQrUrl] = useState('');
+    const [showQrVerification, setShowQrVerification] = useState(true);
 
     // Opciones de escogencia y personalización de informe (ISO/IEC 17025:2017)
     const [reportTemplate, setReportTemplate] = useState('technical'); // 'technical' | 'executive' | 'trend'
@@ -317,28 +376,112 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const [showDecisionRule, setShowDecisionRule] = useState(true);
     const [showEquipment, setShowEquipment] = useState(true);
     const [showDigitalSeal, setShowDigitalSeal] = useState(true);
-    const [showQrVerification, setShowQrVerification] = useState(true);
+    const isClinical = request?.reportType === 'CLINICAL' || 
+                       request?.isClinical === true || 
+                       request?.clientType === 'clinical' || 
+                       Boolean(request?.patientId) || 
+                       Boolean(request?.patientName && !request?.clientType?.toLowerCase().includes('industria'));
+
+    const isIndustrial = !isClinical && (
+        request?.reportType === 'INDUSTRIAL_COA' ||
+        request?.clientType?.toLowerCase().includes('industria') || 
+        request?.sampleType?.toLowerCase().includes('alimento') || 
+        request?.sampleType?.toLowerCase().includes('superficie') || 
+        request?.sampleType?.toLowerCase().includes('agua') || 
+        request?.sampleType?.toLowerCase().includes('hielo') || 
+        request?.sampleType?.toLowerCase().includes('aire') || 
+        request?.analysisRequested?.toLowerCase().includes('camtu') || 
+        request?.analysisRequested?.toLowerCase().includes('nmp') || 
+        Boolean(request?.foodUFCResult)
+    );
+
     const [evidenceList, setEvidenceList] = useState(() => {
         if (request?.evidencePhotos && Array.isArray(request.evidencePhotos) && request.evidencePhotos.length > 0) {
             return request.evidencePhotos;
         }
-        return defaultMicrobiologyEvidence;
+        return isIndustrial ? defaultMicrobiologyEvidence : [];
     });
-
-    const isIndustrial = request?.clientType?.toLowerCase().includes('industria') || 
-                         request?.sampleType?.toLowerCase().includes('alimento') || 
-                         request?.sampleType?.toLowerCase().includes('superficie') || 
-                         request?.sampleType?.toLowerCase().includes('agua') || 
-                         request?.sampleType?.toLowerCase().includes('hielo') || 
-                         request?.sampleType?.toLowerCase().includes('aire') || 
-                         request?.analysisRequested?.toLowerCase().includes('camtu') || 
-                         request?.analysisRequested?.toLowerCase().includes('nmp') || 
-                         !!request?.foodUFCResult;
 
     // URL dinámica oficial de verificación en tiempo real
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lims-microlabs.web.app';
     const reqId = request?.id || '';
     const verificationUrl = `${origin}/verify/${reqId}`;
+
+    // Estado para Generación de Interpretación con Inteligencia Artificial Multimodelo (Gemini)
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [aiInterpretation, setAiInterpretation] = useState(() => request?.clinicalInterpretation || '');
+    const [isEditingAI, setIsEditingAI] = useState(false);
+    const [aiNotice, setAiNotice] = useState('');
+    const [selectedAIModel, setSelectedAIModel] = useState('auto'); // 'auto' | 'gemini-2.5-pro' | 'gemini-2.5-flash'
+    const [selectedAIEvalType, setSelectedAIEvalType] = useState('full'); // 'full' | 'didactic' | 'compliance' | 'export_en'
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [showManualGuide, setShowManualGuide] = useState(false);
+    const [isQualityModalOpen, setIsQualityModalOpen] = useState(false);
+    const [selectedMatrixKey, setSelectedMatrixKey] = useState(() => {
+        const detected = findStandardByCommodity(`${request?.sampleType || ''} ${request?.sampleDescription || ''} ${request?.analysisRequested || ''}`);
+        return detected ? detected.key : 'queso_fresco';
+    });
+
+    // Selección dinámica de firmantes según el caso (Dr. Roldan Ajún, M.Q.C. José Guillermo Ajún, M.Q.C. Roldán Alberto Ajún)
+    const [signaturePreset, setSignaturePreset] = useState(() => request?.signaturePreset || 'dual_roldan_jose');
+
+    const activeSignerPreset = SIGNATURE_PRESETS.find(p => p.id === signaturePreset) || SIGNATURE_PRESETS[0];
+    const primaryMicrobiologist = MICROBIOLOGISTS_CATALOG.find(m => m.id === activeSignerPreset.primaryId) || MICROBIOLOGISTS_CATALOG[0];
+    const secondaryMicrobiologist = activeSignerPreset.secondaryId ? MICROBIOLOGISTS_CATALOG.find(m => m.id === activeSignerPreset.secondaryId) : null;
+    const shouldShowBothSigners = activeSignerPreset.showBoth && Boolean(secondaryMicrobiologist);
+
+    const activeDirectorName = primaryMicrobiologist.id === 'roldan_padre'
+        ? (labInfo?.directorName || primaryMicrobiologist.name)
+        : (primaryMicrobiologist.id === 'roldan_alberto' && labInfo?.professional3Name ? labInfo.professional3Name : primaryMicrobiologist.name);
+    const activeDirectorCode = primaryMicrobiologist.id === 'roldan_padre'
+        ? (labInfo?.directorCode || primaryMicrobiologist.code)
+        : (primaryMicrobiologist.id === 'roldan_alberto' && labInfo?.professional3Code ? labInfo.professional3Code : primaryMicrobiologist.code);
+    const activeDirectorTitle = reportLang === 'es' ? primaryMicrobiologist.titleEs : primaryMicrobiologist.titleEn;
+
+    const activeAnalystName = secondaryMicrobiologist 
+        ? (secondaryMicrobiologist.id === 'jose_guillermo' && labInfo?.professional2Name 
+            ? labInfo.professional2Name 
+            : (secondaryMicrobiologist.id === 'roldan_alberto' && labInfo?.professional3Name ? labInfo.professional3Name : secondaryMicrobiologist.name))
+        : '';
+    const activeAnalystCode = secondaryMicrobiologist 
+        ? (secondaryMicrobiologist.id === 'roldan_alberto' && labInfo?.professional3Code ? labInfo.professional3Code : secondaryMicrobiologist.code)
+        : '';
+    const activeAnalystTitle = secondaryMicrobiologist 
+        ? (reportLang === 'es' ? secondaryMicrobiologist.titleEs : secondaryMicrobiologist.titleEn)
+        : '';
+
+    const handleGenerateAIEvaluation = async (evalType = selectedAIEvalType, modelChoice = selectedAIModel) => {
+        setIsGeneratingAI(true);
+        setAiNotice('');
+        try {
+            const text = await generateReportAIEvaluation({
+                request,
+                isIndustrial,
+                reportLang,
+                evaluationType: evalType,
+                modelChoice: modelChoice
+            });
+            setAiInterpretation(text);
+            setIsEditingAI(false);
+            setAiNotice(reportLang === 'es' ? '✨ Dictamen generado exitosamente con Inteligencia Artificial Multimodelo.' : '✨ AI evaluation generated successfully.');
+            setTimeout(() => setAiNotice(''), 6000);
+        } catch (err) {
+            console.error("Error al generar dictamen con IA:", err);
+            setAiNotice(reportLang === 'es' ? '⚠️ Conexión local activa (Motor de contingencia ejecutado).' : '⚠️ Local fallback rule-engine executed.');
+            setTimeout(() => setAiNotice(''), 6000);
+        } finally {
+            setIsGeneratingAI(false);
+        }
+    };
+
+    const handleWhatsAppQuickShare = () => {
+        const patientOrClient = isIndustrial ? (request.clientName || 'Estimado Cliente') : (request.patientName || 'Estimado(a) Paciente');
+        const repCode = getReportCode(request.id);
+        const text = `🧪 *Laboratorio Microlabs Químicos S.A.*\n\nEstimado(a) *${patientOrClient}*:\nLe hacemos entrega oficial de su informe de resultados N° *${repCode}* (${request.analysisRequested || 'Análisis de Laboratorio'}).\n\n📄 *Ver informe validado en línea:*\n${verificationUrl}\n\n🏛️ *Sede Central:* 75m N. del Correo de Guadalupe, San José\n📞 *Central:* 2234-8837 | 2234-5862 | 2224-6541\n💬 *WhatsApp Oficial:* +506 7138-2750\n✉️ *Resultados:* resultados@microlabscr.com\n🌐 *Sitio Web:* www.microlabscr.com`;
+        const rawPhone = (request.patientPhone || request.phone || request.whatsapp || '').replace(/[^0-9]/g, '');
+        const targetUrl = rawPhone ? `https://wa.me/506${rawPhone.replace(/^506/, '')}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+        window.open(targetUrl, '_blank');
+    };
 
     useEffect(() => {
         if (!reqId) return;
@@ -435,14 +578,13 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     }, [db, isIndustrial, request, reportLang]);
 
     if (!request) return null;
-    const reportDate = new Date().toLocaleDateString(reportLang === 'es' ? 'es-ES' : 'en-US');
     const handlePrint = () => window.print();
 
     const isCulture = request.analysisRequested?.toLowerCase().includes('cultivo') || request.analysisRequested?.toLowerCase().includes('antibiograma') || request.microbiologyAST || request.antibiogram;
     const microData = getMicrobiologyData(request);
     const hasFoodUFC = !!request.foodUFCResult;
 
-    const qrUrl = localQrUrl || `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verificationUrl)}`;
+    const qrUrl = localQrUrl || request?.qrUrl || `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verificationUrl)}`;
 
     const translateAnalysisName = (name) => {
         if (reportLang === 'es') return name;
@@ -480,6 +622,65 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             'Presencia': 'Presence'
         };
         return map[val] || val;
+    };
+
+    const translateTestParam = (name) => {
+        if (!name || reportLang === 'es') return name;
+        const dict = {
+            'Glucosa': 'Glucose',
+            'Colesterol Total': 'Total Cholesterol',
+            'Colesterol HDL': 'HDL Cholesterol',
+            'Colesterol LDL': 'LDL Cholesterol',
+            'Colesterol VLDL': 'VLDL Cholesterol',
+            'Triglicéridos': 'Triglycerides',
+            'Creatinina': 'Creatinine',
+            'Nitrógeno Ureico': 'Blood Urea Nitrogen (BUN)',
+            'Nitrógeno Ureico (BUN)': 'Blood Urea Nitrogen (BUN)',
+            'Urea': 'Urea',
+            'Ácido Úrico': 'Uric Acid',
+            'Proteínas Totales': 'Total Proteins',
+            'Albúmina': 'Albumin',
+            'Globulinas': 'Globulins',
+            'Relación A/G': 'A/G Ratio',
+            'Bilirrubina Total': 'Total Bilirubin',
+            'Bilirrubina Directa': 'Direct Bilirubin',
+            'Bilirrubina Indirecta': 'Indirect Bilirubin',
+            'AST / TGO': 'AST / SGOT',
+            'ALT / TGP': 'ALT / SGPT',
+            'Fosfatasa Alcalina': 'Alkaline Phosphatase',
+            'GGT': 'Gamma-GT',
+            'Sodio': 'Sodium (Na+)',
+            'Potasio': 'Potassium (K+)',
+            'Cloro': 'Chloride (Cl-)',
+            'Calcio': 'Calcium',
+            'Fósforo': 'Phosphorus',
+            'Magnesio': 'Magnesium',
+            'Hemoglobina': 'Hemoglobin',
+            'Hematocrito': 'Hematocrit',
+            'Leucocitos': 'White Blood Cells (WBC)',
+            'Eritrocitos': 'Red Blood Cells (RBC)',
+            'Plaquetas': 'Platelets',
+            'VCM': 'MCV',
+            'HCM': 'MCH',
+            'CHCM': 'MCHC',
+            'RDW': 'RDW',
+            'Neutrófilos Segmentados': 'Segmented Neutrophils',
+            'Linfocitos': 'Lymphocytes',
+            'Monocitos': 'Monocytes',
+            'Eosinófilos': 'Eosinophils',
+            'Basófilos': 'Basophils',
+            'Recuento Total Aerobio': 'Total Aerobic Count',
+            'Recuento Heterotrófico en Placa': 'Heterotrophic Plate Count',
+            'Coliformes Totales': 'Total Coliforms',
+            'Coliformes Fecales': 'Fecal Coliforms',
+            'Escherichia coli': 'Escherichia coli',
+            'Mohos y Levaduras': 'Molds and Yeasts',
+            'Staphylococcus aureus': 'Staphylococcus aureus',
+            'Salmonella spp.': 'Salmonella spp.',
+            'Listeria monocytogenes': 'Listeria monocytogenes',
+            'Pseudomonas aeruginosa': 'Pseudomonas aeruginosa'
+        };
+        return dict[name] || name;
     };
 
     // ─── IA Clínica: genera interpretación automática basada en resultados reales ───
@@ -584,6 +785,8 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     };
 
     const getClinicalInterpretation = () => {
+        if (aiInterpretation) return aiInterpretation;
+
         const defaultClinicalEs = "Los resultados presentados están dentro de los límites de detección del método utilizado. Correlacionar con la clínica del paciente.";
         const defaultClinicalEn = "The results presented are within the detection limits of the method used. Correlate with the patient's clinical picture.";
         const defaultIndustrialEs = "Los resultados presentados están dentro de los límites de detección del método utilizado.";
@@ -874,17 +1077,24 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     };
 
     return (
-        <div className="max-w-4xl mx-auto animate-fade-in pb-12">
+        <div className="max-w-4xl mx-auto animate-fade-in pb-12 print:max-w-none print:w-full print:m-0 print:p-0 print:pb-0">
             <style>{`
                 @media print {
+                    @page {
+                        size: letter portrait;
+                        margin: 8mm 10mm 8mm 10mm;
+                    }
+                    html, body, #root {
+                        height: auto !important;
+                        min-height: 0 !important;
+                        overflow: visible !important;
+                        background-color: white !important;
+                        color: black !important;
+                    }
                     .print-card-break {
                         page-break-inside: avoid !important;
                         break-inside: avoid !important;
-                        margin-bottom: 1.5rem !important;
-                    }
-                    body {
-                        background-color: white !important;
-                        color: black !important;
+                        margin-bottom: 1rem !important;
                     }
                 }
             `}</style>
@@ -903,10 +1113,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     ? 'bg-slate-900 text-white shadow-sm' 
                                     : 'text-slate-600 hover:text-slate-900'
                             }`}
-                            title={reportLang === 'es' ? 'Informe completo con incertidumbre expandida, regla de decisión y trazabilidad ISO 17025' : 'Full technical report with measurement uncertainty, decision rule and ISO 17025 traceability'}
+                            title={isClinical 
+                                ? (reportLang === 'es' ? 'Informe clínico completo con rangos, alertas y metodología ISO 15189' : 'Full clinical report with ranges, flags and ISO 15189 methodology')
+                                : (reportLang === 'es' ? 'Informe completo con incertidumbre expandida, regla de decisión y trazabilidad ISO 17025' : 'Full technical report with measurement uncertainty, decision rule and ISO 17025 traceability')}
                         >
-                            <Microscope size={14} className={reportTemplate === 'technical' ? 'text-amber-400' : 'text-slate-500'} />
-                            <span>{reportLang === 'es' ? 'Técnico ISO 17025' : 'Technical ISO 17025'}</span>
+                            <Microscope size={14} className={reportTemplate === 'technical' ? (isClinical ? 'text-indigo-400' : 'text-amber-400') : 'text-slate-500'} />
+                            <span>{isClinical ? (reportLang === 'es' ? 'Clínico ISO 15189' : 'Clinical ISO 15189') : (reportLang === 'es' ? 'Técnico ISO 17025' : 'Technical ISO 17025')}</span>
                         </button>
                         <button 
                             onClick={() => setReportTemplate('executive')} 
@@ -915,7 +1127,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     ? 'bg-slate-900 text-white shadow-sm' 
                                     : 'text-slate-600 hover:text-slate-900'
                             }`}
-                            title={reportLang === 'es' ? 'Certificado condensado de 1 página con resultados clave para entrega gerencial' : 'Condensed 1-page certificate with key results for management'}
+                            title={reportLang === 'es' ? 'Certificado condensado de 1 página con resultados clave' : 'Condensed 1-page certificate with key results'}
                         >
                             <FileText size={14} className={reportTemplate === 'executive' ? 'text-sky-400' : 'text-slate-500'} />
                             <span>{reportLang === 'es' ? 'Ejecutivo (1 Pág)' : 'Executive (1 Page)'}</span>
@@ -950,11 +1162,58 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 ENG 🇺🇸
                             </button>
                         </div>
-                        <button 
-                            onClick={() => setIsShareModalOpen(true)}
-                            className="flex items-center bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-all font-bold shadow-xs text-xs gap-1.5 cursor-pointer"
+                        {/* Selector / Botón Asistente IA Multimodelo */}
+                        <div className="flex items-center">
+                            <button 
+                                type="button"
+                                onClick={() => handleGenerateAIEvaluation(selectedAIEvalType, selectedAIModel)} 
+                                disabled={isGeneratingAI}
+                                className="flex items-center bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white px-2.5 py-1.5 rounded-l-lg hover:opacity-95 transition-all font-bold shadow-xs text-xs gap-1.5 cursor-pointer disabled:opacity-50"
+                                title={reportLang === 'es' ? 'Generar evaluación e interpretación con IA Gemini (ISO 17025 / 15189)' : 'Generate AI evaluation with Gemini'}
+                            >
+                                <Sparkles size={14} className={isGeneratingAI ? "animate-spin text-amber-300" : "text-amber-300"} />
+                                <span>{isGeneratingAI ? (reportLang === 'es' ? 'Analizando...' : 'Analyzing...') : (reportLang === 'es' ? '✨ Dictamen IA' : '✨ AI Opinion')}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsAIModalOpen(true)}
+                                className="bg-indigo-800 text-indigo-100 hover:bg-indigo-900 px-2 py-1.5 rounded-r-lg border-l border-indigo-700 text-xs font-bold transition-all cursor-pointer"
+                                title="Configurar Modelos de IA (Flash / Pro / Modos de Dictamen)"
+                            >
+                                ⚙️
+                            </button>
+                        </div>
+
+                        {/* Botón de Modo Manual y Guía de Aprendizaje */}
+                        <button
+                            type="button"
+                            onClick={() => setShowManualGuide(!showManualGuide)}
+                            className={`flex items-center px-2.5 py-1.5 rounded-lg font-bold text-xs gap-1 transition-all cursor-pointer ${
+                                showManualGuide
+                                    ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-xs'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                            }`}
+                            title="Ver guía paso a paso y opciones de control manual"
                         >
-                            <Share2 size={15} /> <span>WhatsApp / Email</span>
+                            <span>💡 {reportLang === 'es' ? 'Guía y Control' : 'Guide & Controls'}</span>
+                        </button>
+
+                        <button 
+                            type="button"
+                            onClick={handleWhatsAppQuickShare}
+                            className="flex items-center bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-all font-bold shadow-xs text-xs gap-1.5 cursor-pointer"
+                            title="Enviar informe directamente por WhatsApp con mensaje oficial"
+                        >
+                            <MessageCircle size={15} /> <span>WhatsApp</span>
+                        </button>
+
+                        <button 
+                            type="button"
+                            onClick={() => setIsShareModalOpen(true)}
+                            className="flex items-center bg-slate-800 text-white px-3 py-1.5 rounded-lg hover:bg-slate-900 transition-all font-bold shadow-xs text-xs gap-1.5 cursor-pointer"
+                            title="Compartir enlace o enviar por correo"
+                        >
+                            <Share2 size={15} /> <span>{reportLang === 'es' ? 'Compartir' : 'Share'}</span>
                         </button>
                         <button onClick={handlePrint} className="flex items-center bg-blue-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-blue-700 transition-all font-bold shadow-xs text-xs cursor-pointer">
                             <Printer size={15} className="mr-1.5" /> <span>{reportLang === 'es' ? 'Imprimir / PDF' : 'Print / PDF'}</span>
@@ -962,55 +1221,126 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 </div>
 
-                {/* Barra de Opciones de Escogencia & Toggles ISO 17025 */}
+                {/* Notificación de Éxito de IA */}
+                {aiNotice && (
+                    <div className="mb-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 text-xs font-semibold flex items-center justify-between shadow-xs animate-fade-in print:hidden">
+                        <div className="flex items-center gap-2">
+                            <Sparkles size={15} className="text-indigo-600" />
+                            <span>{aiNotice}</span>
+                        </div>
+                        <button onClick={() => setAiNotice('')} className="text-indigo-400 hover:text-indigo-700 text-xs">✕</button>
+                    </div>
+                )}
+
+                {/* Panel de Ayuda y Curva de Aprendizaje Manual */}
+                {showManualGuide && (
+                    <div className="mb-3 p-4 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl text-xs text-amber-950 space-y-2 animate-fade-in print:hidden select-none">
+                        <div className="flex items-center justify-between font-black text-amber-900 uppercase tracking-wide">
+                            <span className="flex items-center gap-1.5">
+                                <span>📘 Guía Rápida de Operación y Control Manual — LIMS Microlabs</span>
+                            </span>
+                            <button onClick={() => setShowManualGuide(false)} className="text-amber-700 hover:text-amber-950 text-xs font-bold cursor-pointer">✕ Cerrar</button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-[11px] font-medium pt-1">
+                            <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-1">1. Idioma Bilingüe</strong>
+                                Cambie entre 🇪🇸 ESP y 🇺🇸 ENG al instante. Todos los parámetros, rangos y sellos se traducen con terminología médica oficial.
+                            </div>
+                            <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-1">2. Control de Secciones</strong>
+                                Use los botones de "Opciones de Escogencia" para prender o apagar firmas, evidencias, sellos de calidad o código QR.
+                            </div>
+                            <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-1">3. Asistente con IA</strong>
+                                El botón de IA genera una evaluación completa supervisada. Con el engranaje ⚙️ puede escoger el modelo (Flash/Pro).
+                            </div>
+                            <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-1">4. Escudo de Seguridad</strong>
+                                El sistema audita automáticamente los valores ingresados. Si detecta un error de tipeo (ej. un cero de más) le alertará antes de emitir.
+                            </div>
+                            <div className="bg-white/80 p-2.5 rounded-lg border border-amber-200">
+                                <strong className="text-amber-900 block mb-1">5. Escogencia de Firmas</strong>
+                                Escoja según el caso: Dr. Roldan (Regente), José Guillermo, Roldán Alberto, o firmas conjuntas de regencia y análisis.
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Barra de Opciones de Escogencia & Toggles */}
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-150 text-[11px]">
                     <span className="font-extrabold text-slate-400 uppercase text-[10px] mr-1 flex items-center gap-1">
                         <Settings2 size={13} />
                         <span>Opciones de Escogencia:</span>
                     </span>
 
-                    {/* Toggle Evidencia Fotográfica / Cultivos */}
-                    <button
-                        type="button"
-                        onClick={() => setShowEvidence(!showEvidence)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
-                            showEvidence 
-                                ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-xs' 
-                                : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
-                        }`}
-                        title="Activar o desactivar el anexo de fotos de placas petri y cultivos"
-                    >
-                        <Camera size={13} className={showEvidence ? 'text-amber-600' : 'text-slate-400'} />
-                        <span>📷 {reportLang === 'es' ? 'Placas & Evidencias' : 'Culture Plates & Evidence'}</span>
-                    </button>
+                    {/* Selector de Firmantes con Escogencia */}
+                    <div className="flex items-center gap-1.5 bg-blue-50/80 border border-blue-200 rounded-lg px-2.5 py-1 shadow-xs">
+                        <span className="font-black text-blue-950 flex items-center gap-1 text-[11px]">
+                            <span>✍️</span>
+                            <span>{reportLang === 'es' ? 'Firmantes:' : 'Signers:'}</span>
+                        </span>
+                        <select
+                            value={signaturePreset}
+                            onChange={(e) => setSignaturePreset(e.target.value)}
+                            className="text-xs font-bold text-blue-950 bg-transparent border-none outline-none cursor-pointer font-sans"
+                            title={reportLang === 'es' ? 'Seleccionar microbiólogo o combinación de firmas para este informe' : 'Select signers combination for this report'}
+                        >
+                            {SIGNATURE_PRESETS.map(preset => (
+                                <option key={preset.id} value={preset.id} className="text-slate-900 bg-white">
+                                    {preset.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
-                    {/* Toggle Incertidumbre U */}
-                    <button
-                        type="button"
-                        onClick={() => setShowUncertainty(!showUncertainty)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
-                            showUncertainty 
-                                ? 'bg-indigo-50 text-indigo-900 border-indigo-300 shadow-xs' 
-                                : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
-                        }`}
-                        title="Mostrar cálculo formal de incertidumbre expandida (U, k=2)"
-                    >
-                        <span>⚖️ {reportLang === 'es' ? 'Incertidumbre (±U)' : 'Uncertainty (±U)'}</span>
-                    </button>
+                    {/* Toggle Evidencia Fotográfica (sólo para industrial o si hay evidencias adjuntas) */}
+                    {(isIndustrial || (evidenceList && evidenceList.length > 0)) && (
+                        <button
+                            type="button"
+                            onClick={() => setShowEvidence(!showEvidence)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
+                                showEvidence 
+                                    ? 'bg-amber-50 text-amber-900 border-amber-300 shadow-xs' 
+                                    : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                            }`}
+                            title="Activar o desactivar el anexo de fotos y evidencias"
+                        >
+                            <Camera size={13} className={showEvidence ? 'text-amber-600' : 'text-slate-400'} />
+                            <span>📷 {reportLang === 'es' ? 'Evidencias' : 'Evidence'}</span>
+                        </button>
+                    )}
 
-                    {/* Toggle Regla de Decisión */}
-                    <button
-                        type="button"
-                        onClick={() => setShowDecisionRule(!showDecisionRule)}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
-                            showDecisionRule 
-                                ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-xs' 
-                                : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
-                        }`}
-                        title="Declaración formal de regla de decisión según ISO 17025 cláusula 7.8.6"
-                    >
-                        <span>📋 {reportLang === 'es' ? 'Regla Decisión § 7.8.6' : 'Decision Rule § 7.8.6'}</span>
-                    </button>
+                    {/* Toggle Incertidumbre U (sólo industrial ISO 17025) */}
+                    {isIndustrial && (
+                        <button
+                            type="button"
+                            onClick={() => setShowUncertainty(!showUncertainty)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
+                                showUncertainty 
+                                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300 shadow-xs' 
+                                    : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                            }`}
+                            title="Mostrar cálculo formal de incertidumbre expandida (U, k=2)"
+                        >
+                            <span>⚖️ {reportLang === 'es' ? 'Incertidumbre (±U)' : 'Uncertainty (±U)'}</span>
+                        </button>
+                    )}
+
+                    {/* Toggle Regla de Decisión (sólo industrial ISO 17025) */}
+                    {isIndustrial && (
+                        <button
+                            type="button"
+                            onClick={() => setShowDecisionRule(!showDecisionRule)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
+                                showDecisionRule 
+                                    ? 'bg-emerald-50 text-emerald-900 border-emerald-300 shadow-xs' 
+                                    : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
+                            }`}
+                            title="Declaración formal de regla de decisión según ISO 17025 cláusula 7.8.6"
+                        >
+                            <span>📋 {reportLang === 'es' ? 'Regla Decisión § 7.8.6' : 'Decision Rule § 7.8.6'}</span>
+                        </button>
+                    )}
 
                     {/* Toggle Equipos & Trazabilidad */}
                     <button
@@ -1021,9 +1351,9 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 ? 'bg-cyan-50 text-cyan-900 border-cyan-300 shadow-xs' 
                                 : 'bg-slate-50 text-slate-400 border-slate-200 line-through'
                         }`}
-                        title="Mostrar estufas, autoclaves y certificados de calibración"
+                        title={isClinical ? "Mostrar trazabilidad de plataformas analíticas clínicas" : "Mostrar estufas, autoclaves y certificados de calibración"}
                     >
-                        <span>🔬 {reportLang === 'es' ? 'Equipos & Calibración' : 'Equipment Traceability'}</span>
+                        <span>🔬 {isClinical ? (reportLang === 'es' ? 'Analizadores Clínicos' : 'Clinical Analyzers') : (reportLang === 'es' ? 'Equipos & Calibración' : 'Equipment Traceability')}</span>
                     </button>
 
                     {/* Toggle Sello GAUDI / BCCR */}
@@ -1051,10 +1381,41 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     >
                         <span>📱 QR</span>
                     </button>
+
+                    {/* Botón Biblioteca de Calidad & Acreditaciones */}
+                    <button
+                        type="button"
+                        onClick={() => setIsQualityModalOpen(true)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 hover:from-blue-800 hover:to-indigo-800 shadow-xs"
+                        title="Ver acreditaciones institucionales, Cédula Jurídica 3-101-144450, AOAC LPTP, INCIENSA y POEs"
+                    >
+                        <span>🏛️ {reportLang === 'es' ? 'Calidad & Acreditaciones' : 'Quality & Accreditations'}</span>
+                    </button>
+
+                    {/* Selector de Matriz RTCA para informes industriales */}
+                    {isIndustrial && (
+                        <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-lg border border-slate-300">
+                            <span className="text-[10px] font-black uppercase text-slate-600">Matriz RTCA:</span>
+                            <select
+                                value={selectedMatrixKey}
+                                onChange={(e) => setSelectedMatrixKey(e.target.value)}
+                                className="text-[11px] font-bold bg-white text-slate-800 rounded px-1.5 py-0.5 border border-slate-300 focus:outline-hidden"
+                            >
+                                {Object.values(MICROBIOLOGY_STANDARDS).map(std => (
+                                    <option key={std.key} value={std.key}>
+                                        {std.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0">
+            {/* Escudo de Seguridad e Integridad Analítica Microlabs */}
+            <AnalyticalSafetyGuard request={request} reportLang={reportLang} />
+
+            <div id="report-content" className="bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0">
                 {/* Banner de Enmienda ISO 15189 si el reporte ha sido corregido */}
                 {request.reportVersion && request.reportVersion > 1 && (
                     <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3 mb-6 text-center">
@@ -1069,91 +1430,188 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
 
                 {isIndustrial ? (
                     <div className="mb-6">
-                        {/* Custom Header Layout matching the printed report sample */}
+                        {/* Encabezado Superior: Logo al lado izquierdo, Metadatos a la derecha */}
                         <div className="flex justify-between items-start pb-4 border-b border-slate-300">
-                            {/* Logo section and branch details */}
-                            <div className="flex flex-col">
-                                <div className="h-16 w-44 flex-shrink-0 flex items-center bg-transparent">
-                                    <img src={labInfo?.logoUrl || "/logo.png"} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
-                                </div>
-                                <div className="text-[10px] text-slate-600 font-medium mt-1">
-                                    <span className="font-bold text-slate-800">{request.branchName || 'Sede Central Guadalupe'}</span>
-                                    {request.branchCode && <span className="ml-1 text-[9px] bg-slate-100 font-mono font-bold px-1 rounded">({request.branchCode})</span>}
-                                    <span className="ml-2 text-[9px] text-slate-600 font-bold">Céd. Jurídica: {request.branchLegalId || labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'}</span>
-                                    <p className="text-[9px] text-slate-500 line-clamp-1">{request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</p>
-                                </div>
+                            {/* Logo al lado izquierdo */}
+                            <div className="flex items-center">
+                                <img 
+                                    src={labInfo?.logoUrl || "/logo.png"} 
+                                    alt="MicroLabs Químicos S.A." 
+                                    className="h-16 w-auto max-w-[220px] object-contain mix-blend-multiply" 
+                                />
                             </div>
 
-                            {/* Report metadata block */}
-                            <div className="text-right text-xs font-semibold text-slate-800 space-y-1 mt-1">
+                            {/* Metadatos del Informe a la derecha */}
+                            <div className="text-right text-xs font-semibold text-slate-800 space-y-1">
                                 <div className="flex justify-end items-center gap-2 mb-1">
                                     <span className="text-slate-700 font-bold">{reportLang === 'es' ? 'Código de reporte:' : 'Report code:'}</span>
                                     <span className="text-[#ff5500] font-black text-2xl font-mono leading-none">{getReportCode(request.id)}</span>
                                 </div>
-                                <div className="flex justify-end gap-2">
+                                <div className="flex justify-end gap-2 text-[11px]">
                                     <span className="text-slate-500 font-bold">{reportLang === 'es' ? 'Fecha de recepción:' : 'Reception date:'}</span>
                                     <span className="font-normal text-slate-700">{formatReportDate(request.requestDate)}</span>
                                 </div>
-                                <div className="flex justify-end gap-2">
+                                <div className="flex justify-end gap-2 text-[11px]">
                                     <span className="text-slate-500 font-bold">{reportLang === 'es' ? 'Fecha de montaje:' : 'Setup date:'}</span>
                                     <span className="font-normal text-slate-700">{formatReportDate(request.platingDate || request.setupDate || request.requestDate)}</span>
                                 </div>
-                                <div className="flex justify-end gap-2">
+                                <div className="flex justify-end gap-2 text-[11px]">
                                     <span className="text-slate-500 font-bold">{reportLang === 'es' ? 'Fecha de reporte:' : 'Report date:'}</span>
                                     <span className="font-normal text-slate-700">{formatReportDate(new Date())}</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Customer details in the exact format: Company, Contact, Sampled by */}
-                        <div className="grid grid-cols-1 gap-1.5 mt-4 mb-4 text-xs text-slate-800 leading-normal">
-                            <div className="flex">
-                                <span className="font-bold text-slate-600 w-32 flex-shrink-0">{reportLang === 'es' ? 'Empresa solicitante:' : 'Requesting company:'}</span>
-                                <span className="font-bold uppercase text-slate-900">{request.clientName}</span>
-                            </div>
-                            <div className="flex">
-                                <span className="font-bold text-slate-600 w-32 flex-shrink-0">{reportLang === 'es' ? 'Responsable:' : 'Responsible:'}</span>
-                                <span className="font-semibold text-slate-800">{request.clientContactName || 'Guillermo Ajún Gutiérrez'}</span>
-                            </div>
-                            <div className="flex">
-                                <span className="font-bold text-slate-600 w-32 flex-shrink-0">{reportLang === 'es' ? 'Muestreado por:' : 'Sampled by:'}</span>
-                                <span className="font-normal uppercase text-slate-700">{request.sampledBy || 'SOLICITANTE'}</span>
-                            </div>
+                        {/* Barra Azul Oficial */}
+                        <div className="bg-[#4a85c8] text-white font-black text-center py-1.5 uppercase text-xs sm:text-sm tracking-[0.2em] my-3 select-none rounded shadow-xs">
+                            {reportLang === 'es' ? 'CERTIFICADO DE ANÁLISIS — REPORTE DE LABORATORIO' : 'CERTIFICATE OF ANALYSIS — LABORATORY REPORT'}
                         </div>
 
-                        {/* Centered blue bar header */}
-                        <div className="bg-[#4a85c8] text-white font-black text-center py-1.5 uppercase text-sm tracking-[0.2em] mb-4 select-none">
-                            {reportLang === 'es' ? 'REPORTE DE LABORATORIO' : 'LABORATORY REPORT'}
+                        {/* Información de la Empresa / Industria en la Parte Superior */}
+                        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-800 mb-6">
+                            <div className="sm:col-span-2">
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Empresa / Solicitante' : 'Requesting Company'}
+                                </span>
+                                <span className="font-black text-slate-900 text-sm uppercase">
+                                    {request.clientName || 'Cliente Industrial'}
+                                </span>
+                                {request.clientAddress && (
+                                    <p className="text-[10.5px] text-slate-500 mt-0.5 line-clamp-1">
+                                        📍 {request.clientAddress}
+                                    </p>
+                                )}
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Responsable / Contacto' : 'Responsible'}
+                                </span>
+                                <span className="font-bold text-slate-800">
+                                    {request.clientContactName || 'Guillermo Ajún Gutiérrez'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Muestreado por' : 'Sampled by'}
+                                </span>
+                                <span className="font-normal uppercase text-slate-700">
+                                    {request.sampledBy || 'SOLICITANTE'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Matriz / Categoría' : 'Matrix / Category'}
+                                </span>
+                                <span className="font-bold text-indigo-700">
+                                    {request.sampleType || request.matrix || 'Agua / Alimento'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Punto de Muestreo' : 'Sampling Location'}
+                                </span>
+                                <span className="font-normal text-slate-700">
+                                    {request.samplingLocation || 'Instalaciones del Solicitante'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="flex justify-between items-center border-b-4 border-blue-800 pb-6 mb-8">
-                        <div className="flex items-center gap-6">
-                            <div className="h-20 w-48 flex-shrink-0 flex items-center justify-center bg-transparent">
-                                <img src={labInfo?.logoUrl || "/logo.png"} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
+                    <div className="mb-6">
+                        {/* Encabezado Superior: Logo al lado izquierdo, Metadatos a la derecha */}
+                        <div className="flex justify-between items-start pb-4 border-b border-slate-300">
+                            {/* Logo al lado izquierdo */}
+                            <div className="flex items-center">
+                                <img 
+                                    src={labInfo?.logoUrl || "/logo.png"} 
+                                    alt="MicroLabs Químicos S.A." 
+                                    className="h-16 w-auto max-w-[220px] object-contain mix-blend-multiply" 
+                                />
                             </div>
-                            <div>
-                                <p className="text-slate-650 font-bold tracking-widest text-sm mt-1 uppercase">
-                                    {reportLang === 'es' ? 'Reporte de Resultados Analíticos' : 'Analytical Results Report'}
-                                </p>
-                                <p className="text-slate-500 text-xs mt-1">
-                                    {reportLang === 'es' ? `Cédula Jurídica: ${labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'} | Licencia de Salud: #445-A` : `Tax ID: ${labInfo?.legalId || labInfo?.cedulaJuridica || '3101144450'} | Health License: #445-A`}
-                                </p>
+
+                            {/* Metadatos de Reporte a la derecha */}
+                            <div className="text-right text-xs font-semibold text-slate-800 space-y-1">
+                                <div className="flex justify-end items-center gap-2 mb-1">
+                                    <span className="text-slate-600 font-bold">{reportLang === 'es' ? 'Nº Informe / QB:' : 'Report / QB #:'}</span>
+                                    <span className="text-indigo-700 font-black text-2xl font-mono leading-none">#{getReportCode(request.id)}</span>
+                                </div>
+                                <div className="flex justify-end gap-2 text-[11px]">
+                                    <span className="text-slate-500 font-bold">{reportLang === 'es' ? 'Fecha de Recepción:' : 'Reception Date:'}</span>
+                                    <span className="font-semibold text-slate-700">{formatReportDate(request.requestDate)}</span>
+                                </div>
+                                <div className="flex justify-end gap-2 text-[11px]">
+                                    <span className="text-slate-500 font-bold">{reportLang === 'es' ? 'Fecha de Emisión:' : 'Issue Date:'}</span>
+                                    <span className="font-semibold text-slate-700">{formatReportDate(request.signedAt || new Date())}</span>
+                                </div>
                             </div>
                         </div>
-                        <div className="text-right">
-                            <BarcodeDisplay value={request.id.substring(0, 10).toUpperCase()} />
-                            <p className="text-xs font-bold text-slate-500 mt-2">
-                                {reportLang === 'es' ? 'Emisión' : 'Issued'}: {reportDate}
-                            </p>
+
+                        {/* Barra Azul Oficial de Reporte Clínico */}
+                        <div className="bg-indigo-700 text-white font-black text-center py-1.5 uppercase text-xs sm:text-sm tracking-[0.2em] my-3 select-none rounded shadow-xs">
+                            {reportLang === 'es' ? 'INFORME OFICIAL DE LABORATORIO CLÍNICO' : 'OFFICIAL CLINICAL LABORATORY REPORT'}
+                        </div>
+
+                        {/* Información del Paciente en la Parte Superior (Ficha Demográfica ISO 15189) */}
+                        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-800 mb-6">
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Paciente' : 'Patient Name'}
+                                </span>
+                                <span className="font-black text-slate-900 text-sm uppercase">
+                                    {request.patientName || request.clientName || 'Paciente'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Identificación / Cédula' : 'Patient ID'}
+                                </span>
+                                <span className="font-mono font-bold text-indigo-900 text-sm">
+                                    {request.patientId || request.patientCedula || 'N/D'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Edad / Fecha Nacimiento' : 'Age / Date of Birth'}
+                                </span>
+                                <span className="font-semibold text-slate-800">
+                                    {request.patientAge ? `${request.patientAge} años` : ''} 
+                                    {request.patientDob ? ` (${new Date(request.patientDob).toLocaleDateString('es-CR')})` : ''}
+                                    {!request.patientAge && !request.patientDob && 'N/D'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Género / Sexo' : 'Gender'}
+                                </span>
+                                <span className="font-semibold text-slate-800">
+                                    {request.patientGender || 'Femenino'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Tipo de Muestra' : 'Sample Type'}
+                                </span>
+                                <span className="font-bold text-indigo-700">
+                                    {request.sampleType || 'Suero Sanguíneo'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                    {reportLang === 'es' ? 'Médico / Solicitud' : 'Physician / Request'}
+                                </span>
+                                <span className="font-semibold text-slate-800">
+                                    {request.doctorName || 'A Solicitud del Paciente'}
+                                </span>
+                            </div>
                         </div>
                     </div>
                 )}
 
+
                 {isIndustrial ? (
                     <div className="mb-12">
                         {/* Custom Industrial Water Table matching the printed report sample */}
-                        <div className="w-full mb-6 print-card-break">
+                        <div className="w-full mb-6 print:mb-4">
                             <table className="w-full text-left border-collapse border border-slate-300 text-[11px] font-sans">
                                 <thead>
                                     <tr className="bg-[#b8d4f4] border-b border-slate-350 text-slate-800 font-bold uppercase select-none">
@@ -1181,11 +1639,9 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                             const unitText = analysisInfo?.unit || (res.testCode === 'RTA' ? '' : 'NMP/100mL');
                                             return (
                                                 <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                                                    {idx === 0 ? (
-                                                        <td className="p-2.5 px-3 border border-slate-300 align-top font-bold text-slate-800 uppercase" rowSpan={request.analyzerResults.filter(r => r.status === 'released').length}>
-                                                            {request.sampleDescription || '1. BAÑO HOMBRES'}
-                                                        </td>
-                                                    ) : null}
+                                                    <td className="p-2 px-3 border border-slate-300 align-top font-bold text-slate-800 uppercase text-[10px]">
+                                                        {request.sampleDescription || '1. BAÑO HOMBRES'}
+                                                    </td>
                                                     <td className="p-2.5 border border-slate-300 font-normal text-slate-800">{nameText}</td>
                                                     <td className="p-2.5 border border-slate-300 text-center font-bold text-slate-850">{translateResultValue(res.value)}</td>
                                                     <td className="p-2.5 border border-slate-300 text-center text-slate-600 font-medium">{unitText || '-'}</td>
@@ -1378,7 +1834,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                             return (
                                                 <div 
                                                     key={sectionKey} 
-                                                    className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6 print-card-break print:border-slate-300 print:shadow-none"
+                                                    className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6 print:border-slate-300 print:shadow-none print:mb-4"
                                                 >
                                                     <div className="bg-slate-50 border-b border-slate-200 px-5 py-3.5 flex justify-between items-center print:bg-slate-100 print:border-slate-300">
                                                         <h4 className="font-black text-xs tracking-wider uppercase text-slate-700">
@@ -1390,87 +1846,114 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                                     </div>
                                                     
                                                     <table className="w-full text-left border-collapse">
-                                                        <thead className="bg-slate-50/50 border-b border-slate-200 print:bg-slate-100 print:border-slate-300">
+                                                        <thead className="bg-slate-50/75 border-b border-slate-200 print:bg-slate-100 print:border-slate-300">
                                                             <tr>
                                                                 <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-2/5">
-                                                                    {reportLang === 'es' ? 'Parámetro' : 'Parameter'}
+                                                                    {reportLang === 'es' ? 'Parámetro / Examen' : 'Parameter / Test'}
                                                                 </th>
-                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/5 text-center">
+                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/6 text-center">
                                                                     {reportLang === 'es' ? 'Resultado' : 'Result'}
                                                                 </th>
-                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/5 text-center">
+                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/8 text-center">
                                                                     {reportLang === 'es' ? 'Unidad' : 'Unit'}
                                                                 </th>
-                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/5 text-center">
-                                                                    {reportLang === 'es' ? 'Ref. / Normal' : 'Ref. / Normal'}
+                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/4 text-center">
+                                                                    {reportLang === 'es' ? 'Valores de Referencia' : 'Reference Range'}
+                                                                </th>
+                                                                <th className="p-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-1/8 text-center">
+                                                                    {reportLang === 'es' ? 'Estado / Alerta' : 'Flag'}
                                                                 </th>
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-slate-100 print:divide-slate-200">
                                                             {section.items.map((res, idx) => {
                                                                 const analysisInfo = availableAnalyses?.find(a => a.code === res.testCode);
-                                                                const rangeText = analysisInfo?.minRange && analysisInfo?.maxRange 
+                                                                const nameText = res.testName || analysisInfo?.name || res.testCode;
+                                                                const unitText = res.unit || analysisInfo?.unit || '-';
+                                                                const rangeText = res.appliedReferenceRange || res.referenceRange || (analysisInfo?.minRange && analysisInfo?.maxRange 
                                                                     ? `${analysisInfo.minRange} - ${analysisInfo.maxRange}` 
-                                                                    : 'N/A';
-                                                                const unitText = analysisInfo?.unit || 'N/A';
+                                                                    : 'N/A');
                                                                 
-                                                                const valStatus = checkValueBounds(res.value, analysisInfo?.minRange, analysisInfo?.maxRange);
-                                                                let valueClass = 'text-slate-800 font-extrabold';
-                                                                let printBadge = '';
-                                                                let screenBadge = null;
-                                                                
-                                                                if (valStatus === 'low') {
-                                                                    valueClass = 'text-blue-600 font-black';
-                                                                    printBadge = ' * (Bajo)';
-                                                                    screenBadge = (
-                                                                        <span className="text-[8px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded font-extrabold print:hidden uppercase tracking-wider">
-                                                                            {reportLang === 'es' ? 'Bajo' : 'Low'}
+                                                                const parsedRange = parseMinMaxFromRange(rangeText);
+                                                                const effectiveMin = (analysisInfo?.minRange !== undefined && analysisInfo?.minRange !== '') ? parseFloat(analysisInfo.minRange) : parsedRange.min;
+                                                                const effectiveMax = (analysisInfo?.maxRange !== undefined && analysisInfo?.maxRange !== '') ? parseFloat(analysisInfo.maxRange) : parsedRange.max;
+
+                                                                let flagUpper = (res.flag || '').toUpperCase().trim();
+                                                                if (!flagUpper || flagUpper === 'VALIDATED') {
+                                                                    const bounds = checkValueBounds(res.value, effectiveMin, effectiveMax);
+                                                                    if (bounds === 'high') flagUpper = 'HIGH';
+                                                                    else if (bounds === 'low') flagUpper = 'LOW';
+                                                                    else flagUpper = 'NORMAL';
+                                                                }
+
+                                                                const isHigh = flagUpper === 'HIGH' || flagUpper === 'ALTO' || flagUpper === 'ELEVADO';
+                                                                const isLow = flagUpper === 'LOW' || flagUpper === 'BAJO';
+
+                                                                let valueClass = 'text-slate-900 font-extrabold';
+                                                                let flagBadge = (
+                                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                        {reportLang === 'es' ? 'Normal' : 'Normal'}
+                                                                    </span>
+                                                                );
+
+                                                                if (isHigh) {
+                                                                    valueClass = 'text-rose-700 font-black';
+                                                                    flagBadge = (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1 shadow-xs">
+                                                                            ▲ {reportLang === 'es' ? 'Alto' : 'High'}
                                                                         </span>
                                                                     );
-                                                                } else if (valStatus === 'high') {
-                                                                    valueClass = 'text-red-600 font-black';
-                                                                    printBadge = ' * (Alto)';
-                                                                    screenBadge = (
-                                                                        <span className="text-[8px] bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 rounded font-extrabold print:hidden uppercase tracking-wider">
-                                                                            {reportLang === 'es' ? 'Alto' : 'High'}
+                                                                } else if (isLow) {
+                                                                    valueClass = 'text-blue-700 font-black';
+                                                                    flagBadge = (
+                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center gap-1 shadow-xs">
+                                                                            ▼ {reportLang === 'es' ? 'Bajo' : 'Low'}
                                                                         </span>
                                                                     );
                                                                 }
                                                                 
                                                                 return (
-                                                                    <tr key={idx} className={`hover:bg-slate-50/40 transition-colors ${idx % 2 !== 0 ? 'bg-slate-50/20' : ''}`}>
-                                                                        <td className="p-3 text-sm font-bold text-slate-700">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span>{analysisInfo?.name || res.testCode}</span>
-                                                                                {res.origin?.includes('Automatizado') && (
-                                                                                    <span title={res.origin} className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-extrabold border border-indigo-200 print:hidden">
-                                                                                        🤖 Auto
+                                                                    <tr key={idx} className={`hover:bg-slate-50/50 transition-colors ${idx % 2 !== 0 ? 'bg-slate-50/25' : ''}`}>
+                                                                        <td className="p-3 text-sm font-bold text-slate-800">
+                                                                            <div className="flex flex-col">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-slate-900 font-bold">{reportLang === 'es' ? nameText : translateTestParam(nameText)}</span>
+                                                                                    {res.origin?.includes('Automatizado') && (
+                                                                                        <span title={res.origin} className="text-[9px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-extrabold border border-indigo-200 print:hidden">
+                                                                                            🤖 Auto
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                {(res.method || res.technicalNotes) && (
+                                                                                    <span className="text-[9.5px] font-mono text-slate-500 mt-0.5 block">
+                                                                                        {res.method ? `${reportLang === 'es' ? 'Método' : 'Method'}: ${res.method}` : res.technicalNotes}
                                                                                     </span>
                                                                                 )}
                                                                             </div>
-                                                                            {analysisInfo?.minRange && analysisInfo?.maxRange && (
+                                                                            {effectiveMin !== null && effectiveMax !== null && !isNaN(effectiveMin) && !isNaN(effectiveMax) && (
                                                                                 <RangeIndicator 
                                                                                     value={res.value} 
-                                                                                    min={analysisInfo.minRange} 
-                                                                                    max={analysisInfo.maxRange} 
+                                                                                    min={effectiveMin} 
+                                                                                    max={effectiveMax} 
                                                                                     reportLang={reportLang} 
                                                                                 />
                                                                             )}
                                                                         </td>
                                                                         <td className="p-3 text-sm text-center">
-                                                                            <div className="flex flex-col items-center gap-1">
-                                                                                <span className={`${valueClass} text-base`}>
-                                                                                    {translateResultValue(res.value)}
-                                                                                    <span className="hidden print:inline text-xs font-bold">{printBadge}</span>
-                                                                                </span>
-                                                                                {screenBadge}
-                                                                            </div>
+                                                                            <span className={`${valueClass} text-base font-mono`}>
+                                                                                {translateResultValue(res.value)}
+                                                                                {isHigh && <span className="hidden print:inline text-xs font-bold text-rose-700"> {reportLang === 'es' ? '* (Alto)' : '* (High)'}</span>}
+                                                                                {isLow && <span className="hidden print:inline text-xs font-bold text-blue-700"> {reportLang === 'es' ? '* (Bajo)' : '* (Low)'}</span>}
+                                                                            </span>
                                                                         </td>
-                                                                        <td className="p-3 text-sm text-center text-slate-600 font-medium">
+                                                                        <td className="p-3 text-sm text-center text-slate-700 font-semibold font-mono">
                                                                             {unitText}
                                                                         </td>
-                                                                        <td className="p-3 text-sm text-center text-slate-500 font-mono">
+                                                                        <td className="p-3 text-sm text-center text-slate-700 font-mono font-medium">
                                                                             {rangeText}
+                                                                        </td>
+                                                                        <td className="p-3 text-sm text-center">
+                                                                            {flagBadge}
                                                                         </td>
                                                                     </tr>
                                                                 );
@@ -1482,37 +1965,30 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                         });
                                     })()
                                 ) : (
-                                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 print:border-slate-300">
-                                        <table className="w-full text-left border-collapse">
-                                            <thead className="bg-slate-100 print:bg-slate-200">
-                                                <tr>
-                                                    <th className="p-3 text-sm font-bold text-slate-700 border border-slate-300 w-2/5">{reportLang === 'es' ? 'Parámetro' : 'Parameter'}</th>
-                                                    <th className="p-3 text-sm font-bold text-slate-700 border border-slate-300 w-1/5 text-center">{reportLang === 'es' ? 'Resultado' : 'Result'}</th>
-                                                    <th className="p-3 text-sm font-bold text-slate-700 border border-slate-300 w-1/5 text-center">{reportLang === 'es' ? 'Unidad' : 'Unit'}</th>
-                                                    <th className="p-3 text-sm font-bold text-slate-700 border border-slate-300 w-1/5 text-center">{reportLang === 'es' ? 'Ref. / Normal' : 'Ref. / Normal'}</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <tr className="border-b border-slate-200">
-                                                    <td className="p-3 text-sm font-medium">{reportLang === 'es' ? 'Parámetro Principal Analizado' : 'Primary Parameter Analyzed'}</td>
-                                                    <td className="p-3 text-sm font-bold text-center text-slate-800">{reportLang === 'es' ? 'Normal' : 'Normal'}</td>
-                                                    <td className="p-3 text-sm text-center text-slate-600">mg/dL</td>
-                                                    <td className="p-3 text-sm text-center text-slate-500">0.0 - 5.0</td>
-                                                </tr>
-                                                <tr className="border-b border-slate-200 bg-slate-50">
-                                                    <td className="p-3 text-sm font-medium">{reportLang === 'es' ? 'Conteo General' : 'General Count'}</td>
-                                                    <td className="p-3 text-sm font-bold text-center text-emerald-600">{reportLang === 'es' ? 'Negativo' : 'Negative'}</td>
-                                                    <td className="p-3 text-sm text-center text-slate-600">UFC</td>
-                                                    <td className="p-3 text-sm text-center text-slate-500">{reportLang === 'es' ? 'Ausencia' : 'Absence'}</td>
-                                                </tr>
-                                                <tr className="border-b border-slate-200">
-                                                    <td className="p-3 text-sm font-medium">{reportLang === 'es' ? 'Análisis Secundario' : 'Secondary Analysis'}</td>
-                                                    <td className="p-3 text-sm font-bold text-center text-red-600">{reportLang === 'es' ? 'Fuera de Rango*' : 'Out of Range*'}</td>
-                                                    <td className="p-3 text-sm text-center text-slate-600">%</td>
-                                                    <td className="p-3 text-sm text-center text-slate-500">20 - 40</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
+                                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-8 text-center text-slate-500 text-xs font-semibold print:border-slate-300">
+                                        <p>{reportLang === 'es' ? 'No se registran parámetros analíticos en este informe.' : 'No analytical parameters recorded in this report.'}</p>
+                                    </div>
+                                )}
+
+                                {/* ── Trazabilidad de Plataformas Analíticas Clínicas (ISO 15189) ── */}
+                                {showEquipment && reportTemplate !== 'executive' && (
+                                    <div className="w-full mt-4 mb-6 print-card-break">
+                                        <div className="bg-slate-100 px-3 py-1.5 border border-slate-300 font-bold text-slate-800 text-[10px] uppercase flex justify-between items-center">
+                                            <span>{reportLang === 'es' ? 'TRAZABILIDAD Y PLATAFORMAS ANALÍTICAS (ISO 15189)' : 'ANALYTICAL PLATFORMS & TRACEABILITY (ISO 15189)'}</span>
+                                            <span className="font-mono text-[9px] font-bold text-slate-600">Control de Calidad Diario Aprobado</span>
+                                        </div>
+                                        <div className="border-x border-b border-slate-300 p-3 bg-white text-[9px] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div className="border border-slate-200 rounded p-2 bg-slate-50/50">
+                                                <span className="font-bold text-slate-900 block text-[9.5px]">Analizador Clínico FUJIFILM DRI-CHEM NX600</span>
+                                                <span className="text-slate-600 block">Metodología: Química Seca / Fotometría de Reflectancia Multicapa</span>
+                                                <span className="text-indigo-600 font-mono font-bold block text-[8px]">Serie: #NX-8831 | Calibración con Cartuchos de Referencia QC</span>
+                                            </div>
+                                            <div className="border border-slate-200 rounded p-2 bg-slate-50/50">
+                                                <span className="font-bold text-slate-900 block text-[9.5px]">Analizador Quimioluminiscencia SNIBE MAGLUMI X3</span>
+                                                <span className="text-slate-600 block">Metodología: CLIA Flash con Microperlas Magnéticas ABEI</span>
+                                                <span className="text-indigo-600 font-mono font-bold block text-[8px]">Serie: #X3-4412 | Calibradores Trazables NIST</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -1678,27 +2154,70 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 )}
 
-                {/* EVALUACIÓN DE CONFORMIDAD NORMATIVA OFICIAL (MINSA / SENASA / RTCA) */}
-                {isIndustrial && (
-                    <div className="mb-6 p-3.5 bg-slate-50 print:bg-slate-50/50 border-2 border-slate-300 rounded-xl">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2 mb-2">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs">📜</span>
-                                <span className="text-[11px] font-black uppercase text-slate-800 tracking-wide">
-                                    {(request.sampleType || '').toLowerCase().includes('agua') || (request.analysisRequested || '').toLowerCase().includes('agua')
-                                        ? 'Normativa: Reglamento para la Calidad del Agua Potable de Costa Rica (Decreto N° 38924-S)'
-                                        : 'Normativa: Criterios Microbiológicos de Inocuidad y Calidad (RTCA / SENASA)'}
+                {/* EVALUACIÓN DE CONFORMIDAD NORMATIVA OFICIAL (MINSA / SENASA / RTCA / ICMSF) */}
+                {isIndustrial && (() => {
+                    const activeStd = MICROBIOLOGY_STANDARDS[selectedMatrixKey] || MICROBIOLOGY_STANDARDS.queso_fresco;
+                    return (
+                        <div className="mb-6 p-4 bg-slate-50 print:bg-slate-50/50 border-2 border-slate-300 rounded-xl space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-base">📜</span>
+                                    <div>
+                                        <div className="text-[11px] font-black uppercase text-slate-800 tracking-wide">
+                                            {activeStd.name} — {activeStd.standard}
+                                        </div>
+                                        <div className="text-[9.5px] text-slate-500 font-medium">
+                                            {activeStd.institution || 'Ministerio de Salud / SENASA / COMIECO'} • {activeStd.category}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-1 rounded bg-emerald-600 text-white shadow-xs self-start sm:self-auto">
+                                    ✓ CONFORME CON LA NORMATIVA
                                 </span>
                             </div>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2.5 py-1 rounded bg-emerald-600 text-white shadow-xs self-start sm:self-auto">
-                                ✓ CUMPLE CON EL REGLAMENTO
-                            </span>
+
+                            {/* Criterios y Plan de Muestreo de la Norma Oficial */}
+                            {activeStd.criteria && activeStd.criteria.length > 0 && (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-[10px] border-collapse bg-white rounded-lg overflow-hidden border border-slate-200">
+                                        <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                            <tr>
+                                                <th className="p-2">Microorganismo / Parámetro</th>
+                                                <th className="p-2 text-center">Plan (n, c)</th>
+                                                <th className="p-2 text-right">Límite m</th>
+                                                <th className="p-2 text-right">Límite M</th>
+                                                <th className="p-2">Unidad</th>
+                                                <th className="p-2">Método Normalizado</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                                            {activeStd.criteria.map((c, cIdx) => (
+                                                <tr key={cIdx} className={cIdx % 2 !== 0 ? 'bg-slate-50/60' : ''}>
+                                                    <td className="p-2 font-bold text-slate-900">{c.parameter}</td>
+                                                    <td className="p-2 text-center text-slate-600">{c.n ? `n=${c.n}, c=${c.c}` : '—'}</td>
+                                                    <td className="p-2 text-right font-mono font-medium">{c.m !== undefined ? String(c.m) : '—'}</td>
+                                                    <td className="p-2 text-right font-mono font-medium">{c.M !== undefined ? String(c.M) : '—'}</td>
+                                                    <td className="p-2 text-slate-600">{c.unit}</td>
+                                                    <td className="p-2 text-slate-500 italic">{c.method}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Declaración de Conformidad y Regla de Decisión (ISO/IEC 17025:2017) */}
+                            <div className="pt-2 border-t border-slate-200/80 text-[9.5px] text-slate-600 space-y-1">
+                                <p className="leading-relaxed">
+                                    <strong className="text-slate-800">Dictamen de Conformidad:</strong> Los resultados analíticos obtenidos para la muestra evaluada cumplen satisfactoriamente con los Límites Máximos Admisibles (LMA) y las especificaciones microbiológicas estipuladas en la reglamentación técnica citada.
+                                </p>
+                                <p className="leading-relaxed text-slate-500 italic">
+                                    <strong className="text-slate-700 font-semibold not-italic">Regla de Decisión (ISO/IEC 17025 Cláusula 7.8.6):</strong> Regla de aceptación simple binaria. La declaración de conformidad se basa en la comparación directa del resultado analítico con los límites de especificación, considerando la zona de guarda analítica y una probabilidad de aceptación del 95% (k=2).
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-[10px] text-slate-700 font-medium leading-relaxed">
-                            Los resultados analíticos emitidos en este Certificado de Análisis cumplen satisfactoriamente con los Límites Máximos Admisibles (LMA) y parámetros de inocuidad microbiológica establecidos en la legislación oficial vigente de Costa Rica.
-                        </p>
-                    </div>
-                )}
+                    );
+                })()}
 
                 {/* ── Banner de Valores Críticos (sólo clínico) ── */}
                 {!isIndustrial && (() => {
@@ -1721,50 +2240,104 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                         return <span key={i} className="inline-block mr-3">• {ana?.name || res.testCode}: <strong>{res.value} {ana?.unit || ''}</strong></span>;
                                     })}
                                 </div>
-                                <div className="text-[10px] mt-1 opacity-80">Este resultado fue comunicado al médico tratante. Registro automático en sistema LIMS-PRO · {new Date().toLocaleString('es-CR')}</div>
                             </div>
                         </div>
                     );
                 })()}
 
                 {includeInterpretation ? (
-                    <div className="mb-8 rounded-xl overflow-hidden border print:border-slate-300">
-                        {/* Header de Interpretación */}
-                        <div className={`px-4 py-2.5 flex items-center justify-between ${
-                            isIndustrial ? 'bg-slate-700' : 'bg-blue-900'
+                    <div className="mb-8 rounded-xl overflow-hidden border border-slate-300 shadow-xs print:border-slate-300">
+                        {/* Header de Interpretación con Botones de IA */}
+                        <div className={`px-4 py-3 flex flex-wrap items-center justify-between gap-2 ${
+                            isIndustrial ? 'bg-slate-800' : 'bg-blue-900'
                         } text-white`}>
-                            <div className="flex items-center gap-2">
-                                <span className="text-base">🧠</span>
-                                <h4 className="text-xs font-black uppercase tracking-wider">
-                                    {isIndustrial
-                                        ? (reportLang === 'es' ? 'Observaciones / Criterio Microbiológico' : 'Observations / Microbiological Criteria')
-                                        : (reportLang === 'es' ? 'Interpretación Clínica Asistida' : 'AI-Assisted Clinical Interpretation')}
-                                </h4>
-                            </div>
-                            {!isIndustrial && (
-                                <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                                    LIMS-AI · Beta
-                                </span>
-                            )}
-                        </div>
-                        {/* Cuerpo de Interpretación */}
-                        <div className="p-4 bg-blue-50/30 print:bg-transparent">
-                            {!isIndustrial && generateSmartInterpretation() ? (
-                                <div className="space-y-2">
-                                    {generateSmartInterpretation().split('\n\n').map((para, idx) => (
-                                        <p key={idx} className={`text-sm leading-relaxed ${
-                                            para.startsWith('⚠️') ? 'text-red-800 font-bold bg-red-50 border border-red-200 rounded p-2' :
-                                            idx === 0 ? 'text-slate-800 font-semibold' : 'text-slate-700'
-                                        }`}>
-                                            {para}
-                                        </p>
-                                    ))}
-                                    <p className="text-[10px] text-slate-400 italic border-t border-slate-200 pt-2 mt-3">
-                                        Generado automáticamente por LIMS-AI · {new Date().toLocaleString('es-CR')} · Supervisión del {request.signedByName || labInfo?.directorName || 'Director Técnico'}
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-lg">✨</span>
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-wider">
+                                        {isIndustrial
+                                            ? (reportLang === 'es' ? 'Dictamen Técnico & Criterio Microbiológico (ISO 17025)' : 'Technical Opinion & Microbiological Criteria (ISO 17025)')
+                                            : (reportLang === 'es' ? 'Evaluación e Interpretación Clínica Integral (ISO 15189)' : 'Comprehensive Clinical Evaluation (ISO 15189)')}
+                                    </h4>
+                                    <p className="text-[9.5px] text-blue-200/80 font-normal">
+                                        {isIndustrial 
+                                            ? 'Criterios de conformidad microbiológica bajo normas RTCA / BAM FDA / Standard Methods' 
+                                            : 'Correlación multivariable con resumen didáctico supervisado'}
                                     </p>
                                 </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 print:hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => handleGenerateAIEvaluation('full')}
+                                    disabled={isGeneratingAI}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-[11px] shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                    title="Regenerar o analizar con Inteligencia Artificial Multimodelo"
+                                >
+                                    <Sparkles size={13} className={isGeneratingAI ? 'animate-spin' : ''} />
+                                    <span>{isGeneratingAI ? 'Generando con IA...' : '✨ Dictamen con IA'}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditingAI(!isEditingAI)}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+                                    title="Editar texto manualmente"
+                                >
+                                    <Edit3 size={13} />
+                                    <span>{isEditingAI ? 'Cerrar Edición' : 'Editar'}</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Cuerpo de Interpretación */}
+                        <div className="p-5 bg-slate-50/70 print:bg-transparent">
+                            {isEditingAI ? (
+                                <div className="space-y-3 print:hidden">
+                                    <p className="text-xs font-bold text-slate-700">Edición en vivo del Dictamen / Interpretación:</p>
+                                    <textarea
+                                        value={aiInterpretation || generateSmartInterpretation() || getClinicalInterpretation()}
+                                        onChange={(e) => setAiInterpretation(e.target.value)}
+                                        rows={8}
+                                        className="w-full text-xs font-mono bg-white p-3.5 border border-slate-300 rounded-xl text-slate-800 focus:outline-none focus:border-blue-600 shadow-inner"
+                                        placeholder="Escriba o ajuste el dictamen técnico..."
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsEditingAI(false)}
+                                            className="px-4 py-1.5 bg-blue-700 text-white rounded-lg text-xs font-bold hover:bg-blue-800 transition-colors cursor-pointer"
+                                        >
+                                            Guardar y Aplicar al Informe
+                                        </button>
+                                    </div>
+                                </div>
                             ) : (
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap">{getClinicalInterpretation()}</p>
+                                <div className="space-y-3">
+                                    {((aiInterpretation || generateSmartInterpretation() || getClinicalInterpretation())).split('\n\n').map((para, idx) => (
+                                        <div key={idx} className={`text-xs leading-relaxed ${
+                                            para.includes('⚠️ VALORES CRÍTICOS') || para.includes('NO CONFORME')
+                                                ? 'p-3 bg-red-50 border-l-4 border-red-500 rounded text-red-900 font-bold'
+                                                : para.includes('CONFORME') || para.includes('SATISFACTORIO')
+                                                    ? 'p-3 bg-emerald-50 border-l-4 border-emerald-500 rounded text-emerald-950 font-medium'
+                                                    : para.includes('Resumen Didáctico para el Paciente') || para.includes('¿Qué significan mis resultados?')
+                                                        ? 'p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl text-blue-950 font-medium'
+                                                        : idx === 0 
+                                                            ? 'text-slate-900 font-bold text-[12.5px] border-b border-slate-200 pb-1.5' 
+                                                            : 'text-slate-800'
+                                        }`}>
+                                            {para.split('\n').map((line, lIdx) => (
+                                                <p key={lIdx} className={line.startsWith('•') || line.startsWith('-') ? 'ml-3 my-0.5' : 'my-1'}>
+                                                    {line}
+                                                </p>
+                                            ))}
+                                        </div>
+                                    ))}
+                                    <div className="flex flex-wrap items-center justify-between text-[10px] text-slate-500 italic border-t border-slate-200 pt-2.5 mt-3 gap-2">
+                                        <span>{reportLang === 'es' ? 'Supervisión y Aprobación:' : 'Supervision & Approval:'} {activeDirectorName} ({activeDirectorCode}) {shouldShowBothSigners && activeAnalystName ? `· ${activeAnalystName} (${activeAnalystCode})` : ''}</span>
+                                        <span className="font-mono text-[9px] text-slate-400">Emisión Validada · Microlabs Químicos S.A.</span>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1777,98 +2350,62 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                 )}
 
                 {isIndustrial ? (
-                    <div className="mt-12 select-none print-card-break">
-                        {/* Thick orange line */}
-                        <div className="border-t-4 border-[#ff6600] mb-4"></div>
-                        
-                        {/* Contact details & signatures grid */}
-                        <div className="grid grid-cols-12 gap-4 items-center">
-                            {/* Contact Details */}
-                            <div className="col-span-6 grid grid-cols-2 gap-x-4 gap-y-1 text-[9px] text-slate-700 font-medium">
-                                <div className="flex items-center">
-                                    <svg className="w-3 h-3 text-blue-600 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-2.824-1.802-5.14-4.117-6.942-6.942l1.293-.97c.362-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"/></svg>
-                                    <span>Tels: {labInfo?.telephones || '+506 22348837 / 22345862 / 22246541'}</span>
-                                </div>
-                                <div className="flex items-center">
-                                    <svg className="w-3 h-3 text-emerald-600 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.625 1.451 5.402.002 9.795-4.39 9.797-9.795.002-2.618-1.016-5.079-2.87-6.934C16.29 2.02 13.834.999 11.223 1c-5.41 0-9.804 4.394-9.806 9.801 0 1.547.404 3.056 1.171 4.385l-.99 3.61 3.7-.971z"/></svg>
-                                    <span>WhatsApp: {labInfo?.whatsapp || '71382750'}</span>
-                                </div>
-                                <div className="col-span-2 flex items-center">
-                                    <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                                    <span className="truncate">General: {labInfo?.email || 'laboratorio@microlabscr.com'} | Web: {labInfo?.website || 'www.microlabscr.com'}</span>
-                                </div>
-                                <div className="col-span-2 flex items-center">
-                                    <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                                    <span className="truncate">Resultados: {labInfo?.emailReports || 'resultados@microlabscr.com'}</span>
-                                </div>
-                                <div className="col-span-2 flex items-center">
-                                    <svg className="w-3 h-3 text-blue-900 mr-1 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/></svg>
-                                    <span className="truncate">Facturación: {labInfo?.emailBilling || 'fe@microlabscr.com'}</span>
-                                </div>
-                                <div className="col-span-2 flex items-start mt-0.5">
-                                    <svg className="w-3 h-3 text-blue-900 mr-1 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
-                                    <span className="leading-tight">{labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</span>
-                                </div>
+                    <div className="mt-8 select-none print-card-break print:mt-2">
+                        {/* Signatures & Accreditation Stamps row (Industrial / Alimentos) */}
+                        <div className="mt-6 pt-4 print:mt-2 print:pt-1 border-t-2 border-slate-700 grid grid-cols-12 gap-6 print:gap-3 items-end">
+                            <div className="col-span-9">
+                                <DualReportSignatureBlock
+                                    reportLang={reportLang}
+                                    signedDate={request.signedAt ? formatReportDate(request.signedAt) : formatReportDate(new Date())}
+                                    directorName={activeDirectorName}
+                                    directorCode={activeDirectorCode}
+                                    directorTitle={activeDirectorTitle}
+                                    directorCustomImg={primaryMicrobiologist.id === 'roldan_padre' ? labInfo?.signatureUrl : null}
+                                    analystName={activeAnalystName}
+                                    analystCode={activeAnalystCode}
+                                    analystTitle={activeAnalystTitle}
+                                    analystCustomImg={secondaryMicrobiologist?.id === 'jose_guillermo' ? labInfo?.professional2SignatureUrl : null}
+                                    showBoth={shouldShowBothSigners}
+                                />
                             </div>
-                            
-                            {/* Rev version code */}
-                            <div className="col-span-2 text-center text-[10px] font-bold text-slate-500 font-mono self-end pb-1.5">
-                                Rev-03-21
-                            </div>
-                            
-                            {/* Signature Stamp block */}
-                            <div className="col-span-4 flex justify-end pr-4">
-                                <div className="flex flex-col items-center justify-center relative select-none">
-                                    {/* Stamp circle graphic */}
-                                    <div className="absolute -top-10 right-2 w-20 h-20 border border-blue-600/60 rounded-full flex flex-col items-center justify-center rotate-[15deg] pointer-events-none opacity-80 text-blue-600 font-mono text-[6px] font-black bg-white/20">
-                                        <span className="uppercase text-[5px]">MICROBIOLOGIA</span>
-                                        <span className="text-xs font-black my-0.5">1957</span>
-                                        <span className="uppercase text-[5px]">COSTA RICA</span>
+
+                            {/* QR Stamp */}
+                            {showQrVerification ? (
+                                <div className="col-span-3 flex flex-col items-end justify-end">
+                                    <div className="relative">
+                                        <div className="absolute -top-4 -left-4 w-12 h-12 border-2 border-blue-700/50 rounded-full flex flex-col items-center justify-center rotate-[15deg] pointer-events-none opacity-70 text-blue-700 font-mono text-[4px] font-black bg-white/40 z-10">
+                                            <span className="uppercase text-[3.5px]">VERIFICADO</span>
+                                            <span className="text-[8px] font-black my-0.5">✓</span>
+                                            <span className="uppercase text-[3.5px]">ISO 17025</span>
+                                        </div>
+                                        <div className="bg-white p-1.5 border-2 border-slate-800 rounded-lg shadow-sm">
+                                            <img src={qrUrl} alt="Validación QR" className="w-18 h-18 print:w-13 print:h-13" crossOrigin="anonymous" />
+                                        </div>
                                     </div>
-                                    
-                                    {/* Signature handwriting svg */}
-                                    <div className="h-12 flex items-end justify-center relative w-36 pointer-events-none select-none">
-                                        <svg viewBox="0 0 200 80" className="w-32 h-10 text-blue-700 opacity-90 rotate-[-5deg]">
-                                            <path 
-                                                d="M 20 50 Q 50 15 70 45 T 115 25 T 145 65 Q 165 20 185 45" 
-                                                fill="none" 
-                                                stroke="currentColor" 
-                                                strokeWidth="2.5" 
-                                                strokeLinecap="round" 
-                                            />
-                                            <path 
-                                                d="M 55 45 L 145 45" 
-                                                fill="none" 
-                                                stroke="currentColor" 
-                                                strokeWidth="1.5" 
-                                                strokeLinecap="round" 
-                                            />
-                                        </svg>
-                                    </div>
-                                    <div className="border-t border-slate-700 w-32 my-1"></div>
-                                    <span className="text-[10px] font-bold text-slate-800">
-                                        {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}
-                                    </span>
-                                    <span className="text-[8px] text-slate-500 font-mono font-bold">
-                                        Reg. M.Q.C. {request.signedByCode || labInfo?.directorCode || '802'}
-                                    </span>
+                                    <p className="text-[8.5px] print:text-[7.5px] text-slate-500 text-right font-bold mt-1 uppercase w-28">
+                                        {reportLang === 'es' ? '📱 Escaneo Autenticidad' : '📱 Scan Authenticity'}
+                                    </p>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="col-span-3 text-right text-[10px] text-slate-400 font-mono">
+                                    Emisión Oficial ISO 17025
+                                </div>
+                            )}
                         </div>
 
                         {/* Sello de Firma Digital BCCR / GAUDI */}
                         {showDigitalSeal && (
-                            <div className="my-2 p-2 bg-slate-50 border border-slate-300 rounded text-[8px] text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            <div className="my-2 print:my-1 p-2 print:p-1 bg-slate-50 border border-slate-300 rounded text-[8px] print:text-[7.5px] text-slate-700 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                                 <div className="flex items-center gap-2">
                                     <div className="p-1 bg-blue-900 text-white rounded font-mono text-[8px] font-black tracking-tight">
                                         GAUDI
                                     </div>
                                     <div>
-                                        <span className="font-extrabold text-slate-900 block text-[8.5px]">
+                                        <span className="font-extrabold text-slate-900 block text-[8.5px] print:text-[7.5px]">
                                             DOCUMENTO FIRMADO DIGITALMENTE — AUTORIDAD CERTIFICADORA CA SINPE (BCCR)
                                         </span>
-                                        <span className="text-slate-600 font-mono text-[7.5px]">
-                                            Firmante: {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} | Reg: {request.signedByCode || labInfo?.directorCode || '802'} | Algoritmo: SHA-256 with RSA | Estampado de Tiempo TSA SINPE
+                                        <span className="text-slate-600 font-mono text-[7.5px] print:text-[6.5px]">
+                                            Firmante: {labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} | Reg: {labInfo?.directorCode || '802'} | Algoritmo: SHA-256 with RSA | Estampado de Tiempo TSA SINPE
                                         </span>
                                     </div>
                                 </div>
@@ -1878,24 +2415,57 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             </div>
                         )}
 
-                        {/* Solid black line */}
-                        <div className="border-t border-slate-900 mt-2 mb-3"></div>
+                        {/* ── Información General del Laboratorio y Sede Central (Parte Inferior) ── */}
+                        <div className="mt-5 pt-3 print:mt-2 print:pt-1 border-t-2 border-slate-300 flex flex-wrap justify-between items-center text-[9.5px] print:text-[8px] text-slate-600 gap-y-1 select-none">
+                            <div>
+                                <span className="font-black text-slate-900 text-[10.5px] print:text-[8.5px]">
+                                    {labInfo?.name || 'Laboratorio Microlabs Químicos S.A.'}
+                                </span>
+                                <span className="mx-2 text-slate-400">|</span>
+                                <span className="font-semibold text-slate-800">
+                                    Céd. Jurídica: {request.branchLegalId || labInfo?.legalId || labInfo?.cedulaJuridica || '3-101-144450'}
+                                </span>
+                                <span className="mx-2 text-slate-400">|</span>
+                                <span className="text-blue-900 font-bold font-mono">
+                                    Reg. M.Q.C. #{labInfo?.directorCode || '802'}
+                                </span>
+                                <p className="text-[9px] print:text-[7.5px] text-slate-600 mt-0.5">
+                                    🏥 {request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'} 
+                                    <span className="mx-1.5">|</span> 
+                                    📞 {request.branchPhones || labInfo?.telephones || '+506 2234-8837 | 2234-5862 | 2224-6541'}
+                                    <span className="mx-1.5">|</span>
+                                    💬 WhatsApp: <strong className="text-emerald-700">+506 7138-2750</strong>
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[9px] print:text-[7.5px] font-medium text-slate-600">
+                                <span>🌐 {labInfo?.website || 'www.microlabscr.com'}</span>
+                                <span>📄 Informes: <strong className="text-slate-800">resultados@microlabscr.com</strong></span>
+                                <span>🧪 Consultas: <strong className="text-slate-800">laboratorio@microlabscr.com</strong></span>
+                                <span>💳 Facturación: <strong className="text-slate-800">fe@microlabscr.com</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Solid divider line */}
+                        <div className="border-t border-slate-900 mt-2 mb-2 print:my-1"></div>
 
                         {/* Quality systems note & badges */}
-                        <div className="grid grid-cols-12 gap-4 items-center">
-                            <div className="col-span-8 text-[8px] text-slate-700 leading-normal font-medium">
+                        <div className="grid grid-cols-12 gap-3 items-center">
+                            <div className="col-span-8 text-[8px] print:text-[7px] text-slate-700 leading-normal font-medium">
                                 <p className="font-bold text-slate-800 uppercase mb-0.5">
                                     Este Laboratorio cuenta con Programas de Calidad Internos y Externos, Permisos Sanitarios y Certificados de Validez Internacional:
                                 </p>
                                 <p>
-                                    1-AOAC PT ENROLLMENT ID#119455. 2-MINISTERIO SALUD: #01048
+                                    1-AOAC PT ENROLLMENT ID#119455 (Test de Proficiencia). 2-MINISTERIO DE SALUD: #01048.
                                 </p>
                                 <p>
-                                    3-MAG-SENASA (CVO): #DRM1951-2010 4-MQC- SEEC SJ#136.
+                                    3-MAG-SENASA (CVO): #DRM1951-2010. 4-MQC-SEEC SJ#136.
+                                </p>
+                                <p className="text-[7.5px] print:text-[6.5px] text-slate-600 font-semibold mt-0.5">
+                                    Sistema de Gestión de la Calidad implementado bajo la norma INTE/ISO/IEC 17025:2017 (INTECO) e INTE/ISO 15189:2014, respaldado con certificaciones de ensayos de aptitud y test de proficiencia.
                                 </p>
                             </div>
                             
-                            <div className="col-span-4 flex items-center justify-end gap-2.5">
+                            <div className="col-span-4 flex items-center justify-end gap-2">
                                 <div className="flex flex-col items-center bg-[#074684] text-white px-1.5 py-0.5 rounded text-[6px] font-black border border-blue-900 shadow-sm leading-none">
                                     <span>AOAC</span>
                                     <span className="text-[4px] font-normal tracking-tighter mt-0.5">INTERNATIONAL</span>
@@ -1907,18 +2477,24 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     <span className="text-[7px] font-extrabold">SENASA</span>
                                     <span className="text-[3px] font-normal tracking-tighter mt-0.5">COSTA RICA</span>
                                 </div>
-                                {showQrVerification && (
+                                {showQrVerification && qrUrl && (
                                     <div className="bg-white p-0.5 border border-slate-300 rounded shadow-xs ml-1 select-none flex-shrink-0">
-                                        <img src={qrUrl} alt="Validación QR" className="w-10 h-10" crossOrigin="anonymous" />
+                                        <img src={qrUrl} alt="Validación QR" className="w-9 h-9 print:w-7 print:h-7" crossOrigin="anonymous" />
                                     </div>
                                 )}
                             </div>
                         </div>
+
+                        {/* Pie de Control Documental */}
+                        <div className="mt-1.5 pt-1 border-t border-slate-200 flex justify-between items-center text-[8px] print:text-[6.5px] text-slate-400 font-mono select-none">
+                            <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
+                            <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
+                        </div>
                     </div>
                 ) : (
                     <>
-                        {/* ── Galería y Anexo de Evidencias Fotográficas & Placas de Cultivo (Clínico) ── */}
-                        {showEvidence && (
+                        {/* ── Galería y Anexo de Evidencias Fotográficas (Clínico - sólo si existen adjuntas) ── */}
+                        {showEvidence && evidenceList && evidenceList.length > 0 && (
                             <ReportEvidenceGallery 
                                 evidenceList={evidenceList} 
                                 onUpdateEvidence={setEvidenceList} 
@@ -1935,78 +2511,132 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     <div className="p-1 bg-blue-900 text-white rounded font-mono text-[8px] font-black tracking-tight">GAUDI</div>
                                     <div>
                                         <span className="font-extrabold text-slate-900 block text-[8.5px]">DOCUMENTO FIRMADO DIGITALMENTE — CA SINPE (BCCR)</span>
-                                        <span className="text-slate-600 font-mono text-[7.5px]">Firmante: {request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'} | Reg: {request.signedByCode || labInfo?.directorCode || '802'} | SHA-256 RSA | TSA SINPE</span>
+                                        <span className="text-slate-600 font-mono text-[7.5px]">Firmante: {activeDirectorName} | Reg: {activeDirectorCode} {shouldShowBothSigners && activeAnalystName ? `| Co-firmante: ${activeAnalystName} (${activeAnalystCode})` : ''} | SHA-256 RSA | TSA SINPE</span>
                                     </div>
                                 </div>
                                 <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono text-[7px] font-bold px-1.5 py-0.5 rounded shrink-0">✓ FIRMA DIGITAL VÁLIDA</span>
                             </div>
                         )}
 
-                        <div className="mt-10 pt-6 border-t-2 border-blue-900 grid grid-cols-12 gap-6 items-end">
-                            {/* Firma Director */}
-                            <div className="col-span-5 text-center">
-                                <div className="border-b-2 border-slate-700 w-3/4 mx-auto mb-1 relative h-16 flex items-end justify-center">
-                                    <svg viewBox="0 0 200 80" className="w-40 h-12 text-blue-900 opacity-90 rotate-[-4deg] absolute bottom-1">
-                                        <path d="M 10 55 Q 40 10 65 50 T 110 30 T 150 60 Q 170 20 195 50" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-                                        <path d="M 45 50 L 160 50" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                                    </svg>
+                        {/* Bloque Unificado de Firmas y Pie Institucional (Mantiene firmas y sellos juntos en impresión) */}
+                        <div className="print-card-break print:mt-2">
+                            <div className="mt-6 pt-4 print:mt-2 print:pt-1 border-t-2 border-blue-900 grid grid-cols-12 gap-6 print:gap-3 items-end">
+                                <div className="col-span-9">
+                                    <DualReportSignatureBlock
+                                        reportLang={reportLang}
+                                        signedDate={request.signedAt ? formatReportDate(request.signedAt) : formatReportDate(new Date())}
+                                        directorName={activeDirectorName}
+                                        directorCode={activeDirectorCode}
+                                        directorTitle={activeDirectorTitle}
+                                        directorCustomImg={primaryMicrobiologist.id === 'roldan_padre' ? labInfo?.signatureUrl : null}
+                                        analystName={activeAnalystName}
+                                        analystCode={activeAnalystCode}
+                                        analystTitle={activeAnalystTitle}
+                                        analystCustomImg={secondaryMicrobiologist?.id === 'jose_guillermo' ? labInfo?.professional2SignatureUrl : null}
+                                        showBoth={shouldShowBothSigners}
+                                    />
                                 </div>
-                                <p className="text-sm font-black text-slate-900">{request.signedByName || labInfo?.directorName || 'Dr. Roldan Ajún Chaverri'}</p>
-                                <p className="text-xs text-blue-800 font-bold">{reportLang === 'es' ? `Microbiólogo Validador` : `Validating Microbiologist`}</p>
-                                <p className="text-[10px] text-slate-500 font-mono">Reg. M.Q.C. {request.signedByCode || labInfo?.directorCode || '802'}</p>
-                            </div>
 
-                            {/* Firma Analista */}
-                            <div className="col-span-4 text-center">
-                                <div className="border-b border-slate-400 w-3/4 mx-auto mb-1 relative h-16"></div>
-                                <p className="text-sm font-bold text-slate-800">{reportLang === 'es' ? 'Técnico Analista' : 'Technician Analyst'}</p>
-                                <p className="text-xs text-slate-500">{reportLang === 'es' ? 'Sección Análisis' : 'Analysis Section'}</p>
-                            </div>
-
-                            {/* QR Premium */}
-                            {showQrVerification ? (
-                                <div className="col-span-3 flex flex-col items-end justify-end">
-                                    <div className="relative">
-                                        {/* Sello de autenticidad */}
-                                        <div className="absolute -top-5 -left-5 w-14 h-14 border-2 border-blue-700/50 rounded-full flex flex-col items-center justify-center rotate-[15deg] pointer-events-none opacity-70 text-blue-700 font-mono text-[5px] font-black bg-white/40 z-10">
-                                            <span className="uppercase text-[4px]">VERIFICADO</span>
-                                            <span className="text-[9px] font-black my-0.5">✓</span>
-                                            <span className="uppercase text-[4px]">LIMS·PRO</span>
+                                {/* QR Premium */}
+                                {showQrVerification ? (
+                                    <div className="col-span-3 flex flex-col items-end justify-end">
+                                        <div className="relative">
+                                            {/* Sello de autenticidad */}
+                                            <div className="absolute -top-4 -left-4 w-12 h-12 border-2 border-blue-700/50 rounded-full flex flex-col items-center justify-center rotate-[15deg] pointer-events-none opacity-70 text-blue-700 font-mono text-[4px] font-black bg-white/40 z-10">
+                                                <span className="uppercase text-[3.5px]">VERIFICADO</span>
+                                                <span className="text-[8px] font-black my-0.5">✓</span>
+                                                <span className="uppercase text-[3.5px]">LIMS·PRO</span>
+                                            </div>
+                                            <div className="bg-white p-1.5 border-2 border-blue-900 rounded-lg shadow-sm">
+                                                <img src={qrUrl} alt="QR Verificación" className="w-18 h-18 print:w-13 print:h-13" crossOrigin="anonymous" />
+                                            </div>
                                         </div>
-                                        <div className="bg-white p-2 border-2 border-blue-900 rounded-lg shadow-md">
-                                            <img src={qrUrl} alt="QR Verificación" className="w-24 h-24" crossOrigin="anonymous" />
-                                        </div>
+                                        <p className="text-[8.5px] print:text-[7.5px] text-slate-500 text-right font-bold mt-1 leading-tight uppercase w-28">
+                                            {reportLang === 'es' ? '📱 Escaneo Autenticidad' : '📱 Scan Authenticity'}
+                                        </p>
                                     </div>
-                                    <p className="text-[9px] text-slate-500 text-right font-bold mt-1.5 leading-tight uppercase w-32">
-                                        {reportLang === 'es' ? '📱 Escanee para verificar autenticidad en LIMS' : '📱 Scan to verify authenticity in LIMS'}
+                                ) : (
+                                    <div className="col-span-3 text-right text-[10px] text-slate-400 font-mono">
+                                        Emisión Oficial LIMS-PRO
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── Información General del Laboratorio y Sede Central (Clínico - Parte Inferior) ── */}
+                            <div className="mt-5 pt-3 print:mt-2 print:pt-1 border-t-2 border-slate-300 flex flex-wrap justify-between items-center text-[9.5px] print:text-[8px] text-slate-600 gap-y-1 select-none">
+                                <div>
+                                    <span className="font-black text-slate-900 text-[10.5px] print:text-[8.5px]">
+                                        {labInfo?.name || 'MicroLabs Químicos S.A. — Laboratorio Clínico y Microbiológico'}
+                                    </span>
+                                    <span className="mx-2 text-slate-400">|</span>
+                                    <span className="font-semibold text-slate-800">
+                                        Céd. Jurídica: {request.branchLegalId || labInfo?.legalId || labInfo?.cedulaJuridica || '3-101-144450'}
+                                    </span>
+                                    <span className="mx-2 text-slate-400">|</span>
+                                    <span className="text-blue-900 font-bold font-mono">
+                                        Reg. M.Q.C. #{request.signedByCode || labInfo?.directorCode || '802'}
+                                    </span>
+                                    <p className="text-[9px] print:text-[7.5px] text-slate-600 mt-0.5">
+                                        🏥 {request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'} 
+                                        <span className="mx-1.5">|</span> 
+                                        📞 {request.branchPhones || labInfo?.telephones || '+506 2234-8837 | 2234-5862 | 2224-6541'}
+                                        <span className="mx-1.5">|</span>
+                                        💬 WhatsApp: <strong className="text-emerald-700">+506 7138-2750</strong>
                                     </p>
                                 </div>
-                            ) : (
-                                <div className="col-span-3 text-right text-[10px] text-slate-400 font-mono">
-                                    Emisión Oficial LIMS-PRO
+                                <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[9px] print:text-[7.5px] font-medium text-slate-600">
+                                    <span>🌐 {labInfo?.website || 'www.microlabscr.com'}</span>
+                                    <span>📄 Informes: <strong className="text-slate-800">resultados@microlabscr.com</strong></span>
+                                    <span>🧪 Consultas: <strong className="text-slate-800">laboratorio@microlabscr.com</strong></span>
+                                    <span>💳 Facturación: <strong className="text-slate-800">fe@microlabscr.com</strong></span>
                                 </div>
-                            )}
-                        </div>
-                    {/* Contact details footer for clinical report */}
-                        <div className="mt-8 pt-4 border-t border-slate-100 flex flex-wrap justify-between items-center text-[10px] text-slate-500 font-semibold gap-y-2 select-none">
-                            <div>
-                                <span className="font-bold text-slate-700">🏥 {request.branchName || 'Sede Central Guadalupe'}:</span>
-                                <span className="ml-1.5">{request.branchAddress || labInfo?.address || '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica'}</span>
-                                <span className="mx-2">|</span>
-                                <span>📞 {request.branchPhones || labInfo?.telephones || '+506 22348837 | 22345862 | 22246541'}</span>
                             </div>
-                            <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                <span>🌐 {labInfo?.website || 'www.microlabscr.com'}</span>
-                                <span>📧 {labInfo?.email || 'laboratorio@microlabscr.com'}</span>
-                                <span>📄 {labInfo?.emailReports || 'resultados@microlabscr.com'}</span>
-                                <span>💳 {labInfo?.emailBilling || 'fe@microlabscr.com'}</span>
-                            </div>
-                        </div>
 
-                        {/* Pie de Trazabilidad de Versión e ISO 17025 */}
-                        <div className="mt-2 pt-1.5 border-t border-slate-200 flex justify-between items-center text-[8.5px] text-slate-400 font-mono select-none">
-                            <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
-                            <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
+                            {/* Solid divider line */}
+                            <div className="border-t border-slate-900 mt-2 mb-2 print:my-1"></div>
+
+                            {/* Quality systems note & badges (Clínico) */}
+                            <div className="grid grid-cols-12 gap-3 items-center">
+                                <div className="col-span-8 text-[8px] print:text-[7px] text-slate-700 leading-normal font-medium">
+                                    <p className="font-bold text-slate-800 uppercase mb-0.5">
+                                        Este Laboratorio cuenta con Programas de Calidad Internos y Externos, Permisos Sanitarios y Certificados de Validez Internacional:
+                                    </p>
+                                    <p>
+                                        1-AOAC PT ENROLLMENT ID#119455 (Test de Proficiencia). 2-MINISTERIO DE SALUD: #01048.
+                                    </p>
+                                    <p>
+                                        3-MAG-SENASA (CVO): #DRM1951-2010. 4-MQC-SEEC SJ#136.
+                                    </p>
+                                    <p className="text-[7.5px] print:text-[6.5px] text-slate-600 font-semibold mt-0.5">
+                                        Sistema de Gestión de la Calidad implementado bajo la norma INTE/ISO/IEC 17025:2017 (INTECO) e INTE/ISO 15189:2014, respaldado con certificaciones de ensayos de aptitud y test de proficiencia.
+                                    </p>
+                                </div>
+                                
+                                <div className="col-span-4 flex items-center justify-end gap-2">
+                                    <div className="flex flex-col items-center bg-[#074684] text-white px-1.5 py-0.5 rounded text-[6px] font-black border border-blue-900 shadow-sm leading-none">
+                                        <span>AOAC</span>
+                                        <span className="text-[4px] font-normal tracking-tighter mt-0.5">INTERNATIONAL</span>
+                                    </div>
+                                    <div className="flex items-center justify-center bg-[#b81d24] text-white px-1.5 py-1 rounded text-[6px] font-black border border-red-900 shadow-sm leading-none">
+                                        <span>SAEC</span>
+                                    </div>
+                                    <div className="flex flex-col items-center bg-[#0d5c3a] text-white px-1.5 py-0.5 rounded text-[5px] font-black border border-emerald-900 shadow-sm leading-none">
+                                        <span className="text-[7px] font-extrabold">SENASA</span>
+                                        <span className="text-[3px] font-normal tracking-tighter mt-0.5">COSTA RICA</span>
+                                    </div>
+                                    {showQrVerification && qrUrl && (
+                                        <div className="bg-white p-0.5 border border-slate-300 rounded shadow-xs ml-1 select-none flex-shrink-0">
+                                            <img src={qrUrl} alt="Validación QR" className="w-9 h-9 print:w-7 print:h-7" crossOrigin="anonymous" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Pie de Control Documental */}
+                            <div className="mt-1.5 pt-1 border-t border-slate-200 flex justify-between items-center text-[8px] print:text-[6.5px] text-slate-400 font-mono select-none">
+                                <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
+                                <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
+                            </div>
                         </div>
                     </>
                 )}
@@ -2018,6 +2648,160 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                 request={request} 
                 labInfo={labInfo} 
                 reportLang={reportLang} 
+            />
+
+            {/* Modal de Selección y Configuración de Modelos de Inteligencia Artificial */}
+            {isAIModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in print:hidden select-none">
+                    <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold">
+                                    ✨
+                                </div>
+                                <div>
+                                    <h3 className="font-extrabold text-base text-slate-800">
+                                        {reportLang === 'es' ? 'Asistente de IA Multimodelo (Gemini)' : 'Multi-Model AI Assistant (Gemini)'}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 font-medium">
+                                        {reportLang === 'es' ? 'Seleccione el motor de lenguaje y el enfoque del dictamen' : 'Select AI engine and evaluation purpose'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsAIModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-sm font-bold cursor-pointer">✕</button>
+                        </div>
+
+                        {/* Selección de Modelo */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-600 uppercase tracking-wider block">
+                                {reportLang === 'es' ? 'Motor de IA Preferido:' : 'Preferred AI Engine:'}
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIModel('auto')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIModel === 'auto'
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">🔄 Auto Cascada</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">Máxima resiliencia</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIModel('gemini-2.5-flash')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIModel === 'gemini-2.5-flash'
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">⚡ Gemini Flash</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">Rápido y ágil</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIModel('gemini-2.5-pro')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIModel === 'gemini-2.5-pro'
+                                            ? 'bg-indigo-50 border-indigo-500 text-indigo-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">🧠 Gemini Pro</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">Profundo & Normas</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Enfoque del Dictamen */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-600 uppercase tracking-wider block">
+                                {reportLang === 'es' ? 'Propósito del Dictamen:' : 'Evaluation Purpose:'}
+                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIEvalType('full')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIEvalType === 'full'
+                                            ? 'bg-blue-50 border-blue-500 text-blue-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">📋 Dictamen Integral</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">{isIndustrial ? 'RTCA / BAM FDA / ISO 17025' : 'Fisiopatología + Resumen'}</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIEvalType('didactic')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIEvalType === 'didactic'
+                                            ? 'bg-blue-50 border-blue-500 text-blue-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">👨‍👩‍👧 Para el Paciente</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">Explicación didáctica y empática</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIEvalType('compliance')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIEvalType === 'compliance'
+                                            ? 'bg-blue-50 border-blue-500 text-blue-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">🏭 Inocuidad & Calidad</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">Aptitud para consumo humano</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedAIEvalType('export_en')}
+                                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                        selectedAIEvalType === 'export_en'
+                                            ? 'bg-blue-50 border-blue-500 text-blue-950 font-bold shadow-xs'
+                                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                                    }`}
+                                >
+                                    <span className="block text-xs font-extrabold">🌐 Export Certificate (EN)</span>
+                                    <span className="text-[10px] text-slate-500 block mt-0.5">100% English Mayo / FDA</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Botón de Ejecución */}
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsAIModalOpen(false);
+                                    handleGenerateAIEvaluation(selectedAIEvalType, selectedAIModel);
+                                }}
+                                disabled={isGeneratingAI}
+                                className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-xl shadow-md hover:opacity-95 transition-all text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                                <Sparkles size={16} className="text-amber-300" />
+                                <span>{isGeneratingAI ? 'Generando con IA...' : 'Generar y Aplicar al Informe'}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsAIModalOpen(false)}
+                                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition-colors cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <QualityLibraryModal 
+                isOpen={isQualityModalOpen} 
+                onClose={() => setIsQualityModalOpen(false)} 
             />
         </div>
     );

@@ -379,7 +379,7 @@ export const ProficiencyTestingTab = ({ db, user }) => {
                     }`}
                 >
                     <ShieldCheck size={16} className={activeHubTab === 'ECA' ? 'text-amber-300' : 'text-slate-500'} />
-                    <span>Evaluador Oficial ECA (ISO/IEC 17025)</span>
+                    <span>Formación Evaluadores ECA (ISO/IEC 17025)</span>
                     <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">Nota 100</span>
                 </button>
                 <button
@@ -705,7 +705,7 @@ export const ProficiencyTestingTab = ({ db, user }) => {
                                     Vigilancia Continua del Sistema de Calidad (ISO/IEC 17025)
                                 </h3>
                                 <p className="text-xs text-slate-600 mt-1">
-                                    La dirección técnica del Dr. Roldan Ajún, respaldada por su acreditación oficial como evaluador del ECA, asegura que cada proceso en LIMS-PRO cumple rigurosamente con los requisitos normativos:
+                                    La dirección técnica del Dr. Roldan Ajún, calificada en formación de evaluadores según la norma INTE/ISO-IEC 17025 (ECA), asegura que cada proceso en LIMS-PRO cumple rigurosamente con los requisitos normativos del sistema de gestión INTECO e ISO 15189:
                                 </p>
                             </div>
 

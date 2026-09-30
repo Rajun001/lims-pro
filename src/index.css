@@ -12,3 +12,53 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 6mm 8mm 6mm 8mm;
+  }
+
+  html, body, #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background-color: white !important;
+    color: black !important;
+    font-size: 11pt;
+  }
+
+  .h-screen, .h-full, .overflow-hidden, .overflow-y-auto, .overflow-x-auto {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  header, aside, nav, .print\:hidden, [class*="print:hidden"] {
+    display: none !important;
+  }
+
+  .print-card-break, .print\:break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}

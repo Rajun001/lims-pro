@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Activity, RefreshCcw, Cpu, Link as LinkIcon, CheckCircle2, AlertCircle, Database } from 'lucide-react';
 import { LoadingSpinner, StatusBadge } from '../components/UI';
 import { FlashAndGoImporter } from '../components/FlashAndGoImporter';
+import { MaglumiImporter } from '../components/MaglumiImporter';
 import HardwareLink from '../services/HardwareLink';
 
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
@@ -13,12 +14,14 @@ export const AnalyzerInboxView = ({ db, user }) => {
     const [isPolling, setIsPolling] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
     const [showImporter, setShowImporter] = useState(false);
+    const [showMaglumiImporter, setShowMaglumiImporter] = useState(false);
     
-    // Mock data representing JSON payloads received from the local HL7 middleware
+    // Datos en cola con analizadores oficiales de Microlabs (Roche Cobas c111, Mindray BC-5000, Snibe Maglumi X3)
     const [incomingResults, setIncomingResults] = useState([
-        { id: 'msg-001', equipment: 'Fuji NX6000', barcode: 'MC-2026-0506', tests: ['GLU-03', 'LIP-02'], timestamp: 'Hace 5 min', status: 'pending', rawData: { 'GLU-03': 95, 'LIP-02': 'Ver detalle' } },
-        { id: 'msg-002', equipment: 'Snibe Maglumi 800', barcode: 'MC-2026-0507', tests: ['TSH', 'T4L'], timestamp: 'Hace 12 min', status: 'matched', rawData: { 'TSH': 2.4, 'T4L': 1.1 } },
-        { id: 'msg-003', equipment: 'Fuji NX6000', barcode: 'UNKNOWN-889', tests: ['HEM-01'], timestamp: 'Hace 1 hora', status: 'error', rawData: { 'HEM-01': 'Error lectura' } },
+        { id: 'msg-001', equipment: 'Roche Cobas c111', barcode: 'MC-2026-0506', tests: ['GLU-03', 'COL-01', 'TRI-02'], timestamp: 'Hace 3 min', status: 'pending', rawData: { 'GLU-03': 94, 'COL-01': 185, 'TRI-02': 142 } },
+        { id: 'msg-002', equipment: 'Snibe Maglumi X3', barcode: 'MC-2026-0507', tests: ['TSH', 'T4L'], timestamp: 'Hace 8 min', status: 'matched', rawData: { 'TSH': 2.35, 'T4L': 1.18, 'Unit': 'uIU/mL' } },
+        { id: 'msg-003', equipment: 'Mindray BC-5000', barcode: 'MC-2026-0508', tests: ['WBC', 'RBC', 'HGB', 'HCT', 'PLT'], timestamp: 'Hace 15 min', status: 'pending', rawData: { 'WBC': 6.8, 'RBC': 4.75, 'HGB': 14.2, 'HCT': 42.6, 'PLT': 240 } },
+        { id: 'msg-004', equipment: 'IUL Flash & Go', barcode: 'ALIM-2026-102', tests: ['Recuento Aerobios'], timestamp: 'Hace 25 min', status: 'pending', rawData: { 'UFC': 2400, 'Count': 24, 'Dilution': '-2' } }
     ]);
 
     const handleSync = () => {
@@ -222,17 +225,23 @@ export const AnalyzerInboxView = ({ db, user }) => {
                         {isPolling ? 'Escuchando Puerto...' : 'Conectar Analizador (USB)'}
                     </button>
                     <button 
-                        onClick={() => setShowImporter(!showImporter)}
-                        className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm ${showImporter ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                        onClick={() => { setShowImporter(!showImporter); setShowMaglumiImporter(false); }}
+                        className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${showImporter ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}
                     >
-                        <Database size={18} /> Importar CSV
+                        <Database size={15} /> <span>Importar Flash & Go</span>
+                    </button>
+                    <button 
+                        onClick={() => { setShowMaglumiImporter(!showMaglumiImporter); setShowImporter(false); }}
+                        className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer ${showMaglumiImporter ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                    >
+                        <Cpu size={15} /> <span>Importar Maglumi X3 (.xlsx)</span>
                     </button>
                     <button 
                         onClick={handleSync}
                         disabled={isSyncing}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-700 shadow-sm flex items-center gap-2 transition-all disabled:opacity-50"
+                        className="bg-blue-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                     >
-                        <RefreshCcw size={18} className={isSyncing ? 'animate-spin' : ''} /> Sincronizar
+                        <RefreshCcw size={15} className={isSyncing ? 'animate-spin' : ''} /> <span>Sincronizar</span>
                     </button>
                 </div>
             </div>
@@ -269,6 +278,13 @@ export const AnalyzerInboxView = ({ db, user }) => {
 
             {showImporter && (
                 <FlashAndGoImporter onImport={handleImportFlashAndGo} />
+            )}
+
+            {showMaglumiImporter && (
+                <MaglumiImporter 
+                    onImport={handleImportFlashAndGo} 
+                    onClose={() => setShowMaglumiImporter(false)} 
+                />
             )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

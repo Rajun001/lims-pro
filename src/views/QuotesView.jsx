@@ -1,16 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { Calculator, Percent, Plus, Trash2, FileText, Download, Truck } from 'lucide-react';
+import { Calculator, Percent, Plus, Trash2, FileText, Download, Truck, Building2, CreditCard, Copy, Check } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import catalogData from '../data/cmqccr_catalog.json';
 import versionData from '../version.json';
+import { PRELOADED_CORPORATE_CLIENTS } from '../constants/preloadedClients';
+import { OFFICIAL_BANK_ACCOUNTS, SINPE_MOVIL_INFO } from '../constants/bankAccounts';
 
 export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests = [], labInfo }) => {
-    const [clients] = useState([
-        { id: 'C-001', name: 'Hospital Central', type: 'Institucional', discount: 15 },
-        { id: 'C-002', name: 'Empresa Soya S.A.', type: 'Industrial', discount: 10 },
-        { id: 'C-003', name: 'Lácteos del Sur', type: 'Industrial', discount: 5 },
-        { id: 'C-004', name: 'Paciente Particular', type: 'Privado', discount: 0 }
+    const [clients] = useState(() => [
+        { id: 'C-PART', name: 'Paciente Particular / Sin Registro', type: 'Privado', discount: 0 },
+        ...PRELOADED_CORPORATE_CLIENTS.map(c => ({
+            id: c.code || c.id,
+            name: c.name,
+            type: c.clientType,
+            discount: c.discount || 10,
+            email: c.email,
+            category: c.category
+        }))
     ]);
+    const [copiedIban, setCopiedIban] = useState('');
 
     const [selectedClient, setSelectedClient] = useState('');
     const [quoteItems, setQuoteItems] = useState([]);
@@ -548,6 +556,44 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                             </div>
                         </div>
                     )}
+
+                    {/* Cuentas Bancarias Oficiales para Depósito / Transferencia */}
+                    <div className="p-4 bg-blue-50/60 rounded-xl border border-blue-200/80 text-xs space-y-2">
+                        <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs uppercase tracking-wide">
+                            <CreditCard size={15} className="text-blue-700" />
+                            <span>Cuentas Bancarias Oficiales (IBAN)</span>
+                        </div>
+                        <p className="text-[11px] text-blue-800">
+                            <strong>Laboratorio Microlabs Químicos S.A.</strong> (Céd. Jurídica: 3-101-144450)
+                        </p>
+                        <div className="space-y-1.5 pt-1">
+                            {OFFICIAL_BANK_ACCOUNTS.filter(b => ['bncr-crc', 'bac-crc'].includes(b.id)).map(b => (
+                                <div key={b.id} className="bg-white p-2 rounded-lg border border-blue-200 flex justify-between items-center">
+                                    <div>
+                                        <span className="font-bold text-slate-800 text-[11px] block">{b.bankName}</span>
+                                        <span className="font-mono text-[10px] text-slate-600">{b.iban}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(b.iban);
+                                            setCopiedIban(b.id);
+                                            setTimeout(() => setCopiedIban(''), 2500);
+                                        }}
+                                        className="text-[10px] font-bold px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded flex items-center gap-1 cursor-pointer transition-all"
+                                        title="Copiar IBAN"
+                                    >
+                                        {copiedIban === b.id ? <Check size={11} className="text-emerald-700" /> : <Copy size={11} />}
+                                        <span>{copiedIban === b.id ? '¡Copiado!' : 'Copiar'}</span>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="text-[10px] text-blue-700 pt-1 flex items-center justify-between">
+                            <span>📲 SINPE Móvil: <strong>{SINPE_MOVIL_INFO.displayPhone}</strong></span>
+                            <span>Comprobantes: <strong>{SINPE_MOVIL_INFO.notifyEmail}</strong></span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -593,7 +639,7 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                     </tbody>
                 </table>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end mb-6">
                     <div className="w-64 space-y-2 text-sm">
                         <div className="flex justify-between text-slate-600">
                             <span>Subtotal:</span>
@@ -612,7 +658,30 @@ export const QuotesView = ({ _navigateTo, referenceLabs = [], referenceLabTests 
                     </div>
                 </div>
 
-                <div className="mt-16 pt-8 border-t border-slate-300 text-center text-xs text-slate-500">
+                {/* Cuentas Bancarias Oficiales en PDF Proforma */}
+                <div className="mb-6 p-4 bg-slate-50 border border-slate-300 rounded-lg text-xs">
+                    <p className="font-bold text-slate-800 uppercase tracking-wide mb-1 text-[11px]">
+                        Información para Depósito / Transferencia Bancaria — Microlabs Químicos S.A.
+                    </p>
+                    <p className="text-[10px] text-slate-600 mb-2">Cédula Jurídica: <strong>3-101-144450</strong> | Comprobantes a: <strong>facturacion@microlabscr.com</strong></p>
+                    <div className="grid grid-cols-2 gap-3 text-[10px]">
+                        <div className="p-2 bg-white rounded border border-slate-200">
+                            <strong className="block text-slate-900">Banco Nacional de Costa Rica (BNCR)</strong>
+                            <p className="text-slate-700 font-mono mt-0.5">IBAN Colones: <strong>CR55015100010011669478</strong></p>
+                            <p className="text-slate-700 font-mono">IBAN Dólares: <strong>CR87015107720020031032</strong></p>
+                        </div>
+                        <div className="p-2 bg-white rounded border border-slate-200">
+                            <strong className="block text-slate-900">BAC San José</strong>
+                            <p className="text-slate-700 font-mono mt-0.5">IBAN Colones: <strong>CR37010200009017091629</strong></p>
+                            <p className="text-slate-700 font-mono">IBAN Dólares: <strong>CR82010200009026883163</strong></p>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-600">
+                        <span>📲 SINPE Móvil: <strong>7138-2750</strong> (Laboratorio Microlabs Químicos S.A.)</span>
+                    </div>
+                </div>
+
+                <div className="mt-8 pt-4 border-t border-slate-300 text-center text-xs text-slate-500">
                     <p className="mb-1 font-bold">CONDICIONES DE LA COTIZACIÓN</p>
                     <p>Precios válidos por 30 días. Los tiempos de entrega (TAT) dependen de la complejidad de cada ensayo.</p>
                     <p className="mt-4 italic text-[10px]">Documento Proforma FOR-COT-01 (Rev. 02) — Generado electrónicamente por LIMS-PRO {versionData?.fullVersion || 'v2.5.0'} (#{versionData?.gitCommit || 'dev'}).</p>

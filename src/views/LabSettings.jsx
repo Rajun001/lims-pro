@@ -4,9 +4,11 @@ import { FormInput, RestrictedAccess } from '../components/UI';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
-import { Building2, PlusCircle, Edit3, Trash2, CheckCircle2, Star, MapPin, Phone, Mail, UserCheck, ShieldCheck } from 'lucide-react';
+import { Building2, PlusCircle, Edit3, Trash2, CheckCircle2, Star, MapPin, Phone, Mail, UserCheck, ShieldCheck, CreditCard, Copy, Check } from 'lucide-react';
+import { OFFICIAL_BANK_ACCOUNTS, SINPE_MOVIL_INFO } from '../constants/bankAccounts';
 
 export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
+    const [copiedIban, setCopiedIban] = useState('');
     const [info, setInfo] = useState(() => {
         // Deep-copy to avoid mutating the incoming prop reference (ESLint: no prop mutation)
         const base = { ...(labInfo || {}) };
@@ -22,6 +24,12 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
         if (!base.email) base.email = 'laboratorio@microlabscr.com';
         if (!base.emailReports) base.emailReports = 'resultados@microlabscr.com';
         if (!base.emailBilling) base.emailBilling = 'fe@microlabscr.com';
+        if (!base.directorName) base.directorName = 'Dr. Roldan Ajún Chaverri';
+        if (!base.directorCode) base.directorCode = '802';
+        if (!base.professional2Name) base.professional2Name = 'M.Q.C. José Guillermo Ajún Jiménez';
+        if (!base.professional2Code) base.professional2Code = 'Reg. Trámite';
+        if (!base.professional3Name) base.professional3Name = 'M.Q.C. Roldán Alberto Ajún Jiménez';
+        if (!base.professional3Code) base.professional3Code = 'Reg. Trámite';
 
         if (!base.branches || base.branches.length === 0) {
             base.branches = [
@@ -237,6 +245,17 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                 >
                     <UserCheck size={15} /> Microbiólogos Validadores
                 </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('banking')}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                        activeTab === 'banking' 
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
+                            : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                >
+                    <CreditCard size={15} /> Cuentas Bancarias & IBAN
+                </button>
             </div>
 
             {/* TAB 1: GESTIÓN MULTI-SUCURSAL */}
@@ -409,12 +428,36 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
             {activeTab === 'microbiologists' && (
                 <form onSubmit={handleGeneralSave} className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-fade-in">
                     <div className="space-y-4">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b pb-2">Microbiólogos Químicos Clínicos y Validadores Oficiales</h3>
+                        <div className="flex items-center justify-between border-b pb-2">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                Microbiólogos Químicos Clínicos y Validadores Oficiales
+                            </h3>
+                            <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                                3 Profesionales Habilitados
+                            </span>
+                        </div>
+
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 text-xs text-blue-950 space-y-1">
+                            <p className="font-bold flex items-center gap-1.5">
+                                <span>👥</span> <span>Cuerpo Profesional de Regencia & Firmas Microlabs</span>
+                            </p>
+                            <p className="text-[11px] text-blue-900 leading-relaxed">
+                                Los reportes cuentan con selector dinámico de firmas según el caso (Regente individual, analista individual o firmas conjuntas). Al graduarse e incorporarse <strong>Roldán Alberto Ajún Jiménez</strong>, su firma y sello ya están plenamente integrados en el sistema para validar y co-firmar cualquier reporte clínico o industrial.
+                            </p>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormInput label="Director Técnico / Regente Principal" value={info.directorName || ''} onChange={e => setInfo({ ...info, directorName: e.target.value })} placeholder="Dr. Roldan Ajún Chaverri" />
-                            <FormInput label="Código / Registro Profesional MQC" value={info.directorCode || ''} onChange={e => setInfo({ ...info, directorCode: e.target.value })} placeholder="802" />
-                            <FormInput label="Microbiólogo Co-firmante / Sede" value={info.professional2Name || ''} onChange={e => setInfo({ ...info, professional2Name: e.target.value })} placeholder="Dr. José Guillermo Ajún Jiménez" />
-                            <FormInput label="Código / Registro Co-firmante" value={info.professional2Code || ''} onChange={e => setInfo({ ...info, professional2Code: e.target.value })} placeholder="Reg. Trámite" />
+                            {/* Regente Principal */}
+                            <FormInput label="Director Técnico & Regente Principal" value={info.directorName || ''} onChange={e => setInfo({ ...info, directorName: e.target.value })} placeholder="Dr. Roldan Ajún Chaverri" />
+                            <FormInput label="Código / Registro Profesional MQC Regente" value={info.directorCode || ''} onChange={e => setInfo({ ...info, directorCode: e.target.value })} placeholder="802" />
+                            
+                            {/* Hijo 1: José Guillermo */}
+                            <FormInput label="Microbiólogo Analista / Técnico Complementario (Hijo)" value={info.professional2Name || ''} onChange={e => setInfo({ ...info, professional2Name: e.target.value })} placeholder="M.Q.C. José Guillermo Ajún Jiménez" />
+                            <FormInput label="Código / Registro Analista Complementario" value={info.professional2Code || ''} onChange={e => setInfo({ ...info, professional2Code: e.target.value })} placeholder="Reg. Trámite" />
+
+                            {/* Hijo 2: Roldán Alberto */}
+                            <FormInput label="Microbiólogo Analista / Co-firmante (Hijo)" value={info.professional3Name || ''} onChange={e => setInfo({ ...info, professional3Name: e.target.value })} placeholder="M.Q.C. Roldán Alberto Ajún Jiménez" />
+                            <FormInput label="Código / Registro Profesional Analista (Hijo)" value={info.professional3Code || ''} onChange={e => setInfo({ ...info, professional3Code: e.target.value })} placeholder="Reg. Trámite" />
                         </div>
                     </div>
 
@@ -422,6 +465,84 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                         Guardar Profesionales
                     </button>
                 </form>
+            )}
+
+            {/* TAB 4: CUENTAS BANCARIAS & IBAN OFICIAL */}
+            {activeTab === 'banking' && (
+                <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6 animate-fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b pb-4">
+                        <div>
+                            <h3 className="text-sm font-extrabold text-slate-800">
+                                Cuentas Bancarias Institucionales — Microlabs Químicos S.A.
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Cédula Jurídica: <strong className="text-slate-800">3-101-144450</strong> • Certificadas para cobro de facturas y proformas.
+                            </p>
+                        </div>
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="text-emerald-600" /> Cuentas Activas & Validadas
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {OFFICIAL_BANK_ACCOUNTS.map((acc) => (
+                            <div key={acc.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-indigo-300 transition-all space-y-3">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-900">{acc.bankName}</h4>
+                                        <p className="text-xs text-slate-500 font-medium">{acc.accountType} ({acc.currency})</p>
+                                    </div>
+                                    <span className="text-xs font-mono font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        {acc.currency} {acc.currencySymbol}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-1.5 text-xs">
+                                    <div className="flex justify-between items-center text-slate-600">
+                                        <span>Nº de Cuenta:</span>
+                                        <span className="font-mono font-semibold">{acc.accountNumber}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-slate-600">
+                                        <span>Cuenta Cliente:</span>
+                                        <span className="font-mono text-slate-700">{acc.clientNumber}</span>
+                                    </div>
+                                    <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex justify-between items-center">
+                                        <div>
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase block">Código IBAN</span>
+                                            <span className="font-mono font-bold text-slate-800 text-xs tracking-tight">{acc.iban}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(acc.iban);
+                                                setCopiedIban(acc.id);
+                                                setTimeout(() => setCopiedIban(''), 2500);
+                                            }}
+                                            className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-xs font-bold flex items-center gap-1 transition-all cursor-pointer"
+                                            title="Copiar IBAN"
+                                        >
+                                            {copiedIban === acc.id ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                                            <span>{copiedIban === acc.id ? 'Copiado' : 'Copiar'}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Banner SINPE Móvil */}
+                    <div className="p-4 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div>
+                            <span className="text-xs uppercase font-extrabold tracking-wider text-sky-100">Canal de Pago Inmediato</span>
+                            <h4 className="text-lg font-black mt-0.5">SINPE Móvil Oficial: {SINPE_MOVIL_INFO.displayPhone}</h4>
+                            <p className="text-xs text-sky-100">Titular: {SINPE_MOVIL_INFO.holder} • Cédula: {SINPE_MOVIL_INFO.legalId}</p>
+                        </div>
+                        <div className="text-right text-xs">
+                            <span className="block text-sky-200">Envío de comprobantes:</span>
+                            <strong className="underline text-white">{SINPE_MOVIL_INFO.notifyEmail}</strong>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* MODAL REGISTRAR / EDITAR SUCURSAL */}

@@ -5,7 +5,7 @@ import {
     Microscope, Factory, Truck, Wrench, ShieldAlert, Navigation, Layers,
     UserPlus, Building2, CheckCircle2, Send, FileSpreadsheet, Settings,
     FileCheck2, SlidersHorizontal, Home, Thermometer, Stethoscope, 
-    CreditCard, TrendingUp, Search, Award, Globe
+    CreditCard, TrendingUp, Search, Award, Globe, BellRing, Sparkles
 } from 'lucide-react';
 import { Logo } from '../components/UI';
 import versionData from '../version.json';
@@ -181,6 +181,8 @@ export const Sidebar = ({ navigateTo, view, labInfo, userRole }) => {
                         {/* PASO 1: CLIENTES Y EMPRESAS (Comercial / Admisión / Facturación / Dirección) */}
                         {['admin', 'director_tecnico', 'billing_agent'].includes(userRole) && (
                             <NavGroup step="Paso 1" title="Clientes & Empresas" color="text-sky-400">
+                                <NavItem view="reminders" currentView={view} navigateTo={navigateTo} icon={BellRing} label="Agenda & Recordatorios" badge="Alertas" />
+                                <NavItem view="client-crm" currentView={view} navigateTo={navigateTo} icon={Sparkles} label="Reactivación & Mercadeo" badge="Rescate" />
                                 <NavItem view="crm" currentView={view} navigateTo={navigateTo} icon={UserCheck} label="Directorio General (CRM)" />
                                 <NavItem 
                                     view="new_request_clinical" 

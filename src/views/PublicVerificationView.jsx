@@ -33,7 +33,7 @@ export const PublicVerificationView = () => {
                         technicalDirector: 'Dr. Roldan Ajún Chaverri (Director Técnico MQC #802)',
                         sha256Digest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
                         isIntegrityVerified: true,
-                        accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022', '21 CFR Part 11 Compliant']
+                        standards: ['INTE/ISO/IEC 17025:2017 (INTECO)', 'INTE/ISO 15189:2014', 'Test de Proficiencia AOAC/LGC']
                     });
                 }
             } catch (err) {
@@ -43,14 +43,14 @@ export const PublicVerificationView = () => {
                     reportType: 'HUMAN_CLINICAL',
                     clientOrPatient: 'Verificación Oficial LIMS',
                     sampleBarcode: 'SMP-2026-DEMO',
-                    sampleType: 'Análisis de Laboratorio Acreditado',
+                    sampleType: 'Análisis Oficial de Laboratorio',
                     analysisRequested: 'Panel Analítico Certificado',
                     status: 'ISSUED',
                     signedAt: new Date().toISOString(),
                     technicalDirector: 'Dr. Roldan Ajún Chaverri (Director Técnico MQC #802)',
                     sha256Digest: 'a8f5f167f44f4964e6c998dee827110c',
                     isIntegrityVerified: true,
-                    accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022']
+                    standards: ['INTE/ISO/IEC 17025:2017 (INTECO)', 'INTE/ISO 15189:2014']
                 });
             } finally {
                 setLoading(false);
@@ -169,14 +169,15 @@ export const PublicVerificationView = () => {
                         </div>
                     </div>
 
-                    {/* Acreditaciones ISO */}
+                    {/* Normativas y Calidad ISO */}
                     <div className="pt-4 border-t border-slate-800 text-center space-y-2">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Normativas y Acreditaciones de Ensayos Registrados
+                            Sistema de Calidad & Normativas Aplicables
                         </span>
                         <div className="flex flex-wrap justify-center gap-2 text-xs font-semibold">
-                            <span className="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">ISO/IEC 17025:2017</span>
-                            <span className="px-3 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">ISO 15189:2022</span>
+                            <span className="px-3 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">INTE/ISO/IEC 17025:2017 (INTECO)</span>
+                            <span className="px-3 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">INTE/ISO 15189:2014</span>
+                            <span className="px-3 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">Test de Proficiencia AOAC / LGC</span>
                             <span className="px-3 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">USP &lt;51&gt; / RTCA</span>
                         </div>
                     </div>
