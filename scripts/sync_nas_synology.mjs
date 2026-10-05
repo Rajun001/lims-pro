@@ -43,6 +43,7 @@ function getSynologyTargets() {
   } else if (isWin) {
     // Windows: Unidad Z: o carpeta local de sincronización
     candidateDirs.push(
+      'Z:\\Publica\\Respaldos_LIMS',
       'Z:\\public\\Respaldos_LIMS',
       'Z:\\Respaldos_LIMS',
       path.join(home, 'Respaldos_LIMS')

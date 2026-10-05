@@ -307,7 +307,7 @@ export const SystemDiagnosticsView = ({ db, user, requests, clients, userRole, n
                                 </div>
                                 <div>
                                     <h4 className="font-bold text-slate-800 text-sm">NAS / Nube HiDrive</h4>
-                                    <p className="text-xs text-slate-500 mt-1">Ruta: <span className="font-mono">Z:\public\Respaldos_LIMS</span></p>
+                                    <p className="text-xs text-slate-500 mt-1">Ruta: <span className="font-mono">{ecosystem?.nasStorage?.path || 'Z:\\Publica\\Respaldos_LIMS'}</span></p>
                                     <p className="text-xs text-slate-500">Copias en nube: <span className="font-bold text-slate-700">{ecosystem?.nasStorage?.recentBackupsCount || 0}</span></p>
                                 </div>
                                 <div className="mt-3 pt-3 border-t border-slate-200 text-[11px] text-emerald-700 font-medium flex items-center gap-1">

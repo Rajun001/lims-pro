@@ -36,6 +36,7 @@ export const createDatabaseBackup = async (reason = 'SCHEDULED') => {
     const isWindows = process.platform === 'win32';
     if (isWindows) {
       const candidatePaths = [
+        'Z:\\Publica\\Respaldos_LIMS',
         'Z:\\public\\Respaldos_LIMS',
         'Z:\\Respaldos_LIMS',
         '\\\\192.168.0.105\\Respaldos_LIMS'

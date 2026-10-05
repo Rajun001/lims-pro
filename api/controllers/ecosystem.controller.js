@@ -13,7 +13,23 @@ const __dirname = path.dirname(__filename);
 
 const DB_PATH = path.resolve(__dirname, '../prisma/dev.db');
 const LOCAL_BACKUPS_DIR = path.resolve(__dirname, '../prisma/backups');
-const NAS_BACKUP_DIR = 'Z:\\public\\Respaldos_LIMS';
+const NAS_CANDIDATE_DIRS = [
+  'Z:\\Publica\\Respaldos_LIMS',
+  'Z:\\public\\Respaldos_LIMS',
+  'Z:\\Respaldos_LIMS',
+  '\\\\192.168.0.105\\Respaldos_LIMS'
+];
+
+const getNasBackupDir = () => {
+  for (const dir of NAS_CANDIDATE_DIRS) {
+    try {
+      if (fs.existsSync(dir)) return dir;
+    } catch {
+      // ignore
+    }
+  }
+  return 'Z:\\Publica\\Respaldos_LIMS';
+};
 
 // Helper to test TCP port with short timeout
 const testTcpPort = (ip, port, timeout = 1200) => {
@@ -90,10 +106,11 @@ export const getEcosystemStatus = async (req, res) => {
     };
 
     // 4. NAS y Almacenamiento en la Nube (Unidad Z:)
+    const activeNasDir = getNasBackupDir();
     let nasStatus = {
       mounted: false,
       drive: 'Z:',
-      path: NAS_BACKUP_DIR,
+      path: activeNasDir,
       recentBackupsCount: 0,
       latestBackup: null
     };
@@ -101,11 +118,11 @@ export const getEcosystemStatus = async (req, res) => {
     try {
       if (fs.existsSync('Z:\\')) {
         nasStatus.mounted = true;
-        if (fs.existsSync(NAS_BACKUP_DIR)) {
-          const files = fs.readdirSync(NAS_BACKUP_DIR)
+        if (fs.existsSync(activeNasDir)) {
+          const files = fs.readdirSync(activeNasDir)
             .filter(f => f.endsWith('.db'))
             .map(f => {
-              const fPath = path.join(NAS_BACKUP_DIR, f);
+              const fPath = path.join(activeNasDir, f);
               const stat = fs.statSync(fPath);
               return {
                 name: f,
