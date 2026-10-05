@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Save, User, FlaskConical, Calendar, Stethoscope } from 'lucide-react';
 import { ASTMatrix } from './ASTMatrix';
 import { FormInput, StatusBadge } from './UI';
@@ -6,16 +6,62 @@ import { FormInput, StatusBadge } from './UI';
 import { formatToCRDate } from '../utils/dateFormatter.js';
 import versionData from '../version.json';
 
-export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
-    // Parse media state safely
-    const initialMedia = request?.media ? (typeof request.media === 'string' ? JSON.parse(request.media) : request.media) : {
-        agarSangre: false,
-        macConkey: false,
-        sabouraud: false,
-        caldoBHI: false
-    };
+const MEDIA_PRESETS = {
+    coprocultivo: {
+        agarMacConkey: 'Agar MacConkey (Lactosa +/-)',
+        agarSS: 'Agar Salmonella-Shigella (SS)',
+        agarXLD: 'Agar XLD (H2S / Patógenos)',
+        caldoSelenito: 'Caldo Enriquecimiento Selenito',
+        agarHektoen: 'Agar Entérico Hektoen',
+        agarCampy: 'Agar Campy-BAP (Campylobacter 42°C)'
+    },
+    exudado: {
+        agarSangre: 'Agar Sangre Carnero 5% (Hemólisis)',
+        agarChocolate: 'Agar Chocolate Enriquecido (Haemophilus/Neisseria)',
+        thayerMartin: 'Agar Thayer-Martin (Neisseria gonorrhoeae)',
+        sabouraud: 'Agar Sabouraud (Levaduras/Candida)',
+        caldoBHI: 'Caldo Infusión Cerebro Corazón (BHI)',
+        gramDirecto: 'Tinción de Gram / Frotis Directo al Fresco'
+    },
+    general: {
+        agarSangre: 'Agar Sangre Carnero 5%',
+        macConkey: 'Agar MacConkey',
+        sabouraud: 'Agar Sabouraud',
+        caldoBHI: 'Caldo BHI'
+    }
+};
 
-    const [media, setMedia] = useState(initialMedia);
+export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
+    const isCoprocultivo = Boolean(
+        (request?.analysisRequested || '').toLowerCase().includes('copro') ||
+        (request?.sampleType || '').toLowerCase().includes('heces') ||
+        (request?.sampleDescription || '').toLowerCase().includes('heces')
+    );
+
+    const isExudado = Boolean(
+        (request?.analysisRequested || '').toLowerCase().includes('exudado') ||
+        (request?.sampleType || '').toLowerCase().includes('exudado') ||
+        (request?.sampleType || '').toLowerCase().includes('hisopado') ||
+        (request?.sampleDescription || '').toLowerCase().includes('exudado')
+    );
+
+    const cultureType = isCoprocultivo ? 'coprocultivo' : (isExudado ? 'exudado' : 'general');
+    const currentPreset = MEDIA_PRESETS[cultureType];
+
+    const getInitialMedia = useCallback(() => {
+        if (request?.media) {
+            try {
+                return typeof request.media === 'string' ? JSON.parse(request.media) : request.media;
+            } catch {
+                // fallback
+            }
+        }
+        const defaultState = {};
+        Object.keys(currentPreset).forEach(k => { defaultState[k] = false; });
+        return defaultState;
+    }, [request, currentPreset]);
+
+    const [media, setMedia] = useState(getInitialMedia);
     
     const [readings, setReadings] = useState({
         day1: request?.readDay1 || '',
@@ -32,9 +78,7 @@ export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
     useEffect(() => {
         if (request) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
-            setMedia(request.media ? (typeof request.media === 'string' ? JSON.parse(request.media) : request.media) : {
-                agarSangre: false, macConkey: false, sabouraud: false, caldoBHI: false
-            });
+            setMedia(getInitialMedia());
              
             setReadings({
                 day1: request.readDay1 || '',
@@ -47,7 +91,7 @@ export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
                 antibiotics: request.antibiogram?.jsonResults ? JSON.parse(request.antibiogram.jsonResults) : []
             });
         }
-    }, [request]);
+    }, [request, getInitialMedia]);
 
     if (!isOpen || !request) return null;
 
@@ -115,17 +159,45 @@ export const WorkcardDetail = ({ isOpen, onClose, request, onSave }) => {
 
                     {/* Medios de Cultivo */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Medios Inoculados</h3>
-                        <div className="grid grid-cols-2 gap-3">
-                            {Object.keys(media).map((m) => (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-slate-100 pb-2">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">
+                                    {isCoprocultivo 
+                                        ? '🔬 Protocolo Coprocultivo: Medios Selectivos Entéricos' 
+                                        : isExudado 
+                                            ? '🧫 Protocolo Exudado: Medios de Aislamiento y Frotis' 
+                                            : 'Medios de Cultivo Inoculados'}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    {isCoprocultivo 
+                                        ? 'Búsqueda específica de Salmonella, Shigella, Campylobacter y E. coli en materia fecal' 
+                                        : isExudado 
+                                            ? 'Búsqueda específica en hisopado de mucosas / frotis según sitio anatómico' 
+                                            : 'Medios primarios estándar para cultivo microbiológico'}
+                                </p>
+                            </div>
+                            <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border self-start ${
+                                isCoprocultivo 
+                                    ? 'bg-amber-50 text-amber-800 border-amber-300' 
+                                    : isExudado 
+                                        ? 'bg-indigo-50 text-indigo-800 border-indigo-300' 
+                                        : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}>
+                                {isCoprocultivo ? 'Coprocultivo (Heces)' : isExudado ? 'Exudado (Hisopado)' : 'Cultivo General'}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {Object.keys(currentPreset).map((m) => (
                                 <label key={m} className="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
                                     <input 
                                         type="checkbox" 
-                                        checked={media[m]} 
+                                        checked={Boolean(media[m])} 
                                         onChange={() => setMedia({...media, [m]: !media[m]})}
                                         className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300"
                                     />
-                                    <span className="font-medium text-slate-700 capitalize">{m.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                    <span className="font-semibold text-slate-700 text-xs sm:text-sm">
+                                        {currentPreset[m] || m.replace(/([A-Z])/g, ' $1').trim()}
+                                    </span>
                                 </label>
                             ))}
                         </div>

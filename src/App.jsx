@@ -43,7 +43,6 @@ const mergeCalculatedAnalyses = (baseAnalyses) => {
 import { Sidebar } from './layouts/Sidebar';
 import { TopBar } from './layouts/TopBar';
 import { MobileNav } from './layouts/MobileNav';
-import { DemoRunner } from './components/DemoRunner';
 import { VersionUpdateNotifier } from './components/VersionUpdateNotifier';
 import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -387,6 +386,14 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCo
 const AppContent = () => {
     const navigate = useNavigate();
     const [user, setUser] = useState(() => {
+        const savedLimsUser = sessionStorage.getItem('lims_user');
+        if (savedLimsUser) {
+            try {
+                return JSON.parse(savedLimsUser);
+            } catch {
+                // Ignore parsing errors
+            }
+        }
         const saved = sessionStorage.getItem('offlineUser');
         if (saved) {
             try {
@@ -411,58 +418,14 @@ const AppContent = () => {
     }, [userRole]);
 
     useEffect(() => {
-        if (user && user.uid === 'offline-user') {
-            sessionStorage.setItem('offlineUser', JSON.stringify(user));
-        } else if (user === null) {
+        if (user) {
+            sessionStorage.setItem('lims_user', JSON.stringify(user));
+        } else {
+            sessionStorage.removeItem('lims_user');
             sessionStorage.removeItem('offlineUser');
+            sessionStorage.removeItem('lims_token');
         }
     }, [user]);
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const bypassRole = params.get('bypass');
-        if (bypassRole) {
-            let role = 'admin';
-            let email = 'admin-offline@microlabs.com';
-            
-            if (bypassRole === 'dt' || bypassRole === 'director') {
-                role = 'director_tecnico';
-                email = 'director-offline@microlabs.com';
-            } else if (bypassRole === 'analyst' || bypassRole === 'analista') {
-                role = 'analyst';
-                email = 'analista-offline@microlabs.com';
-            } else if (bypassRole === 'billing' || bypassRole === 'facturacion') {
-                role = 'billing_agent';
-                email = 'facturacion-offline@microlabs.com';
-            } else if (bypassRole === 'patient') {
-                role = 'client_patient';
-                email = 'paciente-offline@microlabs.com';
-            } else if (bypassRole === 'company') {
-                role = 'client_company';
-                email = 'empresa-offline@microlabs.com';
-            } else if (bypassRole === 'doctor') {
-                role = 'client_doctor';
-                email = 'medico-offline@microlabs.com';
-            }
-            
-            const offlineUser = { uid: 'offline-user', email: email };
-            Promise.resolve().then(() => {
-                setUser(offlineUser);
-                setUserRole(role);
-            });
-            sessionStorage.setItem('userRole', role);
-            sessionStorage.setItem('offlineUser', JSON.stringify(offlineUser));
-            
-            // Clean URL query parameters and redirect
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            if (role.startsWith('client_')) {
-                navigate('/client_portal');
-            } else {
-                navigate('/home');
-            }
-        }
-    }, [navigate]);
 
     const [requests, setRequests] = useState([]);
     const [analyses, setAnalyses] = useState([]);
@@ -571,6 +534,8 @@ const AppContent = () => {
                 setUserRole(null);
                 sessionStorage.removeItem('userRole');
                 sessionStorage.removeItem('offlineUser');
+                sessionStorage.removeItem('lims_user');
+                sessionStorage.removeItem('lims_token');
             } catch (err) {
                 console.error("Error signing out:", err);
             }
@@ -717,6 +682,10 @@ const AppContent = () => {
             if (urlStr && urlStr.includes('/api/') && !urlStr.includes('/api/logs/access')) {
                 // Ensure headers object exists
                 const headers = { ...(config.headers || {}) };
+                const token = sessionStorage.getItem('lims_token');
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
                 headers['x-user-id'] = user.uid;
                 headers['x-user-email'] = user.email || '';
                 headers['x-user-role'] = userRole || '';
@@ -994,7 +963,6 @@ const AppContent = () => {
                 isOpen={isShortcutsModalOpen} 
                 onClose={() => setIsShortcutsModalOpen(false)} 
             />
-            <DemoRunner />
             <VersionUpdateNotifier />
         </ErrorBoundary>
     );

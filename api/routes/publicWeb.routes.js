@@ -85,6 +85,31 @@ const saveTriageRequests = (items) => {
     }
 };
 
+// Archivo de persistencia para solicitudes de cotización confidenciales (Privacidad y Discreción)
+const QUOTES_STORAGE_PATH = path.join(__dirname, '../data/web_quotes_confidential.json');
+
+const loadQuoteRequests = () => {
+    try {
+        if (!fs.existsSync(QUOTES_STORAGE_PATH)) {
+            return [];
+        }
+        const data = fs.readFileSync(QUOTES_STORAGE_PATH, 'utf8');
+        return JSON.parse(data);
+    } catch (err) {
+        console.warn('Error reading web_quotes_confidential.json:', err.message);
+        return [];
+    }
+};
+
+const saveQuoteRequests = (items) => {
+    try {
+        fs.mkdirSync(path.dirname(QUOTES_STORAGE_PATH), { recursive: true });
+        fs.writeFileSync(QUOTES_STORAGE_PATH, JSON.stringify(items, null, 2), 'utf8');
+    } catch (err) {
+        console.error('Error saving web_quotes_confidential.json:', err.message);
+    }
+};
+
 // =============================================================================
 // 1. ENDPOINT PÚBLICO: Pre-ingreso Seguro de Muestras desde www.microlabscr.com
 // =============================================================================
@@ -185,7 +210,94 @@ router.patch('/public/intake/:id/status', (req, res) => {
 });
 
 // =============================================================================
-// 3. ENDPOINT PÚBLICO: Catálogo Oficial Dinámico de Ensayos para la Web
+// 3. ENDPOINT PÚBLICO: Solicitud de Cotización Confidencial (Protección de Tarifas y Privacidad)
+// =============================================================================
+router.post('/public/quote-request', publicIntakeLimiter, (req, res) => {
+    try {
+        const { clientType, clientName, contactPerson, email, phone, sampleCategory, testsRequested, notes, honeypot } = req.body;
+
+        if (honeypot) {
+            return res.status(200).json({ success: true, message: 'Recibido' });
+        }
+
+        if (!clientName || !email || !phone) {
+            return res.status(400).json({
+                error: 'Los campos Nombre/Empresa, Correo Electrónico y Teléfono son obligatorios para enviar la cotización.'
+            });
+        }
+
+        const quoteId = `COT-WEB-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        const newQuote = {
+            id: quoteId,
+            clientType: ['empresa', 'particular', 'clinica'].includes(clientType) ? clientType : 'empresa',
+            clientName: sanitizeText(clientName, 120),
+            contactPerson: sanitizeText(contactPerson, 100),
+            email: sanitizeText(email, 100),
+            phone: sanitizeText(phone, 30),
+            sampleCategory: sanitizeText(sampleCategory || 'Alimentos / Aguas', 100),
+            testsRequested: Array.isArray(testsRequested) ? testsRequested.map(t => sanitizeText(typeof t === 'string' ? t : t.name, 150)) : [sanitizeText(testsRequested, 400)],
+            notes: sanitizeText(notes, 500),
+            status: 'PENDING_OFFER',
+            createdAt: new Date().toISOString(),
+            ip: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        };
+
+        const list = loadQuoteRequests();
+        list.unshift(newQuote);
+        saveQuoteRequests(list);
+
+        return res.status(201).json({
+            success: true,
+            quoteId,
+            message: 'Su solicitud de presupuesto confidencial ha sido recibida con estricta reserva comercial. Un especialista técnico de Microlabs emitirá su oferta personalizada formal.',
+            timestamp: newQuote.createdAt
+        });
+    } catch (err) {
+        console.error('Error en /api/public/quote-request:', err);
+        return res.status(500).json({ error: 'Ocurrió un error al procesar su solicitud de cotización. Intente nuevamente.' });
+    }
+});
+
+// Listar cotizaciones confidenciales para el personal LIMS
+router.get('/public/quote-requests', (req, res) => {
+    try {
+        const quotes = loadQuoteRequests();
+        return res.json(quotes);
+    } catch {
+        return res.status(500).json({ error: 'Error al consultar cotizaciones' });
+    }
+});
+
+// =============================================================================
+// 4. ENDPOINT: Validación de Contraseña Previa Institucional para Acceso Interno (Staff)
+// =============================================================================
+router.post('/public/verify-staff-passcode', (req, res) => {
+    try {
+        const { passcode } = req.body;
+        const normalized = (passcode || '').trim().toUpperCase();
+
+        const INSTITUTIONAL_PASSCODES = ['MICROLABS-2026', 'MICROLABS2026', 'ADMIN2026'];
+
+        if (INSTITUTIONAL_PASSCODES.includes(normalized)) {
+            return res.json({
+                authorized: true,
+                message: 'Contraseña institucional verificada correctamente.',
+                authCode: 'MICROLABS-2026'
+            });
+        }
+
+        return res.status(401).json({
+            authorized: false,
+            error: 'Contraseña institucional previa inválida. Verifique con la Dirección Técnica de Microlabs.'
+        });
+    } catch {
+        return res.status(500).json({ authorized: false, error: 'Error al verificar clave de seguridad' });
+    }
+});
+
+// =============================================================================
+// 5. ENDPOINT PÚBLICO: Catálogo Oficial Dinámico de Ensayos para la Web
 // =============================================================================
 router.get('/public/catalog', (req, res) => {
     const catalog = {

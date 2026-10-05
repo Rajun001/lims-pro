@@ -6,6 +6,7 @@ import {
     Stethoscope, CheckCircle2, Search, RefreshCw, BadgeCheck
 } from 'lucide-react';
 
+import { useLocation } from 'react-router-dom';
 import { 
     signInWithEmailAndPassword, 
     createUserWithEmailAndPassword, 
@@ -19,15 +20,22 @@ import { getApiUrl } from '../utils/api';
 import { lookupCivilRegistry } from '../utils/civilRegistry';
 
 export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
+    const location = useLocation();
+
     // Mode: 'login' or 'register'
     const [authMode, setAuthMode] = useState('login');
 
+    // Determinar portal inicial según origen de navegación ('client' o 'staff')
+    const initialLoginType = location.state?.loginType || 
+        (new URLSearchParams(location.search).get('type')) || 
+        'client';
+
     // Primary Portal Selector: 'client' (external) or 'staff' (Microlabs internal)
-    const [loginType, setLoginType] = useState('client'); // default to Client Portal
+    const [loginType, setLoginType] = useState(initialLoginType);
     const [clientProfile, setClientProfile] = useState('patient'); // 'patient' | 'company' | 'doctor'
     
     // Login Credentials
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState(location.state?.loginEmail || '');
     const [password, setPassword] = useState('');
     
     // 2FA States
@@ -52,7 +60,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     const [regPassword, setRegPassword] = useState('');
     const [regConfirmPassword, setRegConfirmPassword] = useState('');
     const [licenseNumber, setLicenseNumber] = useState('');
-    const [staffAuthCode, setStaffAuthCode] = useState('');
+    const [staffAuthCode, setStaffAuthCode] = useState(location.state?.staffAuthCode || '');
     const [acceptTerms, setAcceptTerms] = useState(false);
     
     // Civil Registry (TSE) Verification States
@@ -72,8 +80,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
     const [forgotLoading, setForgotLoading] = useState(false);
     const [forgotError, setForgotError] = useState('');
 
-    // Feedback & Demo States
-    const [showDemoAccess, setShowDemoAccess] = useState(false);
+    // Feedback States
     const [authError, setAuthError] = useState('');
     const [authSuccess, setAuthSuccess] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -121,67 +128,14 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
         }
     };
 
-    // Quick Login Demo Handler
-    const handleQuickLogin = (role) => {
-        setStep('credentials');
-        setOtpCode('123456');
-        setAuthError('');
-        setAuthSuccess('');
-        
-        let targetEmail = '';
-        let targetLoginType = 'staff';
-        let targetClientProfile = 'patient';
-        
-        switch (role) {
-            case 'admin':
-                targetEmail = 'admin-offline@microlabs.com';
-                targetLoginType = 'staff';
-                break;
-            case 'director_tecnico':
-                targetEmail = 'director-offline@microlabs.com';
-                targetLoginType = 'staff';
-                break;
-            case 'billing_agent':
-                targetEmail = 'facturacion-offline@microlabs.com';
-                targetLoginType = 'staff';
-                break;
-            case 'analyst':
-                targetEmail = 'analista-offline@microlabs.com';
-                targetLoginType = 'staff';
-                break;
-            case 'client_patient':
-                targetEmail = 'paciente-offline@microlabs.com';
-                targetLoginType = 'client';
-                targetClientProfile = 'patient';
-                break;
-            case 'client_company':
-                targetEmail = 'empresa-offline@microlabs.com';
-                targetLoginType = 'client';
-                targetClientProfile = 'company';
-                break;
-            case 'client_doctor':
-                targetEmail = 'medico-offline@microlabs.com';
-                targetLoginType = 'client';
-                targetClientProfile = 'doctor';
-                break;
-            default:
-                return;
-        }
-        
-        setEmail(targetEmail);
-        setPassword('demo123');
-        setLoginType(targetLoginType);
-        setClientProfile(targetClientProfile);
-    };
-
-    // Login Handler
+    // Login Handler - Autenticación con Backend LIMS (JWT + PBKDF2 + 21 CFR Part 11)
     const handleLogin = async (e) => {
         e.preventDefault();
         setAuthError('');
         setAuthSuccess('');
         
         if (loginType === 'client' && step === 'credentials' && email && password) {
-            // Trigger 2FA step
+            // Verificación de segundo factor 2FA para portal de clientes
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             setGeneratedCode(code);
             setOtpCode(code);
@@ -191,8 +145,8 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
 
         if (email && password) {
             if (loginType === 'client' && step === '2fa') {
-                if (otpCode !== generatedCode && otpCode !== '123456' && !email.toLowerCase().includes('offline')) {
-                    setAuthError("Código incorrecto. Por favor, verifica el código de seguridad.");
+                if (otpCode !== generatedCode && otpCode !== '123456') {
+                    setAuthError("Código de verificación incorrecto. Por favor, revise el código.");
                     return;
                 }
             }
@@ -200,112 +154,122 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
             setIsSubmitting(true);
 
             try {
-                // Si el correo contiene "offline" o está en la base local de registrados
-                if (email.toLowerCase().includes('offline')) {
-                    if (typeof setUser === 'function') {
-                        setUser({ uid: 'offline-user', email: email });
-                    }
-                    if (loginType === 'staff') {
-                        if (email.toLowerCase().includes('admin')) {
-                            setUserRole('admin');
-                        } else if (email.toLowerCase().includes('dt@') || email.toLowerCase().includes('director')) {
-                            setUserRole('director_tecnico');
-                        } else if (email.toLowerCase().includes('facturacion') || email.toLowerCase().includes('cobro')) {
-                            setUserRole('billing_agent');
+                const API_URL = getApiUrl();
+                let authenticated = false;
+
+                // 1. Autenticación con API LIMS (Base de datos local con hash PBKDF2 y JWT)
+                try {
+                    const response = await fetch(`${API_URL}/api/auth/login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const token = data.token;
+                        const apiUser = data.user;
+
+                        sessionStorage.setItem('lims_token', token);
+
+                        // Mapeo canónico de roles normativos a interfaces del sistema
+                        const roleMap = {
+                            'ADMINISTRATOR': 'admin',
+                            'TECHNICAL_DIRECTOR': 'director_tecnico',
+                            'CLINICAL_ANALYST': 'analyst',
+                            'MICROBIOLOGIST': 'analyst',
+                            'RECEPTION': 'billing_agent',
+                            'CLIENT_PATIENT': 'client_patient',
+                            'CLIENT_COMPANY': 'client_company',
+                            'CLIENT_DOCTOR': 'client_doctor'
+                        };
+                        const mappedRole = roleMap[apiUser.role] || (apiUser.role ? apiUser.role.toLowerCase() : 'analyst');
+
+                        const authUser = {
+                            uid: `user-${apiUser.id}`,
+                            id: apiUser.id,
+                            email: apiUser.email,
+                            displayName: apiUser.fullName,
+                            role: mappedRole,
+                            licenseNumber: apiUser.licenseNumber,
+                            token: token
+                        };
+
+                        sessionStorage.setItem('lims_user', JSON.stringify(authUser));
+                        sessionStorage.setItem('userRole', mappedRole);
+
+                        if (typeof setUser === 'function') setUser(authUser);
+                        if (typeof setUserRole === 'function') setUserRole(mappedRole);
+
+                        if (mappedRole.startsWith('client_') || mappedRole === 'client' || mappedRole === 'patient') {
+                            navigateTo('client_portal');
                         } else {
-                            setUserRole('analyst');
+                            navigateTo('home');
                         }
-                        navigateTo('home');
-                    } else {
-                        setUserRole(`client_${clientProfile}`);
-                        navigateTo('client_portal');
+                        authenticated = true;
+                        return;
+                    } else if (response.status === 401 || response.status === 400) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || "Credenciales incorrectas. Verifique su correo institucional y contraseña.");
                     }
-                    return;
+                } catch (apiErr) {
+                    if (apiErr.message && !apiErr.message.includes('Failed to fetch') && !apiErr.message.includes('NetworkError')) {
+                        throw apiErr;
+                    }
+                    console.warn("Servidor LIMS local no respondió directamente, verificando autenticación de respaldo...");
                 }
 
-                // Verificar si es un usuario registrado en la base local/offline
-                const localUsers = JSON.parse(localStorage.getItem('lims_local_registered_users') || '[]');
-                const foundLocal = localUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-                if (foundLocal && foundLocal.password === password) {
-                    if (typeof setUser === 'function') {
-                        setUser({ uid: foundLocal.uid, email: foundLocal.email, displayName: foundLocal.fullName });
-                    }
-                    setUserRole(foundLocal.role);
-                    if (foundLocal.role.startsWith('client_') || foundLocal.role === 'patient' || foundLocal.role === 'client') {
-                        navigateTo('client_portal');
+                if (authenticated) return;
+
+                // 2. Respaldo secundario con Firebase Auth (en caso de despliegue en la nube)
+                try {
+                    const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+                    const loggedUser = userCredential.user;
+
+                    const userDocRef = doc(db, 'users', loggedUser.uid);
+                    const userDocSnap = await getDoc(userDocRef);
+
+                    let role = 'analyst';
+                    if (!userDocSnap.exists()) {
+                        const defaultRole = loginType === 'staff' ? 'analyst' : `client_${clientProfile}`;
+                        await setDoc(userDocRef, {
+                            uid: loggedUser.uid,
+                            email: loggedUser.email,
+                            role: defaultRole,
+                            createdAt: serverTimestamp(),
+                            isActive: true
+                        }, { merge: true });
+                        role = defaultRole;
                     } else {
-                        navigateTo('home');
+                        role = userDocSnap.data().role || 'analyst';
                     }
-                    return;
-                }
 
-                // Iniciar sesión con Firebase real
-                const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                const loggedUser = userCredential.user;
-
-                // Obtener rol desde Firestore en la colección '/users'
-                const userDocRef = doc(db, 'users', loggedUser.uid);
-                const userDocSnap = await getDoc(userDocRef);
-
-                if (!userDocSnap.exists()) {
-                    const defaultRole = loginType === 'staff' ? 'analyst' : `client_${clientProfile}`;
-                    await setDoc(userDocRef, {
+                    const authUser = {
                         uid: loggedUser.uid,
                         email: loggedUser.email,
-                        role: defaultRole,
-                        createdAt: serverTimestamp(),
-                        isActive: true
-                    }, { merge: true });
-                    setUserRole(defaultRole);
-                    if (defaultRole.startsWith('client_') || defaultRole === 'client') {
+                        displayName: loggedUser.displayName || loggedUser.email,
+                        role: role
+                    };
+                    sessionStorage.setItem('lims_user', JSON.stringify(authUser));
+                    sessionStorage.setItem('userRole', role);
+                    if (typeof setUser === 'function') setUser(authUser);
+                    if (typeof setUserRole === 'function') setUserRole(role);
+
+                    if (role && (role.startsWith('client_') || role === 'client' || role === 'patient')) {
                         navigateTo('client_portal');
                     } else {
                         navigateTo('home');
                     }
                     return;
-                }
-
-                const role = userDocSnap.data().role;
-                setUserRole(role);
-                
-                if (role && (role.startsWith('client_') || role === 'client' || role === 'patient')) {
-                    navigateTo('client_portal');
-                } else {
-                    navigateTo('home');
+                } catch (fbErr) {
+                    if (fbErr.code === 'auth/invalid-credential' || fbErr.code === 'auth/wrong-password' || fbErr.code === 'auth/user-not-found') {
+                        throw new Error("Credenciales inválidas. Por favor verifique su correo institucional y contraseña.");
+                    }
+                    throw fbErr;
                 }
             } catch (error) {
                 console.error("Error authenticating:", error);
-                
-                // Fallback local si Firebase Auth no está configurado o falla
-                if ((error.code === 'auth/configuration-not-found' || error.code === 'auth/network-request-failed') && password === 'demo123') {
-                    console.warn("Iniciando sesión en modo local/offline por configuración.");
-                    if (typeof setUser === 'function') {
-                        setUser({ uid: 'offline-user', email: email });
-                    }
-                    if (loginType === 'staff') {
-                        if (email.toLowerCase().includes('admin')) setUserRole('admin');
-                        else if (email.toLowerCase().includes('director')) setUserRole('director_tecnico');
-                        else if (email.toLowerCase().includes('facturacion')) setUserRole('billing_agent');
-                        else setUserRole('analyst');
-                        navigateTo('home');
-                    } else {
-                        setUserRole(`client_${clientProfile}`);
-                        navigateTo('client_portal');
-                    }
-                    return;
-                }
-
-                let errorMsg = "Error de autenticación. Verifica tus credenciales.";
-                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                    errorMsg = "Credenciales incorrectas. Verifique su correo electrónico y contraseña.";
-                } else if (error.code === 'auth/configuration-not-found') {
-                    errorMsg = "El método de inicio de sesión con Correo y Contraseña está en configuración en Firebase. Puedes utilizar los Accesos Demo locales abajo para probar.";
-                } else if (error.code === 'auth/too-many-requests') {
-                    errorMsg = "Demasiados intentos fallidos. Por favor, espere unos minutos o recupere su contraseña.";
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
-                setAuthError(errorMsg);
+                setAuthError(error.message || "Credenciales incorrectas. Verifique su correo electrónico institucional y contraseña.");
             } finally {
                 setIsSubmitting(false);
             }
@@ -524,6 +488,25 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 flex items-center justify-center p-4 selection:bg-teal-500 selection:text-white">
             <div className="bg-white w-full max-w-lg rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.55)] p-6 sm:p-8 transform transition-all animate-fade-in relative border border-slate-100 overflow-hidden">
                 
+                {/* Top Navigation Back to Web & Security Badge */}
+                <div className="flex items-center justify-between w-full mb-3 pb-2 border-b border-slate-100">
+                    <button
+                        type="button"
+                        onClick={() => navigateTo('web')}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors px-2 py-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                        title="Regresar a la página web oficial"
+                    >
+                        <ArrowLeft size={14} /> Volver al Sitio Web
+                    </button>
+                    {location.state?.authorized ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <CheckCircle2 size={12} className="text-emerald-600" /> Clave Institucional Validada
+                        </span>
+                    ) : (
+                        <span className="text-[11px] text-slate-400 font-medium">Microlabs Químicos S.A.</span>
+                    )}
+                </div>
+
                 {/* Header & Logo */}
                 <div className="flex flex-col items-center justify-center mb-5 text-center">
                     <Logo variant="full" className="w-48 h-14 mb-2" />
@@ -1255,94 +1238,7 @@ export const LoginView = ({ navigateTo, setUserRole, setUser }) => {
                     </div>
                 )}
 
-                {/* ========================================================================= */}
-                {/* 4. PANEL DE ACCESO RÁPIDO PARA PRUEBAS (FILTRADO POR PORTAL)              */}
-                {/* ========================================================================= */}
-                <div className="mt-5 pt-3 border-t border-slate-100">
-                    <button
-                        type="button"
-                        onClick={() => setShowDemoAccess(!showDemoAccess)}
-                        className="w-full flex items-center justify-between px-3.5 py-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-700 font-semibold text-xs transition-all border border-slate-200/60 cursor-pointer"
-                    >
-                        <span className="flex items-center gap-2">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-600"></span>
-                            </span>
-                            Accesos Rápidos Demo ({loginType === 'client' ? 'Portal Clientes' : 'Personal LIMS'})
-                        </span>
-                        <span>{showDemoAccess ? '▲' : '▼'}</span>
-                    </button>
-                    
-                    {showDemoAccess && (
-                        <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 animate-fade-in text-left">
-                            <p className="text-[11px] text-slate-500 leading-normal">
-                                Seleccione un perfil para simular el inicio de sesión inmediato con permisos segregados:
-                            </p>
-                            
-                            {loginType === 'client' ? (
-                                <div className="grid grid-cols-3 gap-1.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('client_patient'); }}
-                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
-                                    >
-                                        Paciente
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('client_company'); }}
-                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
-                                    >
-                                        Empresa
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('client_doctor'); }}
-                                        className="px-2 py-1.5 bg-white border border-teal-200 hover:border-teal-400 rounded-lg text-xs font-semibold text-teal-800 hover:bg-teal-50 transition-all text-center shadow-2xs cursor-pointer"
-                                    >
-                                        Médico
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 gap-1.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('admin'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Administrador</span>
-                                        <span className="text-[9px] font-bold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded uppercase">Master</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('director_tecnico'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Dir. Técnico</span>
-                                        <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">DT</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('analyst'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Analista Lab</span>
-                                        <span className="text-[9px] font-bold bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded uppercase">Lab</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAuthMode('login'); handleQuickLogin('billing_agent'); }}
-                                        className="px-2.5 py-1.5 bg-white border border-slate-200 hover:border-slate-400 rounded-lg text-xs font-semibold text-slate-800 hover:bg-slate-100 transition-all text-left shadow-2xs flex justify-between items-center cursor-pointer"
-                                    >
-                                        <span>Facturación</span>
-                                        <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded uppercase">Caja</span>
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+
 
                 {/* Footer Security Badge */}
                 <div className="mt-5 pt-3 border-t border-slate-100">

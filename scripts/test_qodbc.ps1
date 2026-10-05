@@ -1,27 +1,22 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-Write-Host "Probando conexion con QODBC..." -ForegroundColor Yellow
-
-$connString = "DSN=QuickBooks Data;DFN=C:\quickbooks2010\alimentos10.QBW;OpenMode=F;"
+Write-Host "Probando conexión ODBC con 'QuickBooks Data 64-Bit QRemote'..."
 try {
-    $conn = New-Object System.Data.Odbc.OdbcConnection($connString)
-    Write-Host "Abriendo conexion ODBC con 'QuickBooks Data'..." -ForegroundColor Yellow
+    $conn = New-Object System.Data.Odbc.OdbcConnection
+    $conn.ConnectionString = "DSN=QuickBooks Data 64-Bit QRemote;"
     $conn.Open()
-    Write-Host "[EXITO] Conexion ODBC abierta con exito!" -ForegroundColor Green
+    Write-Host ">>> CONEXION ODBC 64-BIT ABIERTA CON EXITO! <<<" -ForegroundColor Green
 
     $cmd = $conn.CreateCommand()
-    $cmd.CommandText = "SELECT TOP 5 ListID, Name, FullName, Balance FROM Customer"
-    $adapter = New-Object System.Data.Odbc.OdbcDataAdapter($cmd)
-    $dt = New-Object System.Data.DataTable
-    $null = $adapter.Fill($dt)
+    $cmd.CommandText = "SELECT TOP 3 TxnDate, RefNumber, CustomerRefFullName FROM Estimate WHERE TxnDate >= {d'2024-01-01'} ORDER BY TxnDate DESC"
+    $reader = $cmd.ExecuteReader()
 
-    Write-Host "`nClientes recuperados:" -ForegroundColor Cyan
-    foreach ($row in $dt.Rows) {
-        Write-Host " - $($row['FullName']) | Saldo: $($row['Balance'])"
+    while ($reader.Read()) {
+        Write-Host "Estimate: $($reader['RefNumber']) | Fecha: $($reader['TxnDate']) | Cliente: $($reader['CustomerRefFullName'])"
     }
-
+    $reader.Close()
     $conn.Close()
-    Write-Host "`n[COMPLETO] QODBC esta funcionando perfectamente." -ForegroundColor Green
+    Write-Host "Prueba ODBC finalizada con éxito."
 } catch {
-    Write-Host "[ERROR] $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "ERROR ODBC 64-bit: $($_.Exception.Message)"
 }

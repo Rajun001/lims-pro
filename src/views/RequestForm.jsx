@@ -1117,7 +1117,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                 return {
                     clientName: finalClientName, clientId: actualClientId,
                     clientType: formMode === 'clinical' ? 'Clínica' : 'Industria',
-                    sampleType: formMode === 'clinical' ? 'Clínica' : sampleCategory,
+                    sampleType: formMode === 'clinical' ? (sample.description || 'Muestra Biológica') : sampleCategory,
                     sampleDescription: sample.description,
                     sampleLot: formMode === 'clinical' ? null : sample.lot,
                     sampleOther: sample.other,

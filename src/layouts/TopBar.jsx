@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Bell, Users, FlaskConical, Settings, Play, Sparkles, Activity, 
+    Bell, Users, FlaskConical, Settings, Sparkles, Activity, 
     ShieldCheck, Search, Command, Keyboard, PlusCircle 
 } from 'lucide-react';
 import { Logo } from '../components/UI';
@@ -37,9 +37,7 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole, onOpenCommandPalet
 
     const unreadCount = notifications.filter(n => !n.read).length;
 
-    const triggerDemo = () => {
-        window.dispatchEvent(new CustomEvent('start-lims-demo'));
-    };
+
 
     return (
         <header className="bg-white border-b h-16 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0 print:hidden relative gap-2 sm:gap-4">
@@ -87,15 +85,6 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole, onOpenCommandPalet
                     <Keyboard size={18} />
                 </button>
 
-                {/* E2E Demo Trigger Button */}
-                <button
-                    onClick={triggerDemo}
-                    className="hidden xl:flex hover:scale-105 active:scale-95 transition-all bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-extrabold text-xs px-3 py-1.5 rounded-xl shadow-sm cursor-pointer items-center gap-1.5"
-                    title="Iniciar Demo Automático del Sistema"
-                >
-                    <Play size={12} className="fill-white" />
-                    <span>Demo</span>
-                </button>
 
                 {/* Connectivity Status Indicator */}
                 <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-300 ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>

@@ -580,7 +580,11 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     if (!request) return null;
     const handlePrint = () => window.print();
 
-    const isCulture = request.analysisRequested?.toLowerCase().includes('cultivo') || request.analysisRequested?.toLowerCase().includes('antibiograma') || request.microbiologyAST || request.antibiogram;
+    const isCulture = request.analysisRequested?.toLowerCase().includes('cultivo') || 
+                      request.analysisRequested?.toLowerCase().includes('antibiograma') || 
+                      request.analysisRequested?.toLowerCase().includes('exudado') || 
+                      request.analysisRequested?.toLowerCase().includes('copro') || 
+                      request.microbiologyAST || request.antibiogram;
     const microData = getMicrobiologyData(request);
     const hasFoodUFC = !!request.foodUFCResult;
 
@@ -592,7 +596,10 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             'Perfil Bioquímico': 'Biochemical Profile',
             'Cultivo Microbiológico': 'Microbiological Culture',
             'Hemograma Completo': 'Complete Blood Count',
-            'Examen General de Orina': 'Urinalysis'
+            'Examen General de Orina': 'Urinalysis',
+            'Coprocultivo': 'Stool Culture',
+            'Cultivo de Exudado Faríngeo': 'Throat Swab Culture',
+            'Cultivo de Exudado Vaginal': 'Vaginal Swab Culture'
         };
         return map[name] || name;
     };
@@ -603,8 +610,16 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             'Sangre': 'Blood',
             'Orina': 'Urine',
             'Heces': 'Stool',
+            'Heces / Materia Fecal': 'Stool / Fecal Matter',
             'Saliva': 'Saliva',
             'Frotis': 'Swab',
+            'Exudado': 'Exudate / Swab',
+            'Exudado Faríngeo': 'Pharyngeal Swab',
+            'Exudado Faríngeo / Hisopado Nasal': 'Pharyngeal / Nasal Swab',
+            'Exudado Vaginal': 'Vaginal Swab',
+            'Exudado Vaginal / Cervical': 'Vaginal / Cervical Swab',
+            'Exudado Uretral': 'Urethral Swab',
+            'Coprocultivo': 'Stool Culture',
             'Físico-Químico': 'Physicochemical',
             'Bacteriológico': 'Bacteriological'
         };
@@ -921,8 +936,21 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             <div className="space-y-6 print-card-break">
                 {/* pathogen / sample overview card */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 print:border-slate-300">
-                    <h4 className="text-xs font-black tracking-wider uppercase text-blue-900 mb-4 pb-2 border-b border-slate-100">
-                        {reportLang === 'es' ? 'Resumen del Cultivo Microbiológico' : 'Microbiological Culture Summary'}
+                    <h4 className="text-xs font-black tracking-wider uppercase text-blue-900 mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+                        <span>
+                            {request.analysisRequested?.toLowerCase().includes('copro') || request.sampleType?.toLowerCase().includes('heces')
+                                ? (reportLang === 'es' ? 'Resumen de Coprocultivo (Enteropatógenos en Heces)' : 'Stool Culture Summary (Enteropathogens)')
+                                : request.analysisRequested?.toLowerCase().includes('exudado') || request.sampleType?.toLowerCase().includes('exudado')
+                                    ? (reportLang === 'es' ? 'Resumen de Cultivo de Exudado / Secreción' : 'Exudate / Swab Culture Summary')
+                                    : (reportLang === 'es' ? 'Resumen del Cultivo Microbiológico' : 'Microbiological Culture Summary')}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                            {request.analysisRequested?.toLowerCase().includes('copro') || request.sampleType?.toLowerCase().includes('heces')
+                                ? 'Coprocultivo'
+                                : request.analysisRequested?.toLowerCase().includes('exudado') || request.sampleType?.toLowerCase().includes('exudado')
+                                    ? 'Exudado'
+                                    : 'Microbiología'}
+                        </span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
@@ -930,7 +958,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 {reportLang === 'es' ? 'Muestra Analizada' : 'Sample Analyzed'}
                             </span>
                             <span className="text-sm font-bold text-slate-700">
-                                {translateSampleType(request.sampleType || request.clientType || (reportLang === 'es' ? 'Orina' : 'Urine'))}
+                                {translateSampleType((request.sampleType && request.sampleType !== 'Clínica') ? request.sampleType : (request.sampleDescription || (reportLang === 'es' ? 'Muestra Biológica' : 'Biological Sample')))}
                             </span>
                         </div>
                         <div>
