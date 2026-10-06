@@ -1,21 +1,13 @@
 import { Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { publicFormLimiter, staffPasscodeLimiter } from '../middlewares/rateLimiter.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const router = Router();
-
-// Rate limiter específico para formularios públicos (prevenir spam / DoS)
-const publicIntakeLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
-    limit: 25, // Max 25 envíos por IP cada 15 min
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    message: { error: 'Ha alcanzado el límite de envíos de muestras desde su conexión. Intente en 15 minutos.' }
-});
 
 // Sanitizador seguro contra XSS e inyecciones
 const sanitizeText = (val, maxLen = 300) => {
@@ -113,7 +105,7 @@ const saveQuoteRequests = (items) => {
 // =============================================================================
 // 1. ENDPOINT PÚBLICO: Pre-ingreso Seguro de Muestras desde www.microlabscr.com
 // =============================================================================
-router.post('/public/intake', publicIntakeLimiter, (req, res) => {
+router.post('/public/intake', publicFormLimiter, (req, res) => {
     try {
         const {
             clientType,
@@ -177,7 +169,7 @@ router.post('/public/intake', publicIntakeLimiter, (req, res) => {
 // =============================================================================
 // 2. ENDPOINT LIMS: Listado de Pre-ingresos Pendientes de Triage (Para Recepción)
 // =============================================================================
-router.get('/public/intake', (req, res) => {
+router.get('/public/intake', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR', 'RECEPTION', 'CLINICAL_ANALYST'), (req, res) => {
     try {
         const items = loadTriageRequests();
         return res.json(items);
@@ -187,7 +179,7 @@ router.get('/public/intake', (req, res) => {
 });
 
 // Actualizar estado de solicitud web (Aprobar para admisión oficial o Descartar)
-router.patch('/public/intake/:id/status', (req, res) => {
+router.patch('/public/intake/:id/status', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR', 'RECEPTION'), (req, res) => {
     try {
         const { id } = req.params;
         const { status, remarks } = req.body;
@@ -212,7 +204,7 @@ router.patch('/public/intake/:id/status', (req, res) => {
 // =============================================================================
 // 3. ENDPOINT PÚBLICO: Solicitud de Cotización Confidencial (Protección de Tarifas y Privacidad)
 // =============================================================================
-router.post('/public/quote-request', publicIntakeLimiter, (req, res) => {
+router.post('/public/quote-request', publicFormLimiter, (req, res) => {
     try {
         const { clientType, clientName, contactPerson, email, phone, sampleCategory, testsRequested, notes, honeypot } = req.body;
 
@@ -260,7 +252,7 @@ router.post('/public/quote-request', publicIntakeLimiter, (req, res) => {
 });
 
 // Listar cotizaciones confidenciales para el personal LIMS
-router.get('/public/quote-requests', (req, res) => {
+router.get('/public/quote-requests', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR', 'RECEPTION'), (req, res) => {
     try {
         const quotes = loadQuoteRequests();
         return res.json(quotes);
@@ -272,7 +264,7 @@ router.get('/public/quote-requests', (req, res) => {
 // =============================================================================
 // 4. ENDPOINT: Validación de Contraseña Previa Institucional para Acceso Interno (Staff)
 // =============================================================================
-router.post('/public/verify-staff-passcode', (req, res) => {
+router.post('/public/verify-staff-passcode', staffPasscodeLimiter, (req, res) => {
     try {
         const { passcode } = req.body;
         const normalized = (passcode || '').trim().toUpperCase();

@@ -3,15 +3,16 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { syncQuickBooksEstimates, ingestEstimatesArray, getSyncStatus } from '../services/qbWatcher.service.js';
+import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const router = Router();
 
 /**
- * Trigger manual de sincronización desde QuickBooks Desktop (2024 a Hoy)
+ * Trigger manual de sincronización desde QuickBooks Desktop (2024 a Hoy) - Restringido
  */
-router.post('/qb/sync-now', async (req, res) => {
+router.post('/qb/sync-now', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR'), async (req, res) => {
     try {
         const maxReturned = req.body?.maxReturned ? parseInt(req.body.maxReturned, 10) : 500;
         const fromDate = req.body?.fromDate || '2024-01-01';
@@ -25,7 +26,7 @@ router.post('/qb/sync-now', async (req, res) => {
 /**
  * Ingesta directa de estimaciones desde JSON o archivo exportado (sin necesidad de PDFs)
  */
-router.post('/qb/import-json', async (req, res) => {
+router.post('/qb/import-json', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR'), async (req, res) => {
     try {
         let estimates = req.body?.estimates;
         if (!estimates || !Array.isArray(estimates)) {
@@ -45,9 +46,9 @@ router.post('/qb/import-json', async (req, res) => {
 });
 
 /**
- * Consulta de estado y estadísticas de sincronización
+ * Consulta de estado y estadísticas de sincronización (Personal Autenticado)
  */
-router.get('/qb/sync-status', (req, res) => {
+router.get('/qb/sync-status', authenticateJWT, (req, res) => {
     try {
         const status = getSyncStatus();
         return res.json(status);

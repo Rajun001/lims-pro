@@ -2,12 +2,13 @@ import { Router } from 'express';
 import prisma from '../config/db.js';
 import { ReportGeneratorService } from '../services/reportGenerator.service.js';
 import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
+import { publicVerifyLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { fetchAndIngestSingleEstimate } from '../services/qbWatcher.service.js';
 
 const router = Router();
 
-// Listado General de Informes de Laboratorio (con paginación y búsqueda)
-router.get('/reports', async (req, res) => {
+// Listado General de Informes de Laboratorio (con paginación y búsqueda - Protegido)
+router.get('/reports', authenticateJWT, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
@@ -109,8 +110,8 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-// Detalle Completo de un Informe de Laboratorio (por ID numérico o reportNumber / número de estimate)
-router.get('/reports/details/:id', async (req, res) => {
+// Detalle Completo de un Informe de Laboratorio (Protegido con JWT)
+router.get('/reports/details/:id', authenticateJWT, async (req, res) => {
   const param = String(req.params.id || '').trim();
   const numericId = parseInt(param);
   try {
@@ -155,8 +156,8 @@ router.get('/reports/details/:id', async (req, res) => {
   }
 });
 
-// Actualizar o adjuntar elementos probatorios / fotografías de cultivos a un informe
-router.put('/reports/:id/evidence', async (req, res) => {
+// Actualizar o adjuntar elementos probatorios / fotografías de cultivos a un informe (Personal Técnico Regulado)
+router.put('/reports/:id/evidence', authenticateJWT, authorizeRoles('TECHNICAL_DIRECTOR', 'ADMINISTRATOR', 'CLINICAL_ANALYST'), async (req, res) => {
   const id = parseInt(req.params.id);
   const { evidencePhotos } = req.body;
   try {
@@ -171,8 +172,8 @@ router.put('/reports/:id/evidence', async (req, res) => {
   }
 });
 
-// Descarga Directa del PDF Oficial
-router.get('/reports/details/:id/pdf', async (req, res) => {
+// Descarga Directa del PDF Oficial (Protegido con JWT)
+router.get('/reports/details/:id/pdf', authenticateJWT, async (req, res) => {
   const id = parseInt(req.params.id);
   try {
     const report = await prisma.report.findUnique({ where: { id } });
@@ -186,8 +187,8 @@ router.get('/reports/details/:id/pdf', async (req, res) => {
   }
 });
 
-// Endpoint Público de Verificación por QR (No requiere autenticación previa)
-router.get('/reports/verify/:reportNumber', async (req, res) => {
+// Endpoint Público de Verificación por QR (Anti-enumeración con Rate Limiting)
+router.get('/reports/verify/:reportNumber', publicVerifyLimiter, async (req, res) => {
   const { reportNumber } = req.params;
 
   try {

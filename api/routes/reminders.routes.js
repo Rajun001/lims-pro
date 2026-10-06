@@ -6,8 +6,12 @@ import {
     updateReminderStatus, 
     createCustomReminder 
 } from '../services/reminderScheduler.service.js';
+import { authenticateJWT } from '../middlewares/auth.middleware.js';
 
 const router = Router();
+
+// Proteger todas las rutas de recordatorios y agenda médica/industrial
+router.use('/reminders', authenticateJWT);
 
 /**
  * GET /api/reminders

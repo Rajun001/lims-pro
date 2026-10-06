@@ -1,10 +1,20 @@
 import { Router } from 'express';
 import { createDatabaseBackup } from '../utils/backup.js';
+import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
+router.use('/backup', authenticateJWT, authorizeRoles('ADMINISTRATOR', 'TECHNICAL_DIRECTOR'));
+
 /**
- * POST /api/backup - Dispara un respaldo manual inmediato de la base de datos
+ * GET /api/backup - Estado o metadatos de respaldo (Restringido)
+ */
+router.get('/backup', (req, res) => {
+  res.json({ status: 'ok', message: 'Servicio de respaldos activo y protegido.' });
+});
+
+/**
+ * POST /api/backup - Dispara un respaldo manual inmediato de la base de datos (Restringido)
  */
 router.post('/backup', async (req, res) => {
   try {

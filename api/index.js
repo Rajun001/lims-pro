@@ -21,39 +21,48 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Ocultar cabecera X-Powered-By para mitigar fingerprinting de atacantes
+app.disable('x-powered-by');
+
 // =============================================================================
-// GLOBAL MIDDLEWARES & SECURITY
+// GLOBAL MIDDLEWARES & PERIMETER SECURITY
 // =============================================================================
 
-// 1. Cabeceras de seguridad con Helmet
+// 1. Cabeceras de seguridad reforzadas con Helmet
 app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy: false
+  contentSecurityPolicy: false, // Compatibilidad con Vite y recursos web externos
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+  xContentTypeOptions: true,
+  xFrameOptions: { action: 'sameorigin' },
+  xXssProtection: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  hidePoweredBy: true
 }));
 
-// 2. Limitador de peticiones (Rate Limiting)
+// 2. Limitador general de peticiones (Rate Limiting de defensa perimetral)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 2000,
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  limit: 1000, // Máximo 1000 peticiones globales por IP
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  message: { error: 'Demasiadas peticiones desde esta IP, por favor intente de nuevo en 15 minutos.' }
+  message: { error: 'Demasiadas peticiones desde esta IP. Por favor intente de nuevo en 15 minutos.' }
 });
 app.use('/api/', limiter);
 
-// Función auxiliar para verificar si un origen corresponde a una IP local/red privada o loopback
-const isLocalOrigin = (origin) => {
+// Función auxiliar para verificar si un origen corresponde a una red autorizada
+const isAllowedOrigin = (origin) => {
   try {
     const url = new URL(origin);
     const hostname = url.hostname;
     
+    // Loopback local (desarrollo o servicios en el mismo equipo)
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname.endsWith('.local')) {
       return true;
     }
     
+    // Redes LAN privadas institucionales (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
     if (hostname.startsWith('10.')) return true;
-    
     if (hostname.startsWith('172.')) {
       const parts = hostname.split('.');
       if (parts.length >= 2) {
@@ -61,8 +70,22 @@ const isLocalOrigin = (origin) => {
         if (secondOctet >= 16 && secondOctet <= 31) return true;
       }
     }
-    
     if (hostname.startsWith('192.168.')) return true;
+    
+    // Dominios oficiales de Microlabs
+    if (
+      hostname === 'microlabscr.com' ||
+      hostname.endsWith('.microlabscr.com') ||
+      hostname === 'lims-microlabs.web.app' ||
+      hostname === 'lims-microlabs.firebaseapp.com'
+    ) {
+      return true;
+    }
+    
+    // Túneles remotos autorizados (Cloudflare Tunnel)
+    if (hostname.endsWith('.trycloudflare.com')) {
+      return true;
+    }
     
     return false;
   } catch {
@@ -70,19 +93,25 @@ const isLocalOrigin = (origin) => {
   }
 };
 
-// 3. CORS
-const allowedOrigins = [
+// 3. Política de CORS restringida y validada
+const allowedStaticOrigins = [
   'http://localhost:5173',
-  'https://lims-microlabs.web.app'
+  'http://localhost:3000',
+  'https://www.microlabscr.com',
+  'https://microlabscr.com',
+  'https://lims-microlabs.web.app',
+  'https://lims-microlabs.firebaseapp.com'
 ];
+
 app.use(cors({
   origin: (origin, callback) => {
+    // Permitir peticiones sin origen (ej. curl local, scripts del servidor, web connector SOAP)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || isLocalOrigin(origin)) {
+    if (allowedStaticOrigins.includes(origin) || isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-    console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
-    return callback(null, false);
+    console.warn(`[CORS Blocked] Acceso denegado desde origen no autorizado: ${origin}`);
+    return callback(new Error('Acceso bloqueado por política de seguridad CORS de Microlabs.'));
   },
   credentials: true
 }));
@@ -142,6 +171,11 @@ app.get('/api/version', (req, res) => {
 
 // Registrar todas las rutas modularizadas
 app.use('/api', apiRouter);
+
+// Manejador 404 estricto para peticiones /api no encontradas (Previene exponer el HTML de SPA)
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `Recurso de API no encontrado: ${req.method} ${req.originalUrl}` });
+});
 
 // =============================================================================
 // FALLBACK & SERVER START

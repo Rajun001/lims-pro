@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { calculateActivityStatus } from '../services/clientClassifier.service.js';
+import { authenticateJWT } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Proteger todas las operaciones de CRM (Cumplimiento normativo y privacidad empresarial)
+router.use('/crm', authenticateJWT);
 
 /**
  * GET /api/crm/stats
