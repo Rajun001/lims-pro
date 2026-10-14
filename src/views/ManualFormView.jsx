@@ -75,8 +75,17 @@ export const ManualFormView = ({ navigateTo, labInfo }) => {
             <div className="bg-white p-8 sm:p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0">
                 <div className="flex justify-between items-center border-b-2 border-slate-800 pb-6 mb-8">
                     <div className="flex items-center gap-4">
-                        <div className="h-16 w-40 flex-shrink-0 flex items-center justify-center bg-transparent">
-                            <img src={labInfo?.logoUrl || "/logo.png"} alt="Logo" className="w-full h-full object-contain mix-blend-multiply" />
+                        <div className="h-16 w-44 flex-shrink-0 flex items-center justify-center bg-transparent">
+                            <img 
+                                src={labInfo?.logoUrl || "/logo.png"} 
+                                alt="Logo Oficial Microlabs" 
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                    if (e.target.src !== window.location.origin + '/logo.png') {
+                                        e.target.src = '/logo.png';
+                                    }
+                                }}
+                            />
                         </div>
                         <div>
                             <p className="text-slate-800 font-extrabold uppercase tracking-wider text-sm">

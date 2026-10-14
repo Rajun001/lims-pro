@@ -22,8 +22,9 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
         if (!base.telephones) base.telephones = '+506 22348837, +506 22345862, +506 22246541';
         if (!base.whatsapp) base.whatsapp = '71382750';
         if (!base.email) base.email = 'laboratorio@microlabscr.com';
-        if (!base.emailReports) base.emailReports = 'resultados@microlabscr.com';
+        if (!base.emailReports) base.emailReports = 'reportes@microlabscr.com';
         if (!base.emailBilling) base.emailBilling = 'fe@microlabscr.com';
+        if (!base.emailCxC) base.emailCxC = 'cxc@microlabscr.com';
         if (!base.directorName) base.directorName = 'Dr. Roldan Ajún Chaverri';
         if (!base.directorCode) base.directorCode = '802';
         if (!base.professional2Name) base.professional2Name = 'M.Q.C. José Guillermo Ajún Jiménez';
@@ -45,8 +46,9 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     telephones: '+506 22348837, +506 22345862, +506 22246541',
                     whatsapp: '71382750',
                     email: 'laboratorio@microlabscr.com',
-                    emailReports: 'resultados@microlabscr.com',
+                    emailReports: 'reportes@microlabscr.com',
                     emailBilling: 'fe@microlabscr.com',
+                    emailCxC: 'cxc@microlabscr.com',
                     website: 'www.microlabscr.com',
                     directorName: 'Dr. Roldan Ajún Chaverri',
                     directorCode: '802',

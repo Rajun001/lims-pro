@@ -8,7 +8,11 @@
  */
 export const cleanPhoneNumber = (phone) => {
     if (!phone) return '';
-    return String(phone).replace(/[^\d+]/g, '').replace(/^\+/, '');
+    let cleaned = String(phone).replace(/[^\d]/g, '');
+    if (cleaned.length === 8) {
+        cleaned = '506' + cleaned;
+    }
+    return cleaned;
 };
 
 /**

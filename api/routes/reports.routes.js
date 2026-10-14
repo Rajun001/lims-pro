@@ -4,6 +4,7 @@ import { ReportGeneratorService } from '../services/reportGenerator.service.js';
 import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.js';
 import { publicVerifyLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { fetchAndIngestSingleEstimate } from '../services/qbWatcher.service.js';
+import EmailService from '../services/email.service.js';
 
 const router = Router();
 
@@ -241,6 +242,58 @@ router.post('/reports/:id/sign', authenticateJWT, authorizeRoles('TECHNICAL_DIRE
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Endpoint para Envío Silencioso de Informes por Correo (SMTP IONOS)
+router.post('/reports/send-email', async (req, res) => {
+  const { 
+    to, 
+    patientName, 
+    reportNumber, 
+    analysisRequested, 
+    verificationUrl,
+    sampleType,
+    matrix,
+    samplingLocation,
+    resultsList,
+    interpretation
+  } = req.body;
+
+  if (!to) {
+    return res.status(400).json({ error: 'Debe especificar el correo electrónico destinatario.' });
+  }
+
+  try {
+    const result = await EmailService.sendReportEmail({
+      to,
+      patientName: patientName || 'Estimado(a) Cliente',
+      reportNumber: reportNumber || 'S/N',
+      analysisRequested: analysisRequested || 'Análisis de Laboratorio',
+      verificationUrl: verificationUrl || `https://lims-microlabs.web.app/verify/${reportNumber || ''}`,
+      sampleType,
+      matrix,
+      samplingLocation,
+      resultsList,
+      interpretation
+    });
+
+    if (result.requiresPassword) {
+      return res.status(503).json({
+        success: false,
+        requiresPassword: true,
+        message: 'El servidor requiere la contraseña de reportes@microlabscr.com para activar el envío.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Informe enviado exitosamente a ${to}`,
+      messageId: result.messageId
+    });
+  } catch (err) {
+    console.error('Error al enviar correo SMTP:', err);
+    res.status(500).json({ error: 'Error al enviar el correo: ' + err.message });
   }
 });
 

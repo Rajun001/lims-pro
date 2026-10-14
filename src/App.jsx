@@ -197,15 +197,17 @@ const RequestViewWrapper = ({ requests, analyses, db, user, labInfo, navigateTo,
     const request = useMemo(() => {
         const found = requests.find(r => r.id === id);
         if (found) return found;
+        try {
+            const localReqs = JSON.parse(localStorage.getItem('lims_local_requests') || '[]');
+            const localFound = localReqs.find(r => r.id === id);
+            if (localFound) return localFound;
+        } catch (_ERR) {
+            void _ERR;
+        }
+        const mockFound = mockData.requests?.find(r => r.id === id);
+        if (mockFound) return mockFound;
         if (id && id.startsWith('MC-2026-')) {
-            const mockDateSeconds = 1779926400;
-            return {
-                id,
-                clientName: 'Cliente Mock (Simulación)',
-                analysisRequested: 'Análisis Demostrativo',
-                requestDate: { seconds: mockDateSeconds },
-                status: 'En Proceso'
-            };
+            return mockData.requests?.find(r => r.id === 'MC-2026-0003') || mockData.requests?.[0];
         }
         return fetchedRequest;
     }, [requests, id, fetchedRequest]);
@@ -324,6 +326,9 @@ const LayoutWrapper = ({ children, user, userRole, labInfo, navigateTo, onOpenCo
     
     // Route Guard
     if (!user) {
+        if (location.pathname.startsWith('/final_report/') || location.pathname.startsWith('/public_report/')) {
+            return children;
+        }
         return <Navigate to="/login" replace />;
     }
 
@@ -441,8 +446,9 @@ const AppContent = () => {
         telephones: '+506 22348837, +506 22345862, +506 22246541',
         whatsapp: '71382750',
         email: 'laboratorio@microlabscr.com',
-        emailReports: 'resultados@microlabscr.com',
+        emailReports: 'reportes@microlabscr.com',
         emailBilling: 'fe@microlabscr.com',
+        emailCxC: 'cxc@microlabscr.com',
         address: '75 metros norte del correo de Guadalupe, Goicoechea, San José, Costa Rica',
         directorName: 'Dr. Roldan Ajún Chaverri',
         directorCode: '802',
@@ -461,8 +467,9 @@ const AppContent = () => {
                 telephones: '+506 22348837, +506 22345862, +506 22246541',
                 whatsapp: '71382750',
                 email: 'laboratorio@microlabscr.com',
-                emailReports: 'resultados@microlabscr.com',
+                emailReports: 'reportes@microlabscr.com',
                 emailBilling: 'fe@microlabscr.com',
+                emailCxC: 'cxc@microlabscr.com',
                 website: 'www.microlabscr.com',
                 directorName: 'Dr. Roldan Ajún Chaverri',
                 directorCode: '802',
@@ -884,6 +891,16 @@ const AppContent = () => {
                     </Suspense>
                 } />
                 <Route path="/verify" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicVerificationView />
+                    </Suspense>
+                } />
+                <Route path="/public_report/:id" element={
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <PublicVerificationView />
+                    </Suspense>
+                } />
+                <Route path="/public_report" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <PublicVerificationView />
                     </Suspense>

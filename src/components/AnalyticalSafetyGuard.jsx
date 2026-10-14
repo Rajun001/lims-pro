@@ -123,23 +123,7 @@ export const AnalyticalSafetyGuard = ({ request, reportLang = 'es' }) => {
     const integrityHash = useMemo(() => computeReportIntegrityHash(request), [request]);
 
     if (!issues.length) {
-        return (
-            <div className="print:hidden mb-4 p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-900 select-none">
-                <div className="flex items-center gap-2">
-                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                    <span>
-                        <strong>{reportLang === 'es' ? 'Validación de Seguridad:' : 'Safety Validation:'}</strong>{' '}
-                        {reportLang === 'es'
-                            ? 'Datos verificados sin inconsistencias tipográficas ni valores implausibles.'
-                            : 'All analytical entries verified without typographical anomalies.'}
-                    </span>
-                </div>
-                <div className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-800 bg-white/80 px-2 py-0.5 rounded border border-emerald-300">
-                    <Lock size={11} className="text-emerald-700" />
-                    <span>{integrityHash}</span>
-                </div>
-            </div>
-        );
+        return null;
     }
 
     return (

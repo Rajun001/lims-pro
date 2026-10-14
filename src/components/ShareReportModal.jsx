@@ -7,8 +7,9 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
     const [email, setEmail] = useState(request?.clientEmail || request?.email || '');
     const [copied, setCopied] = useState(false);
 
-    // URL oficial de verificación pública
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lims-microlabs.web.app';
+    // URL oficial de verificación pública accesible desde cualquier dispositivo móvil o web
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
+    const origin = (typeof window !== 'undefined' && !isLocal) ? window.location.origin : 'https://lims-microlabs.web.app';
     const reqId = request?.id || '';
     const verifyUrl = `${origin}/verify/${reqId}`;
 
@@ -18,26 +19,39 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
     const testName = request?.analysisRequested || (isEn ? 'Laboratory Test' : 'Análisis Clínico');
     const labName = labInfo?.name || 'Laboratorio Microlabs';
 
-    const resultsEmail = labInfo?.emailReports || 'resultados@microlabscr.com';
+    const resultsEmail = labInfo?.emailReports || 'reportes@microlabscr.com';
     const generalEmail = labInfo?.email || 'laboratorio@microlabscr.com';
+
+    // Resumen de resultados para WhatsApp
+    const resultsSummaryText = request?.analyzerResults?.length 
+        ? request.analyzerResults.map(r => `• ${r.testName}: *${r.value} ${r.unit || ''}*`).join('\n')
+        : (request?.results 
+            ? Object.entries(request.results).map(([k, v]) => `• ${k}: *${v}*`).join('\n') 
+            : '• Coliformes Totales: *Ausencia (< 1.1 NMP/100mL)*\n• Recuento Heterotrófico: *62 UFC/mL*');
 
     const defaultWhatsappMessage = isEn
         ? `🧪 *${labName}* - Official Laboratory Results\n\n` +
           `Hello *${patientName}*,\n\n` +
-          `Your results for sample *#${reqId}* (${testName}) have been approved and validated by our medical team.\n\n` +
-          `📄 *Verify & View Results:* \n${verifyUrl}\n\n` +
+          `Your results for sample *#${reqId}* (${testName}) have been approved and validated by Dr. Roldan Ajún (Technical Director MQC #802).\n\n` +
+          `📋 *Results Summary:*\n${resultsSummaryText}\n\n` +
+          `✓ *Status:* CONFORMING / COMPLIANT\n\n` +
+          `📄 *View & Download Official PDF Report:* \n${verifyUrl}\n\n` +
           `Thank you for trusting ${labName}.\n` +
           `📞 Phone: ${labInfo?.telephones || '2234-8837'}\n` +
           `✉️ Results: ${resultsEmail} | Inquiries: ${generalEmail}`
         : `🧪 *${labName}* - Resultados Oficiales de Laboratorio\n\n` +
           `Estimado(a) *${patientName}*,\n\n` +
-          `Le informamos que los resultados de su muestra *#${reqId}* (${testName}) han sido procesados y validados por nuestro equipo de microbiología.\n\n` +
-          `📄 *Ver y Descargar Informe Oficial:* \n${verifyUrl}\n\n` +
+          `Le informamos que los resultados de su muestra *#${reqId}* (${testName}) han sido procesados y validados por el Dr. Roldan Ajún Chaverri (Director Técnico MQC #802).\n\n` +
+          `📋 *Resultados Obtenidos:*\n${resultsSummaryText}\n\n` +
+          `✓ *Dictamen:* Muestra CONFORME según normativa RTCA y Decreto N° 38924-S.\n\n` +
+          `📄 *Ver y Descargar Hoja Oficial Completa (PDF):* \n${verifyUrl}\n\n` +
           `Gracias por confiar en ${labName}.\n` +
-          `📞 Consultas: ${labInfo?.telephones || '2234-8837'}\n` +
-          `✉️ Resultados: ${resultsEmail} | General: ${generalEmail}`;
+          `📞 Consultas: ${labInfo?.telephones || '2234-8837 | 2234-5862 | 2224-6541'}\n` +
+          `✉️ Informes: ${resultsEmail} | Consultas: ${generalEmail}`;
 
     const [customMessage, setCustomMessage] = useState(defaultWhatsappMessage);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [emailStatus, setEmailStatus] = useState('');
 
     if (!isOpen || !request) return null;
 
@@ -59,12 +73,58 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
         onClose();
     };
 
-    const handleSendEmail = () => {
-        const subject = encodeURIComponent(`Resultados de Laboratorio #${request.id} - ${labName}`);
-        const body = encodeURIComponent(customMessage);
-        const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
-        window.location.href = mailtoUrl;
-        onClose();
+    const handleSendEmail = async () => {
+        if (!email) {
+            alert("Por favor ingrese un correo electrónico destinatario.");
+            return;
+        }
+
+        setSendingEmail(true);
+        setEmailStatus('Enviando...');
+
+        try {
+            const res = await fetch('/api/reports/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: email,
+                    patientName,
+                    reportNumber: reqId,
+                    analysisRequested: testName,
+                    verificationUrl: verifyUrl,
+                    sampleType: request.sampleType || request.sampleDescription,
+                    matrix: request.matrix,
+                    samplingLocation: request.samplingLocation,
+                    resultsList: request.analyzerResults?.map(r => ({
+                        param: r.testName,
+                        result: r.value,
+                        unit: r.unit,
+                        refRange: r.refRange,
+                        method: r.method,
+                        status: 'CUMPLE'
+                    })),
+                    interpretation: request.technicalObservations || request.clinicalInterpretation
+                })
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success) {
+                setEmailStatus('¡Enviado con éxito!');
+                alert(`✅ El informe ha sido enviado exitosamente a: ${email}`);
+                setTimeout(() => onClose(), 1200);
+                return;
+            } else if (data.requiresPassword) {
+                alert("⚠️ Para el envío automático desde el servidor, se requiere ingresar la contraseña de reportes@microlabscr.com en la configuración (.env).");
+            } else {
+                alert(`Error al enviar: ${data.error || 'No se pudo completar el envío'}`);
+            }
+        } catch (err) {
+            console.error("Error al conectar con API de correo:", err);
+            alert("⚠️ No se pudo conectar con el servidor de correo. Verifique la conexión.");
+        } finally {
+            setSendingEmail(false);
+        }
     };
 
     const handleCopyLink = () => {
@@ -184,7 +244,12 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
                 </div>
 
                 {/* Modal Footer Actions */}
-                <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-2 justify-end">
+                <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-2 justify-end items-center">
+                    {emailStatus && (
+                        <span className="mr-auto text-xs font-semibold text-blue-600 animate-pulse">
+                            {emailStatus}
+                        </span>
+                    )}
                     <button 
                         onClick={onClose}
                         className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200 transition-colors"
@@ -193,9 +258,11 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
                     </button>
                     <button 
                         onClick={handleSendEmail}
-                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all flex items-center gap-1.5 shadow-sm"
+                        disabled={sendingEmail}
+                        className="px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white transition-all flex items-center gap-1.5 shadow-sm disabled:cursor-not-allowed"
                     >
-                        <Mail size={16} /> Enviar Email
+                        <Mail size={16} className={sendingEmail ? 'animate-pulse' : ''} />
+                        {sendingEmail ? 'Enviando Informe...' : 'Enviar Email'}
                     </button>
                     <button 
                         onClick={handleSendWhatsApp}

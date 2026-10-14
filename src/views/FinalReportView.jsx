@@ -376,6 +376,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const [showDecisionRule, setShowDecisionRule] = useState(true);
     const [showEquipment, setShowEquipment] = useState(true);
     const [showDigitalSeal, setShowDigitalSeal] = useState(true);
+    const [showVisualGauges, setShowVisualGauges] = useState(false);
     const isClinical = request?.reportType === 'CLINICAL' || 
                        request?.isClinical === true || 
                        request?.clientType === 'clinical' || 
@@ -402,8 +403,9 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         return isIndustrial ? defaultMicrobiologyEvidence : [];
     });
 
-    // URL dinámica oficial de verificación en tiempo real
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://lims-microlabs.web.app';
+    // URL dinámica oficial de verificación en tiempo real accesible desde móviles
+    const isLocalHost = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
+    const origin = (typeof window !== 'undefined' && !isLocalHost) ? window.location.origin : 'https://lims-microlabs.web.app';
     const reqId = request?.id || '';
     const verificationUrl = `${origin}/verify/${reqId}`;
 
@@ -477,7 +479,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const handleWhatsAppQuickShare = () => {
         const patientOrClient = isIndustrial ? (request.clientName || 'Estimado Cliente') : (request.patientName || 'Estimado(a) Paciente');
         const repCode = getReportCode(request.id);
-        const text = `🧪 *Laboratorio Microlabs Químicos S.A.*\n\nEstimado(a) *${patientOrClient}*:\nLe hacemos entrega oficial de su informe de resultados N° *${repCode}* (${request.analysisRequested || 'Análisis de Laboratorio'}).\n\n📄 *Ver informe validado en línea:*\n${verificationUrl}\n\n🏛️ *Sede Central:* 75m N. del Correo de Guadalupe, San José\n📞 *Central:* 2234-8837 | 2234-5862 | 2224-6541\n💬 *WhatsApp Oficial:* +506 7138-2750\n✉️ *Resultados:* resultados@microlabscr.com\n🌐 *Sitio Web:* www.microlabscr.com`;
+        const text = `🧪 *Laboratorio Microlabs Químicos S.A.*\n\nEstimado(a) *${patientOrClient}*:\nLe hacemos entrega oficial de su informe de resultados N° *${repCode}* (${request.analysisRequested || 'Análisis de Laboratorio'}).\n\n📄 *Ver informe validado en línea:*\n${verificationUrl}\n\n🏛️ *Sede Central:* 75m N. del Correo de Guadalupe, San José\n📞 *Central:* 2234-8837 | 2234-5862 | 2224-6541\n💬 *WhatsApp Oficial:* +506 7138-2750\n✉️ *Informes / Resultados:* reportes@microlabscr.com\n🌐 *Sitio Web:* www.microlabscr.com`;
         const rawPhone = (request.patientPhone || request.phone || request.whatsapp || '').replace(/[^0-9]/g, '');
         const targetUrl = rawPhone ? `https://wa.me/506${rawPhone.replace(/^506/, '')}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
         window.open(targetUrl, '_blank');
@@ -1410,6 +1412,22 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                         <span>📱 QR</span>
                     </button>
 
+                    {/* Toggle Medidores Gráficos Visuales (sólo clínico) */}
+                    {isClinical && (
+                        <button
+                            type="button"
+                            onClick={() => setShowVisualGauges(!showVisualGauges)}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
+                                showVisualGauges 
+                                    ? 'bg-indigo-50 text-indigo-900 border-indigo-300 shadow-xs' 
+                                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                            title="Alternar entre informe clínico limpio tradicional o barras gráficas de aguja"
+                        >
+                            <span>📊 {showVisualGauges ? (reportLang === 'es' ? 'Ocultar Medidores' : 'Hide Gauges') : (reportLang === 'es' ? 'Medidores Gráficos' : 'Graphic Gauges')}</span>
+                        </button>
+                    )}
+
                     {/* Botón Biblioteca de Calidad & Acreditaciones */}
                     <button
                         type="button"
@@ -1465,7 +1483,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <img 
                                     src={labInfo?.logoUrl || "/logo.png"} 
                                     alt="MicroLabs Químicos S.A." 
-                                    className="h-16 w-auto max-w-[220px] object-contain mix-blend-multiply" 
+                                    className="h-16 w-auto max-w-[220px] object-contain" 
+                                    onError={(e) => {
+                                        if (e.target.src !== window.location.origin + '/logo.png') {
+                                            e.target.src = '/logo.png';
+                                        }
+                                    }}
                                 />
                             </div>
 
@@ -1553,7 +1576,12 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <img 
                                     src={labInfo?.logoUrl || "/logo.png"} 
                                     alt="MicroLabs Químicos S.A." 
-                                    className="h-16 w-auto max-w-[220px] object-contain mix-blend-multiply" 
+                                    className="h-16 w-auto max-w-[220px] object-contain" 
+                                    onError={(e) => {
+                                        if (e.target.src !== window.location.origin + '/logo.png') {
+                                            e.target.src = '/logo.png';
+                                        }
+                                    }}
                                 />
                             </div>
 
@@ -1917,9 +1945,9 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                                                 const isHigh = flagUpper === 'HIGH' || flagUpper === 'ALTO' || flagUpper === 'ELEVADO';
                                                                 const isLow = flagUpper === 'LOW' || flagUpper === 'BAJO';
 
-                                                                let valueClass = 'text-slate-900 font-extrabold';
+                                                                let valueClass = 'text-slate-900 font-bold';
                                                                 let flagBadge = (
-                                                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                                    <span className="text-[11px] font-semibold text-slate-400">
                                                                         {reportLang === 'es' ? 'Normal' : 'Normal'}
                                                                     </span>
                                                                 );
@@ -1927,14 +1955,14 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                                                 if (isHigh) {
                                                                     valueClass = 'text-rose-700 font-black';
                                                                     flagBadge = (
-                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1 shadow-xs">
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 inline-flex items-center gap-0.5">
                                                                             ▲ {reportLang === 'es' ? 'Alto' : 'High'}
                                                                         </span>
                                                                     );
                                                                 } else if (isLow) {
                                                                     valueClass = 'text-blue-700 font-black';
                                                                     flagBadge = (
-                                                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-300 inline-flex items-center gap-1 shadow-xs">
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-0.5">
                                                                             ▼ {reportLang === 'es' ? 'Bajo' : 'Low'}
                                                                         </span>
                                                                     );
@@ -1958,7 +1986,7 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                                                                     </span>
                                                                                 )}
                                                                             </div>
-                                                                            {effectiveMin !== null && effectiveMax !== null && !isNaN(effectiveMin) && !isNaN(effectiveMax) && (
+                                                                            {showVisualGauges && effectiveMin !== null && effectiveMax !== null && !isNaN(effectiveMin) && !isNaN(effectiveMax) && (
                                                                                 <RangeIndicator 
                                                                                     value={res.value} 
                                                                                     min={effectiveMin} 
@@ -2118,8 +2146,8 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                     </div>
                 )}
 
-                {/* Gráfico de Evolución Temporal (Vida Útil / Seguimiento) */}
-                {historicalData && historicalData.length > 1 && (
+                {/* Gráfico de Evolución Temporal (Vida Útil / Seguimiento) - Se activa en plantilla 'Histórico & Gráfica' */}
+                {reportTemplate === 'trend' && historicalData && historicalData.length > 1 && (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 mb-8 print-card-break print:border-slate-300">
                         <h4 className="text-xs font-black tracking-wider uppercase text-blue-900 mb-4 pb-2 border-b border-slate-100 flex justify-between items-center">
                             <span>{reportLang === 'es' ? 'Evolución Temporal del Ensayo' : 'Test Temporal Evolution'}</span>
@@ -2179,6 +2207,20 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 </LineChart>
                             </ResponsiveContainer>
                         </div>
+                    </div>
+                )}
+
+                {/* Acceso directo ligero a Gráfica si existen datos históricos */}
+                {reportTemplate !== 'trend' && historicalData && historicalData.length > 1 && (
+                    <div className="mb-6 print:hidden text-center">
+                        <button
+                            type="button"
+                            onClick={() => setReportTemplate('trend')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors cursor-pointer"
+                        >
+                            <TrendingUp size={14} />
+                            <span>{reportLang === 'es' ? `📈 Ver gráfico de tendencia histórica (${historicalData.length} registros)` : `📈 View historical trend chart (${historicalData.length} entries)`}</span>
+                        </button>
                     </div>
                 )}
 

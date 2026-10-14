@@ -1855,8 +1855,17 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                         onClick={() => scrollToSection('inicio')}
                         title="Ir al inicio"
                     >
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
-                            <Microscope size={24} />
+                        <div className="bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-slate-700/50 flex items-center justify-center shrink-0">
+                            <img 
+                                src="/logo.png" 
+                                alt="Microlabs Centro Microbiológico" 
+                                className="h-8 w-auto max-w-[160px] object-contain"
+                                onError={(e) => {
+                                    if (e.target.src !== window.location.origin + '/logo.png') {
+                                        e.target.src = '/logo.png';
+                                    }
+                                }}
+                            />
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
