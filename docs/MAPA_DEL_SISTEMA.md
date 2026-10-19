@@ -102,6 +102,25 @@ c:\lims-microlabs\
 
 ---
 
+## 🛡️ Blindaje de Privacidad y Soberanía de Datos (100% Local / Air-Gapped)
+
+Conforme a la **Ley de Protección de la Persona frente al Tratamiento de sus Datos Personales (Ley N° 8968)**, el **Código de Ética del Colegio de Microbiólogos y Químicos Clínicos de Costa Rica** y las normas **INTE/ISO 15189:2014 / INTE/ISO/IEC 17025:2017**:
+
+1. **Cero Fugas a la Red (Zero Cloud Leakage)**:
+   - Toda información clínica (pacientes, cédulas, diagnósticos) e industrial (fórmulas, marcas, recuentos de patógenos) se procesa y almacena en el equipo local del laboratorio y en la intranet institucional.
+   - Queda estrictamente prohibida la emisión de telemetría a servidores de terceros, scripts CDN no auditados o APIs externas.
+2. **Generación Local de Códigos QR**:
+   - Los códigos QR para validación de autenticidad se calculan directamente en memoria RAM del navegador utilizando la biblioteca local `qrcode`. Se eliminó cualquier llamada a servicios remotos externos (como `api.qrserver.com`).
+3. **Motor Experto de Normativa Offline (Local Expert Rules)**:
+   - La interpretación y contraste normativo contra el RTCA, FDA-BAM e ISO se ejecuta mediante un motor analítico heurístico local en `src/services/aiService.js`, sin enviar datos a APIs externas.
+4. **Cierre Automático de Sesión por Inactividad (21 CFR Part 11 / ISO 15189)**:
+   - Para prevenir acceso no autorizado a terminales desatendidas en el laboratorio o ventanilla, el componente [`InactivityTimeout.jsx`](file:///c:/lims-microlabs/src/components/InactivityTimeout.jsx) bloquea la sesión tras 15 minutos de inactividad de analistas (y 10 min para clientes) tras mostrar un temporizador de advertencia de 45 segundos.
+5. **Autenticación Físicamente Respaldada**:
+   - El personal de laboratorio no puede auto-registrarse de forma pública o remota; solo la Dirección Técnica en la sede física de Guadalupe puede autorizar altas y bajas de analistas.
+   - En el portal de pacientes, las órdenes únicamente se reclaman si coinciden con el correo registrado en ventanilla física o ingresando el PIN confidencial impreso en el comprobante de entrega.
+
+---
+
 ## 🔧 Guía Rápida de Reparaciones Comunes
 
 ### 1. ¿Cómo cambiar o corregir los firmantes de un reporte?
