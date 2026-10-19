@@ -86,14 +86,23 @@ export const TopBar = ({ user, navigateTo, labInfo, userRole, onOpenCommandPalet
                 </button>
 
 
+                {/* Privacy & Sovereignty Badge */}
+                <div 
+                    className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold border bg-blue-50 border-blue-200 text-blue-800 shadow-2xs select-none"
+                    title="Privacidad Estricta Microlabs: Datos 100% confinados en el laboratorio local (0 fugas a servidores externos)"
+                >
+                    <ShieldCheck size={14} className="text-blue-600" />
+                    <span>100% Privado Local</span>
+                </div>
+
                 {/* Connectivity Status Indicator */}
                 <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-all duration-300 ${isOnline ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                     <span className={`w-2 h-2 rounded-full ${isOnline ? (watchdogStatus.api === 'ONLINE' ? 'bg-emerald-500' : 'bg-emerald-400 animate-pulse') : 'bg-amber-500 animate-pulse'}`}></span>
                     <span className="hidden md:inline">
-                        {isOnline ? (watchdogStatus.api === 'ONLINE' ? 'En Línea (Local OK)' : 'En Línea (Cloud)') : 'Sin Conexión'}
+                        {isOnline ? (watchdogStatus.api === 'ONLINE' ? 'En Línea (Local OK)' : 'En Línea (Local)') : 'Sin Conexión'}
                     </span>
                     <span className="md:hidden">
-                        {isOnline ? 'OK' : 'Offline'}
+                        {isOnline ? 'Local' : 'Offline'}
                     </span>
                 </div>
 

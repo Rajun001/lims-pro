@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import versionData from '../version.json';
 import mockData from '../data/mock_data.json';
+import QRCode from 'qrcode';
 
 export const PublicVerificationView = () => {
     const { id } = useParams();
@@ -14,6 +15,7 @@ export const PublicVerificationView = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('report'); // 'report' o 'certificate'
     const [copied, setCopied] = useState(false);
+    const [localQrUrl, setLocalQrUrl] = useState('');
 
     const searchId = id || 'MC-2026-0003';
 
@@ -156,6 +158,21 @@ export const PublicVerificationView = () => {
         fetchVerificationData();
     }, [id, searchId]);
 
+    useEffect(() => {
+        if (!report?.reportNumber) return;
+        const origin = typeof window !== 'undefined' ? window.location.origin : '';
+        const qrUrl = `${origin}/verify/${report.reportNumber}`;
+        QRCode.toDataURL(qrUrl, {
+            margin: 1,
+            width: 140,
+            color: { dark: '#0f172a', light: '#ffffff' }
+        }).then(url => {
+            setLocalQrUrl(url);
+        }).catch(err => {
+            console.error('Error generando QR local:', err);
+        });
+    }, [report?.reportNumber]);
+
     const handlePrint = () => {
         window.print();
     };
@@ -196,8 +213,7 @@ export const PublicVerificationView = () => {
         );
     }
 
-    const qrVerificationUrl = `https://lims-microlabs.web.app/verify/${report.reportNumber}`;
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(qrVerificationUrl)}`;
+    const qrImageUrl = localQrUrl || '';
 
     return (
         <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col justify-between selection:bg-emerald-500 selection:text-white print:bg-white print:p-0">

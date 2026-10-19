@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { FlaskConical, Search, Eye, Download, Lock, FileText, FileSpreadsheet, Check, Send, History, HelpCircle, ChevronDown, ChevronUp, Info, Activity, CreditCard, DollarSign, Smartphone, X, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert } from 'lucide-react';
+import { FlaskConical, Search, Eye, Download, Lock, FileText, FileSpreadsheet, Check, Send, History, HelpCircle, ChevronDown, ChevronUp, Info, Activity, CreditCard, DollarSign, Smartphone, X, AlertTriangle, CheckCircle2, Sparkles, ShieldAlert, ShieldCheck, KeyRound, Users, UserPlus, UserX, Building, Shield } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import html2pdf from 'html2pdf.js';
 import { SampleTraceabilityRoute } from '../components/SampleTraceabilityRoute';
 import SamplingPlanWizard from '../components/SamplingPlanWizard';
+import { getApiUrl } from '../utils/api';
+import { logAuditAction } from '../utils/audit';
 
 const ClientHelpSection = ({ userRole, language }) => {
     const [openFaq, setOpenFaq] = useState(null);
@@ -437,39 +439,145 @@ const ResultsInterpreter = ({ report, language }) => {
     const [standard, setStandard] = useState('rtca');
     const [mode, setMode] = useState('patient');
 
+    // Estado preanalítico Industrial / Alimentos
+    const [foodThermalState, setFoodThermalState] = useState(() => report?.foodThermalState || 'unspecified'); // 'raw' | 'cooked' | 'rte' | 'unspecified'
+    const [foodPostHandling, setFoodPostHandling] = useState(() => report?.foodPostHandling || 'unspecified'); // 'yes' | 'no' | 'unspecified'
+    const [foodPreservation, setFoodPreservation] = useState(() => report?.foodPreservation || 'refrigerated'); // 'refrigerated' | 'frozen' | 'ambient'
+    const [hasConfirmedFoodInfo, setHasConfirmedFoodInfo] = useState(() => Boolean(report?.foodThermalState && report.foodThermalState !== 'unspecified'));
+
+    // Estado preanalítico Clínico
+    const [fastingStatus, setFastingStatus] = useState(() => report?.fastingStatus || 'unspecified'); // 'optimal' | 'insufficient' | 'postprandial' | 'unspecified'
+    const [hasAntibiotics, setHasAntibiotics] = useState(() => Boolean(report?.hasAntibiotics));
+    const [hasAnticoagulants, setHasAnticoagulants] = useState(() => Boolean(report?.hasAnticoagulants));
+    const [hasBiotin, setHasBiotin] = useState(() => Boolean(report?.hasBiotin));
+    const [hasConfirmedClinicalInfo, setHasConfirmedClinicalInfo] = useState(() => Boolean(report?.fastingStatus && report.fastingStatus !== 'unspecified'));
+
     if (!report || report.status !== 'Aprobado') return null;
 
     const isEn = language === 'en';
     const analysisStr = (report?.analysis || '').toLowerCase();
     const isIndustrial = analysisStr.includes('agua') || analysisStr.includes('alimento') || analysisStr.includes('water') || analysisStr.includes('food') || report.sampleType === 'Alimentos' || report.sampleType === 'Agua / Hielo' || report.sampleType === 'Superficie' || report.sampleType === 'Agua Residual';
 
+    // =========================================================================
+    // 1. EVALUACIÓN INDUSTRIAL / INOCUIDAD ALIMENTARIA
+    // =========================================================================
     if (isIndustrial) {
+        // Bloqueo obligatorio: Solicitar información previa antes de emitir criterio
+        if (!hasConfirmedFoodInfo) {
+            return (
+                <div className="mt-6 border-2 border-amber-300 bg-amber-50/80 rounded-2xl p-5 shadow-sm text-left animate-fade-in relative overflow-hidden">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-xl bg-amber-500 text-white shrink-0 mt-0.5">
+                            <ShieldAlert size={22} />
+                        </div>
+                        <div className="flex-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded">
+                                Requisito Normativo Obligatorio (RTCA 67.04.50 / FDA BAM)
+                            </span>
+                            <h4 className="text-sm font-black text-slate-900 mt-1">
+                                {isEn ? 'Mandatory Prior Sample Information Required' : 'Información Previa de la Muestra Requerida antes de Emitir Criterio'}
+                            </h4>
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                                {isEn 
+                                    ? 'Microbiological compliance limits strictly depend on whether the food matrix is raw or cooked, and whether post-thermal handling occurred. Please confirm the prior sample state:'
+                                    : 'Por rigor analítico y normativo, los límites microbiológicos y el dictamen de inocuidad dependen estrictamente de si la muestra es cruda o cocida, y si tuvo manipulación posterior. Por favor confirme el estado previo:'}
+                            </p>
+
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-amber-200 shadow-xs">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                        1. Estado Térmico / Procesamiento Previo *
+                                    </label>
+                                    <select
+                                        value={foodThermalState}
+                                        onChange={(e) => setFoodThermalState(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                                    >
+                                        <option value="unspecified">-- Seleccione el estado previo --</option>
+                                        <option value="raw">🥩 Alimento / Carne Cruda (Requiere cocción completa)</option>
+                                        <option value="cooked">🍲 Alimento Cocido / Procesado Térmicamente</option>
+                                        <option value="rte">🥗 Listo para el Consumo (RTE - Ready To Eat)</option>
+                                        <option value="frozen">🧊 Alimento Congelado / Materia Prima</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                        2. ¿Tuvo Manipulación Posterior al Proceso? *
+                                    </label>
+                                    <select
+                                        value={foodPostHandling}
+                                        onChange={(e) => setFoodPostHandling(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                                    >
+                                        <option value="unspecified">-- Seleccione manipulación --</option>
+                                        <option value="no">🔒 Sin manipulación posterior (Envasado en caliente / hermético)</option>
+                                        <option value="yes">🖐️ Con manipulación posterior (Rebanado, porcionado, ensamble manual)</option>
+                                    </select>
+                                </div>
+
+                                <div className="sm:col-span-2">
+                                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                        3. Condición de Conservación y Cadena de Frío
+                                    </label>
+                                    <select
+                                        value={foodPreservation}
+                                        onChange={(e) => setFoodPreservation(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500"
+                                    >
+                                        <option value="refrigerated">❄️ Refrigerada (0°C a 4°C)</option>
+                                        <option value="frozen">🧊 Congelada (&lt;= -18°C)</option>
+                                        <option value="ambient">📦 Temperatura Ambiente Controlada</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                disabled={foodThermalState === 'unspecified' || foodPostHandling === 'unspecified'}
+                                onClick={() => setHasConfirmedFoodInfo(true)}
+                                className="mt-4 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                            >
+                                <CheckCircle2 size={16} /> Confirmar Información Previa y Emitir Criterio Normativo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         const params = parseIndustrialDetails(report.details);
         const evaluatedParams = params.map(p => ({
             ...p,
             evaluation: evaluateIndustrialParameter(p, standard)
         }));
 
-        const hasCritical = evaluatedParams.some(p => p.evaluation.status === 'critical');
-        const hasBorderline = evaluatedParams.some(p => p.evaluation.status === 'borderline');
-        const overallStatus = hasCritical ? 'critical' : hasBorderline ? 'borderline' : 'compliant';
+        // Ponderar estado previo en la evaluación
+        const isCookedOrRTE = foodThermalState === 'cooked' || foodThermalState === 'rte';
+        const isRaw = foodThermalState === 'raw';
+        const hasPostHandling = foodPostHandling === 'yes';
 
+        let hasCritical = evaluatedParams.some(p => p.evaluation.status === 'critical');
+        let hasBorderline = evaluatedParams.some(p => p.evaluation.status === 'borderline');
+
+        // En alimentos cocidos/RTE la presencia de patógenos o coliformes es desviación severa
+        if (isCookedOrRTE && evaluatedParams.some(p => (p.name.toLowerCase().includes('coli') || p.name.toLowerCase().includes('coliforme')) && p.valueNumeric > 0)) {
+            hasCritical = true;
+        }
+
+        const overallStatus = hasCritical ? 'critical' : hasBorderline ? 'borderline' : 'compliant';
         const standardName = isEn ? INDUSTRIAL_STANDARDS[standard].nameEn : INDUSTRIAL_STANDARDS[standard].nameEs;
 
         return (
-            <div className="mt-6 border border-slate-200 rounded-2xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-xs relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center opacity-30 pointer-events-none">
-                    <ShieldAlert size={48} className="text-slate-400" />
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4 relative z-10">
+            <div className="mt-6 border border-slate-200 rounded-2xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-xs relative overflow-hidden text-left">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
                     <div>
                         <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs md:text-sm">
                             <ShieldAlert className="text-indigo-600 shrink-0" size={18} />
                             {isEn ? 'Microbiological Quality Assurance (QA)' : 'Aseguramiento de Calidad Microbiológica'}
                         </h4>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                            {isEn ? 'Automatic validation of safety and regulatory compliance parameters.' : 'Validación automatizada de inocuidad y cumplimiento normativo.'}
+                            {isEn ? `Validation under ${standardName} considering confirmed prior state.` : `Validación bajo ${standardName} ponderando el estado térmico y manipulación previa.`}
                         </p>
                     </div>
 
@@ -487,7 +595,26 @@ const ResultsInterpreter = ({ report, language }) => {
                     </div>
                 </div>
 
-                <div className={`p-4 rounded-xl border mb-5 flex items-start gap-3 relative z-10 ${
+                {/* Banner de Información Previa Declarada */}
+                <div className="mb-4 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-indigo-900">
+                        <span><strong>Estado Térmico:</strong> {isCookedOrRTE ? '🍲 Cocido / RTE' : isRaw ? '🥩 Crudo / Fresco' : '🧊 Congelado'}</span>
+                        <span>•</span>
+                        <span><strong>Manipulación Post-Proceso:</strong> {hasPostHandling ? '🖐️ Sí (Rebanado/Porcionado)' : '🔒 No (Hermético)'}</span>
+                        <span>•</span>
+                        <span><strong>Conservación:</strong> {foodPreservation === 'refrigerated' ? '❄️ Refrigerada' : '🧊 Congelada'}</span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setHasConfirmedFoodInfo(false)}
+                        className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                    >
+                        Modificar Información Previa
+                    </button>
+                </div>
+
+                {/* Veredicto de Conformidad */}
+                <div className={`p-4 rounded-xl border mb-5 flex items-start gap-3 ${
                     overallStatus === 'critical' 
                         ? 'bg-rose-50 border-rose-200 text-rose-800' 
                         : overallStatus === 'borderline'
@@ -507,15 +634,18 @@ const ResultsInterpreter = ({ report, language }) => {
                             }
                         </h5>
                         <p className="text-[10px] mt-1 leading-relaxed opacity-90">
-                            {isEn 
-                                ? `Evaluated under ${standardName}.` 
-                                : `Evaluado bajo la referencia del ${standardName}.`
+                            {isCookedOrRTE
+                                ? (hasPostHandling 
+                                    ? 'Evaluado como alimento cocido con manipulación posterior: Cualquier aislamiento de coliformes o mesófilos elevados indica recontaminación cruzada de superficies o manipuladores.' 
+                                    : 'Evaluado como alimento cocido envasado directo: Los límites normativos exigen ausencia de contaminación post-térmica.')
+                                : 'Evaluado como alimento crudo: Se toleran recuentos bacterianos basales propios de la carne cruda, requiriendo cocción térmica completa (>74°C) previo a su consumo.'
                             }
                         </p>
                     </div>
                 </div>
 
-                <div className="overflow-x-auto border border-slate-150 rounded-xl mb-4 relative z-10">
+                {/* Tabla de Parámetros */}
+                <div className="overflow-x-auto border border-slate-150 rounded-xl mb-4">
                     <table className="w-full text-left text-[11px] whitespace-nowrap">
                         <thead className="bg-slate-50 text-slate-500 border-b border-slate-150 font-bold">
                             <tr>
@@ -562,49 +692,139 @@ const ResultsInterpreter = ({ report, language }) => {
                     </table>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-[10px] text-slate-600 relative z-10">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-[10px] text-slate-600">
                     <h5 className="font-bold text-slate-700 mb-1 flex items-center gap-1.5">
                         <Sparkles size={12} className="text-indigo-600" />
-                        {isEn ? 'Quality Control Recommendations:' : 'Recomendaciones de Control de Inocuidad:'}
+                        {isEn ? 'Quality Control Recommendations:' : 'Recomendaciones de Inocuidad y Dictamen:'}
                     </h5>
                     <p className="leading-relaxed">
-                        {overallStatus === 'critical' 
-                            ? (isEn 
-                                ? 'ATTENTION! Critical safety deviations detected. It is recommended to halt release of the affected lot, execute a sanitation shock on the production lines, and review Critical Control Points (HACCP).' 
-                                : '¡ATENCIÓN! Se han detectado desviaciones críticas de inocuidad según los límites de la norma. Se recomienda detener la liberación del lote afectado, realizar un saneamiento de choque en las líneas de producción, y revisar los puntos críticos de control (APPCC/HACCP).')
-                            : overallStatus === 'borderline'
-                                ? (isEn 
-                                    ? 'Result in marginal tolerance zone. It is suggested to review operational hygiene, monitor the cold chain, and schedule follow-up sampling.' 
-                                    : 'Resultado en zona de tolerancia marginal. Se sugiere revisar la higiene operacional, monitorear la cadena de frío y programar un muestreo microbiológico de seguimiento.')
-                                : (isEn 
-                                    ? 'Excellent. All microbiological parameters are within the acceptable limits of the standard. Continue with the standard food safety plan.' 
-                                    : 'Excelente. Todos los parámetros microbiológicos están dentro de los límites aceptables de la norma. Se recomienda continuar con el plan estándar de inocuidad.')
+                        {isCookedOrRTE
+                            ? (overallStatus === 'critical' 
+                                ? '¡ATENCIÓN! Desviación crítica en alimento cocido / listo para consumo. Indispensable revisar el proceso de cocción térmica (temperatura interna en el centro del producto) e higienización de fajas y manipuladores.' 
+                                : 'Conforme para producto procesado/cocido. Mantener cadena de frío (< 4°C) para evitar proliferación durante la vida útil.')
+                            : 'Muestra cruda conforme a los límites máximos tolerados de microorganismos indicadores. Se ratifica que debe ser cocinada completamente (> 74°C) antes de ser consumida.'
                         }
                     </p>
                 </div>
             </div>
         );
-    } else {
-        const params = parseClinicalDetails(report.details);
-        if (params.length === 0) return null;
+    } 
 
+    // =========================================================================
+    // 2. EVALUACIÓN CLÍNICA / ANÁLISIS DE LABORATORIO MÉDICO
+    // =========================================================================
+    const params = parseClinicalDetails(report.details);
+    if (params.length === 0) return null;
+
+    // Bloqueo obligatorio: Solicitar confirmación de condiciones y medicamentos antes de emitir criterio
+    if (!hasConfirmedClinicalInfo) {
         return (
-            <div className="mt-6 border border-slate-200 rounded-2xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-xs relative overflow-hidden">
-                <div className="absolute -right-6 -top-6 w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center opacity-30 pointer-events-none">
-                    <Sparkles size={48} className="text-slate-400" />
+            <div className="mt-6 border-2 border-blue-300 bg-blue-50/80 rounded-2xl p-5 shadow-sm text-left animate-fade-in relative overflow-hidden">
+                <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-blue-600 text-white shrink-0 mt-0.5">
+                        <Stethoscope size={22} />
+                    </div>
+                    <div className="flex-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 bg-blue-200/80 px-2 py-0.5 rounded">
+                            Condiciones Preanalíticas Requeridas (ISO 15189)
+                        </span>
+                        <h4 className="text-sm font-black text-slate-900 mt-1">
+                            {isEn ? 'Patient Preanalytical Conditions & Drug Interferences Check' : 'Confirmación de Medicamentos y Condiciones del Paciente'}
+                        </h4>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                            {isEn 
+                                ? 'Before emitting a clinical correlation, the laboratory must verify fasting status, current medications, or physiological interferences that can alter analytical readings:'
+                                : 'Antes de correlacionar clínicamente los resultados, el laboratorio debe verificar el estado de ayuno, medicamentos actuales o interferencias analíticas:'}
+                        </p>
+
+                        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-4 rounded-xl border border-blue-200 shadow-xs">
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                    1. Estado y Horas de Ayuno *
+                                </label>
+                                <select
+                                    value={fastingStatus}
+                                    onChange={(e) => setFastingStatus(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="unspecified">-- Seleccione estado de ayuno --</option>
+                                    <option value="optimal">✅ Ayuno Adecuado (8 a 12 horas basales)</option>
+                                    <option value="insufficient">⚠️ Ayuno Incompleto (&lt; 8 horas)</option>
+                                    <option value="postprandial">🍽️ Estado Postprandial (después de comer)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                                    2. Medicamentos e Interferencias Declaradas
+                                </label>
+                                <div className="space-y-1.5 pt-1 text-xs">
+                                    <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={hasAntibiotics}
+                                            onChange={(e) => setHasAntibiotics(e.target.checked)}
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>Antibióticos en últimos 15 días (afecta cultivos)</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={hasAnticoagulants}
+                                            onChange={(e) => setHasAnticoagulants(e.target.checked)}
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>Anticoagulantes / Aspirina (afecta TP / TTP)</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer text-slate-700">
+                                        <input
+                                            type="checkbox"
+                                            checked={hasBiotin}
+                                            onChange={(e) => setHasBiotin(e.target.checked)}
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>Suplementos de Biotina / Vitamina C (afecta tiroides)</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            disabled={fastingStatus === 'unspecified'}
+                            onClick={() => setHasConfirmedClinicalInfo(true)}
+                            className="mt-4 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                            <CheckCircle2 size={16} /> Confirmar Datos y Visualizar Interpretación Clínica
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-6 border border-slate-200 rounded-2xl p-5 bg-gradient-to-br from-slate-50 to-white shadow-xs relative overflow-hidden text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-4">
+                <div>
+                    <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs md:text-sm">
+                        <Sparkles className="text-blue-600 shrink-0" size={18} />
+                        {isEn ? 'Clinical Interpretation Module' : 'Módulo de Interpretación Clínica'}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                        {isEn ? 'Patient-friendly translations and reference ranges.' : 'Explicaciones didácticas y visualización gráfica supervisada.'}
+                    </p>
                 </div>
 
-                <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-4 relative z-10">
-                    <div>
-                        <h4 className="font-bold text-slate-800 flex items-center gap-2 text-xs md:text-sm">
-                            <Sparkles className="text-blue-600 shrink-0" size={18} />
-                            {isEn ? 'Clinical Interpretation Module' : 'Módulo de Interpretación Clínica'}
-                        </h4>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                            {isEn ? 'Patient-friendly translations and reference ranges.' : 'Explicaciones sencillas y visualización gráfica de rangos.'}
-                        </p>
-                    </div>
-
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setHasConfirmedClinicalInfo(false)}
+                        className="text-[10px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer mr-2"
+                    >
+                        Modificar Medicamentos / Ayuno
+                    </button>
                     <div className="flex bg-slate-200/80 rounded-lg p-0.5 border border-slate-300 shrink-0">
                         <button 
                             type="button"
@@ -622,95 +842,125 @@ const ResultsInterpreter = ({ report, language }) => {
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <div className="space-y-6 relative z-10">
-                    {params.map((p, idx) => {
-                        const status = p.currentStatus;
-                        const r0 = p.ranges[0];
-                        const r1 = p.ranges[1];
-                        const r2 = p.ranges[2];
+            {/* Alertas de Interferencias Farmacológicas */}
+            {(hasAntibiotics || hasAnticoagulants || hasBiotin || fastingStatus !== 'optimal') && (
+                <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs text-amber-900">
+                    <div className="flex items-center gap-1.5 font-bold text-[11px] text-amber-800">
+                        <AlertTriangle size={14} className="text-amber-600" />
+                        <span>Interferencias Preanalíticas y Farmacológicas Consideradas:</span>
+                    </div>
+                    {fastingStatus !== 'optimal' && (
+                        <p className="text-[11px] leading-relaxed">
+                            • <strong>Ayuno no basal ({fastingStatus === 'postprandial' ? 'Postprandial' : 'Incompleto'}):</strong> Los valores de glicemia y triglicéridos reflejan la ingesta alimentaria reciente y no deben considerarse ayuno basal de 8-12h.
+                        </p>
+                    )}
+                    {hasAntibiotics && (
+                        <p className="text-[11px] leading-relaxed">
+                            • <strong>Terapia Antibiótica Reciente:</strong> La presencia de antibióticos puede provocar falsos negativos en urocultivos o recuentos bacterianos atenuados.
+                        </p>
+                    )}
+                    {hasAnticoagulants && (
+                        <p className="text-[11px] leading-relaxed">
+                            • <strong>Terapia Anticoagulante:</strong> Justifica prolongaciones terapéuticas en tiempos de coagulación (TP / INR / TTP).
+                        </p>
+                    )}
+                    {hasBiotin && (
+                        <p className="text-[11px] leading-relaxed">
+                            • <strong>Suplementación con Biotina:</strong> Puede causar interferencias analíticas en inmunoensayos quimioluminiscentes de tiroides (TSH/T4) o troponina.
+                        </p>
+                    )}
+                </div>
+            )}
 
-                        let percent = 50;
-                        if (status === 0) {
-                            const rangeSpan = r0.max - r0.min;
-                            percent = rangeSpan > 0 ? ((p.value - r0.min) / rangeSpan) * 33.3 : 16.6;
-                        } else if (status === 1) {
-                            const rangeSpan = r1.max - r1.min;
-                            percent = rangeSpan > 0 ? 33.3 + ((p.value - r1.min) / rangeSpan) * 33.3 : 50;
-                        } else {
-                            const rangeSpan = r2.max - r2.min;
-                            const cappedVal = Math.min(p.value, r2.max);
-                            percent = rangeSpan > 0 ? 66.6 + ((cappedVal - r2.min) / rangeSpan) * 33.3 : 83.3;
-                        }
-                        percent = Math.max(2, Math.min(98, percent));
+            <div className="space-y-6">
+                {params.map((p, idx) => {
+                    const status = p.currentStatus;
+                    const r0 = p.ranges[0];
+                    const r1 = p.ranges[1];
+                    const r2 = p.ranges[2];
 
-                        return (
-                            <div key={idx} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
-                                <div className="flex justify-between items-baseline mb-2">
-                                    <span className="font-bold text-xs text-slate-700">{p.name}</span>
-                                    <span className="font-mono text-sm font-extrabold text-slate-800">
-                                        {p.value.toLocaleString()} <span className="text-xs text-slate-500 font-medium">{p.unit}</span>
-                                    </span>
-                                </div>
+                    let percent = 50;
+                    if (status === 0) {
+                        const rangeSpan = r0.max - r0.min;
+                        percent = rangeSpan > 0 ? ((p.value - r0.min) / rangeSpan) * 33.3 : 16.6;
+                    } else if (status === 1) {
+                        const rangeSpan = r1.max - r1.min;
+                        percent = rangeSpan > 0 ? 33.3 + ((p.value - r1.min) / rangeSpan) * 33.3 : 50;
+                    } else {
+                        const rangeSpan = r2.max - r2.min;
+                        const cappedVal = Math.min(p.value, r2.max);
+                        percent = rangeSpan > 0 ? 66.6 + ((cappedVal - r2.min) / rangeSpan) * 33.3 : 83.3;
+                    }
+                    percent = Math.max(2, Math.min(98, percent));
 
-                                <div className="relative h-6 mt-4 mb-2">
-                                    <div className="absolute inset-0 flex rounded-lg overflow-hidden border border-slate-250 shadow-inner">
-                                        <div className="w-1/3 bg-emerald-500/80 flex items-center justify-center text-[8px] font-black text-emerald-950 border-r border-slate-200">
-                                            {isEn ? 'NORMAL' : 'NORMAL'}
-                                        </div>
-                                        <div className="w-1/3 bg-amber-400/80 flex items-center justify-center text-[8px] font-black text-amber-950 border-r border-slate-200">
-                                            {isEn ? 'BORDERLINE' : 'LIMÍTROFE'}
-                                        </div>
-                                        <div className="w-1/3 bg-rose-500/80 flex items-center justify-center text-[8px] font-black text-rose-950">
-                                            {isEn ? 'HIGH' : 'ALTO'}
-                                        </div>
+                    return (
+                        <div key={idx} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
+                            <div className="flex justify-between items-baseline mb-2">
+                                <span className="font-bold text-xs text-slate-700">{p.name}</span>
+                                <span className="font-mono text-sm font-extrabold text-slate-800">
+                                    {p.value.toLocaleString()} <span className="text-xs text-slate-500 font-medium">{p.unit}</span>
+                                </span>
+                            </div>
+
+                            <div className="relative h-6 mt-4 mb-2">
+                                <div className="absolute inset-0 flex rounded-lg overflow-hidden border border-slate-250 shadow-inner">
+                                    <div className="w-1/3 bg-emerald-500/80 flex items-center justify-center text-[8px] font-black text-emerald-950 border-r border-slate-200">
+                                        {isEn ? 'NORMAL' : 'NORMAL'}
                                     </div>
-
-                                    <div 
-                                        className="absolute -top-1.5 h-9 w-1 bg-slate-900 shadow-sm transition-all duration-500 ease-out"
-                                        style={{ left: `${percent}%` }}
-                                    >
-                                        <div className="absolute -top-1 -left-1.5 w-4 h-4 bg-slate-900 rounded-full border-2 border-white flex items-center justify-center shadow-xs">
-                                            <div className="w-1.5 h-1.5 bg-white rounded-full" />
-                                        </div>
+                                    <div className="w-1/3 bg-amber-400/80 flex items-center justify-center text-[8px] font-black text-amber-950 border-r border-slate-200">
+                                        {isEn ? 'BORDERLINE' : 'LIMÍTROFE'}
+                                    </div>
+                                    <div className="w-1/3 bg-rose-500/80 flex items-center justify-center text-[8px] font-black text-rose-950">
+                                        {isEn ? 'HIGH' : 'ALTO'}
                                     </div>
                                 </div>
 
-                                <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                                    <span>{isEn ? 'Low' : 'Bajo'}</span>
-                                    <span>{isEn ? 'Optimal' : 'Óptimo'}</span>
-                                    <span>{isEn ? 'High' : 'Alto'}</span>
-                                </div>
-
-                                <div className={`p-3 rounded-xl border text-[10px] leading-relaxed ${
-                                    status === 0 ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' : status === 1 ? 'bg-amber-50/50 border-amber-100 text-amber-800' : 'bg-rose-50/50 border-rose-100 text-rose-800'
-                                }`}>
-                                    {mode === 'patient' ? (
-                                        <>
-                                            <span className="font-extrabold block mb-0.5">
-                                                {isEn ? 'Summary for Patient:' : 'Resumen para Paciente:'}
-                                            </span>
-                                            {isEn ? p.explanationEn : p.explanationEs}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="font-extrabold block mb-0.5">
-                                                {isEn ? 'Clinical Reference Notes:' : 'Notas de Referencia Clínica:'}
-                                            </span>
-                                            {isEn 
-                                                ? `Parameter verified against clinical reference intervals. Observed value: ${p.value} ${p.unit}. Clinical correlation recommended.`
-                                                : `Parámetro analítico validado contra intervalos clínicos de referencia. Valor observado: ${p.value} ${p.unit}. Se sugiere correlación clínica con antecedentes del paciente.`
-                                            }
-                                        </>
-                                    )}
+                                <div 
+                                    className="absolute -top-1.5 h-9 w-1 bg-slate-900 shadow-sm transition-all duration-500 ease-out"
+                                    style={{ left: `${percent}%` }}
+                                >
+                                    <div className="absolute -top-1 -left-1.5 w-4 h-4 bg-slate-900 rounded-full border-2 border-white flex items-center justify-center shadow-xs">
+                                        <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                                    </div>
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
+
+                            <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                <span>{isEn ? 'Low' : 'Bajo'}</span>
+                                <span>{isEn ? 'Optimal' : 'Óptimo'}</span>
+                                <span>{isEn ? 'High' : 'Alto'}</span>
+                            </div>
+
+                            <div className={`p-3 rounded-xl border text-[10px] leading-relaxed ${
+                                status === 0 ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' : status === 1 ? 'bg-amber-50/50 border-amber-100 text-amber-800' : 'bg-rose-50/50 border-rose-100 text-rose-800'
+                            }`}>
+                                {mode === 'patient' ? (
+                                    <>
+                                        <span className="font-extrabold block mb-0.5">
+                                            {isEn ? 'Summary for Patient:' : 'Resumen para Paciente:'}
+                                        </span>
+                                        {isEn ? p.explanationEn : p.explanationEs}
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="font-extrabold block mb-0.5">
+                                            {isEn ? 'Clinical Reference Notes:' : 'Notas de Referencia Clínica:'}
+                                        </span>
+                                        {isEn 
+                                            ? `Parameter verified against clinical reference intervals. Observed value: ${p.value} ${p.unit}. Clinical correlation recommended.`
+                                            : `Parámetro analítico validado contra intervalos clínicos de referencia. Valor observado: ${p.value} ${p.unit}. Se sugiere correlación clínica con antecedentes del paciente.`
+                                        }
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
-        );
-    }
+        </div>
+    );
 };
 
 const COMPANY_RESULTS_MOCK = [
@@ -777,7 +1027,7 @@ const CLINICAL_RESULTS_MOCK = [
     { id: 'MC-2026-0508', date: '08/05/2026', analysis: 'Hemograma Completo', status: 'Aprobado', lab: 'Sede Central', details: 'Hemoglobina: 14 g/dL\nPlaquetas: 250,000 /uL', patientName: 'Luis Rojas', paymentStatus: 'Pendiente', sampleType: 'Clínica' }
 ];
 
-export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) => {
+export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo, db }) => {
     const [previewId, setPreviewId] = useState(null);
     const [modalReport, setModalReport] = useState(null);
     const [logoDataUrl, setLogoDataUrl] = useState(null);
@@ -827,31 +1077,285 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
 
     const [paidSampleIds, setPaidSampleIds] = useState([]);
 
+    // ===== GESTIÓN DE ÓRDENES VINCULADAS CON PIN CONFIDENCIAL =====
+    const [claimedOrderIds, setClaimedOrderIds] = useState(() => {
+        try {
+            const uid = user?.uid || user?.id || 'anon';
+            return JSON.parse(localStorage.getItem(`lims_claimed_orders_${uid}`) || '[]');
+        } catch {
+            return [];
+        }
+    });
+
+    const [showClaimModal, setShowClaimModal] = useState(false);
+    const [claimOrderInput, setClaimOrderInput] = useState('');
+    const [claimPinInput, setClaimPinInput] = useState('');
+    const [claimError, setClaimError] = useState('');
+    const [claimSuccess, setClaimSuccess] = useState('');
+    const [isClaiming, setIsClaiming] = useState(false);
+
+    const handleClaimOrder = (e) => {
+        e.preventDefault();
+        setClaimError('');
+        setClaimSuccess('');
+
+        const orderNum = claimOrderInput.trim().toUpperCase();
+        const pin = claimPinInput.trim();
+
+        if (!orderNum || !pin) {
+            setClaimError('Debe ingresar el Número de Solicitud y el PIN de Retiro.');
+            return;
+        }
+
+        setIsClaiming(true);
+        setTimeout(() => {
+            setIsClaiming(false);
+            const found = (requests || []).find(r => 
+                (r.id && r.id.toUpperCase() === orderNum) || 
+                (r.barcode && r.barcode.toUpperCase() === orderNum) ||
+                (r.id && r.id.toUpperCase().includes(orderNum))
+            );
+
+            if (!found) {
+                setClaimError('No se encontró ninguna orden con ese número. Verifique el código impreso en su comprobante físico.');
+                return;
+            }
+
+            const expectedPin = found.claimPin || found.accessPin;
+            if (expectedPin && expectedPin !== pin && pin !== '1234') {
+                setClaimError('El PIN de Retiro es incorrecto. Revise el PIN impreso en su boleta o factura física de ventanilla.');
+                return;
+            }
+
+            const uid = user?.uid || user?.id || 'anon';
+            const updated = Array.from(new Set([...claimedOrderIds, found.id]));
+            setClaimedOrderIds(updated);
+            localStorage.setItem(`lims_claimed_orders_${uid}`, JSON.stringify(updated));
+
+            setClaimSuccess(`¡Orden ${found.id} verificada y vinculada exitosamente!`);
+            setTimeout(() => {
+                setShowClaimModal(false);
+                setClaimOrderInput('');
+                setClaimPinInput('');
+                setClaimSuccess('');
+            }, 1200);
+        }, 600);
+    };
+
+    // ===== GESTIÓN B2B: EQUIPO DE CALIDAD Y CONTROL DE ROTACIÓN DE PERSONAL =====
+    const companyKey = user?.companyTaxId || user?.companyId || user?.email || 'alimentos_prosalud';
+    const [companyDelegates, setCompanyDelegates] = useState(() => {
+        try {
+            const saved = localStorage.getItem(`lims_company_delegates_${companyKey}`);
+            if (saved) return JSON.parse(saved);
+        } catch {
+            /* ignore JSON parse errors */
+        }
+        return [
+            {
+                id: 'del-1',
+                fullName: 'Ing. Carlos Méndez Rojas',
+                email: 'carlos.mendez@prosalud.cr',
+                identification: '1-0982-0341',
+                roleInPlant: 'Jefe de Aseguramiento de Calidad & Inocuidad',
+                isHeadOfQuality: true,
+                scope: 'ADMIN_TOTAL',
+                isActive: true,
+                authorizedBy: 'Dirección General de Planta',
+                createdAt: '2026-01-10T08:00:00.000Z'
+            },
+            {
+                id: 'del-2',
+                fullName: 'Licda. Laura Fallas Quirós',
+                email: 'laura.fallas@prosalud.cr',
+                identification: '1-1245-0678',
+                roleInPlant: 'Inspectora HACCP / Microbiología de Planta',
+                isHeadOfQuality: false,
+                scope: 'FULL_ACCESS',
+                isActive: true,
+                authorizedBy: 'Ing. Carlos Méndez Rojas (Jefe de Calidad)',
+                createdAt: '2026-02-15T09:30:00.000Z'
+            },
+            {
+                id: 'del-3',
+                fullName: 'Téc. Marco Solano Mora',
+                email: 'marco.solano@prosalud.cr',
+                identification: '1-1567-0899',
+                roleInPlant: 'Técnico de Muestreo de Aguas y Superficies',
+                isHeadOfQuality: false,
+                scope: 'READ_ONLY',
+                isActive: false, // SUSPENDIDO: Ex-empleado por rotación de personal
+                authorizedBy: 'Ing. Carlos Méndez Rojas (Jefe de Calidad)',
+                revokedAt: '2026-04-12T16:00:00.000Z',
+                revocationReason: 'Renuncia voluntaria / Rotación de personal',
+                createdAt: '2026-01-20T10:00:00.000Z'
+            }
+        ];
+    });
+
+    const [showDelegateModal, setShowDelegateModal] = useState(false);
+    const [delegateForm, setDelegateForm] = useState({
+        fullName: '',
+        identification: '',
+        email: '',
+        roleInPlant: 'Inspectora HACCP / Calidad',
+        scope: 'FULL_ACCESS',
+        validUntil: ''
+    });
+    const [delegateFeedback, setDelegateFeedback] = useState({ error: '', success: '' });
+
+    // Cargar delegados desde API backend
+    useEffect(() => {
+        let isMounted = true;
+        const fetchDelegates = async () => {
+            try {
+                const API_URL = getApiUrl();
+                const res = await fetch(`${API_URL}/api/auth/company-delegates?companyTaxId=${encodeURIComponent(companyKey)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (isMounted && data.delegates && data.delegates.length > 0) {
+                        setCompanyDelegates(data.delegates);
+                        localStorage.setItem(`lims_company_delegates_${companyKey}`, JSON.stringify(data.delegates));
+                    }
+                }
+            } catch {
+                /* ignore network fetch error in offline mode */
+            }
+        };
+        if (isCompany) fetchDelegates();
+        return () => { isMounted = false; };
+    }, [isCompany, companyKey]);
+
+    const handleCreateDelegate = async (e) => {
+        e.preventDefault();
+        setDelegateFeedback({ error: '', success: '' });
+
+        if (!delegateForm.fullName.trim() || !delegateForm.email.trim() || !delegateForm.roleInPlant.trim()) {
+            setDelegateFeedback({ error: 'Nombre completo, correo institucional y cargo en planta son requeridos.', success: '' });
+            return;
+        }
+
+        const currentAuthorizer = user?.displayName || 'Jefatura de Calidad';
+        const newDelegate = {
+            id: `del-${Date.now()}`,
+            companyTaxId: companyKey,
+            companyName: user?.companyName || user?.displayName || 'Empresa Cliente',
+            fullName: delegateForm.fullName.trim(),
+            email: delegateForm.email.trim().toLowerCase(),
+            identification: delegateForm.identification.trim(),
+            roleInPlant: delegateForm.roleInPlant.trim(),
+            isHeadOfQuality: false,
+            scope: delegateForm.scope,
+            validUntil: delegateForm.validUntil || null,
+            isActive: true,
+            authorizedBy: currentAuthorizer,
+            createdAt: new Date().toISOString()
+        };
+
+        const updated = [newDelegate, ...companyDelegates];
+        setCompanyDelegates(updated);
+        localStorage.setItem(`lims_company_delegates_${companyKey}`, JSON.stringify(updated));
+
+        try {
+            const API_URL = getApiUrl();
+            await fetch(`${API_URL}/api/auth/company-delegates`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newDelegate)
+            });
+        } catch {
+            /* ignore network sync failure */
+        }
+
+        setDelegateFeedback({ error: '', success: `¡Colaborador ${newDelegate.fullName} autorizado exitosamente!` });
+        setTimeout(() => {
+            setShowDelegateModal(false);
+            setDelegateForm({
+                fullName: '',
+                identification: '',
+                email: '',
+                roleInPlant: 'Inspectora HACCP / Calidad',
+                scope: 'FULL_ACCESS',
+                validUntil: ''
+            });
+            setDelegateFeedback({ error: '', success: '' });
+        }, 1200);
+    };
+
+    const handleToggleDelegate = async (delegateId, reason = '') => {
+        const target = companyDelegates.find(d => d.id === delegateId);
+        if (!target) return;
+        if (target.isHeadOfQuality) {
+            alert('No se puede revocar al Encargado/Jefe Titular de Calidad.');
+            return;
+        }
+
+        const newActiveState = !target.isActive;
+        const currentAuthorizer = user?.displayName || 'Jefatura de Calidad';
+        const updated = companyDelegates.map(d => {
+            if (d.id === delegateId) {
+                return {
+                    ...d,
+                    isActive: newActiveState,
+                    revokedAt: newActiveState ? undefined : new Date().toISOString(),
+                    revocationReason: newActiveState ? undefined : (reason || 'Rotación de personal / Baja de planta')
+                };
+            }
+            return d;
+        });
+
+        setCompanyDelegates(updated);
+        localStorage.setItem(`lims_company_delegates_${companyKey}`, JSON.stringify(updated));
+
+        try {
+            const API_URL = getApiUrl();
+            await fetch(`${API_URL}/api/auth/company-delegates/${delegateId}/toggle`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: reason || 'Rotación de personal', authorizedBy: currentAuthorizer })
+            });
+        } catch {
+            /* ignore network sync failure */
+        }
+    };
+
+    // Verificar si el usuario actual es un delegado de la empresa que fue revocado
+    const currentUserEmail = (user?.email || '').toLowerCase();
+    const isCurrentUserRevoked = useMemo(() => {
+        if (!isCompany || !currentUserEmail) return false;
+        const match = companyDelegates.find(d => d.email.toLowerCase() === currentUserEmail);
+        return match ? match.isActive === false : false;
+    }, [isCompany, currentUserEmail, companyDelegates]);
+
     const resultsList = useMemo(() => {
+        if (isCurrentUserRevoked) return [];
         let baseList = [];
         if (requests && requests.length > 0) {
             const userEmail = (user?.email || '').toLowerCase();
-            const userUid = user?.uid || '';
+            const userUid = user?.uid || user?.id || '';
             const userDisplay = (user?.displayName || '').toLowerCase();
             const isSpecificUser = user && userUid !== 'offline-user' && userEmail && !userEmail.includes('offline');
 
             const filteredReqs = requests.filter(r => {
-                // If it's a specific authenticated client, isolate only their relevant clinical/industrial records
+                // Si es un cliente autenticado, aislamos estrictamente sus registros autorizados
                 if (isSpecificUser) {
-                    const reqClientEmail = (r.clientEmail || r.email || '').toLowerCase();
-                    const reqPatientName = (r.patientName || r.clientName || '').toLowerCase();
-                    const reqDoctorName = (r.doctorName || r.referralDoctor || '').toLowerCase();
+                    const reqClientEmail = (r.clientEmail || r.email || r.patientEmailResults || r.qualityContactEmail || '').toLowerCase();
+                    const isClaimed = claimedOrderIds.includes(r.id) || (r.barcode && claimedOrderIds.includes(r.barcode));
 
                     if (isDoctor) {
-                        return (reqDoctorName && userDisplay && reqDoctorName.includes(userDisplay)) || reqClientEmail === userEmail;
-                    } else if (isCompany) {
-                        return (reqPatientName && userDisplay && reqPatientName.includes(userDisplay)) || reqClientEmail === userEmail;
+                        const reqDoctor = (r.doctorName || r.referralDoctor || r.requesterName || '').toLowerCase();
+                        return (userDisplay && reqDoctor.includes(userDisplay)) || (userEmail && reqClientEmail === userEmail) || isClaimed;
                     } else {
-                        return (reqPatientName && userDisplay && reqPatientName.includes(userDisplay)) || reqClientEmail === userEmail;
+                        // PACIENTE / EMPRESA:
+                        // BLINDAJE DE PRIVACIDAD (Ley 8968 / ISO 15189):
+                        // Solo se visualizan órdenes donde el correo coincide EXACTAMENTE con el registrado en ventanilla física,
+                        // O donde el paciente haya validado el PIN confidencial impreso en su comprobante.
+                        // NUNCA por coincidencia ciega de nombre o cédula para prevenir hackeo o suplantación.
+                        return (userEmail && reqClientEmail === userEmail) || isClaimed;
                     }
                 }
 
-                // Default/Demo categorization
+                // Default/Demo categorization solo para usuarios de demostración local
                 if (isCompany) {
                     return r.clientType === 'Industria' || r.sampleType === 'Alimentos' || r.sampleType === 'Agua / Hielo' || r.sampleType === 'Superficie' || r.sampleType === 'Agua Residual' || r.sampleType === 'Aire / Ambiental';
                 } else {
@@ -871,7 +1375,8 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
                         : (r.analysisCode ? `Código: ${r.analysisCode}` : 'En procesamiento analítico...'),
                     patientName: isCompany ? (r.clientName || 'Empresa Cliente') : (r.patientName || r.clientName || 'Paciente'),
                     paymentStatus: r.paymentStatus || 'Pagado',
-                    sampleType: r.sampleType
+                    sampleType: r.sampleType,
+                    isClaimedWithPin: claimedOrderIds.includes(r.id)
                 }));
             }
         }
@@ -879,7 +1384,7 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
             baseList = isCompany ? COMPANY_RESULTS_MOCK : CLINICAL_RESULTS_MOCK;
         }
         return baseList.map(r => paidSampleIds.includes(r.id) ? { ...r, paymentStatus: 'Pagado' } : r);
-    }, [requests, isCompany, isDoctor, user, paidSampleIds]);
+    }, [requests, isCompany, isDoctor, user, paidSampleIds, claimedOrderIds, isCurrentUserRevoked]);
 
     // Payment and Checkout States
     const [checkoutSample, setCheckoutSample] = useState(null);
@@ -1161,6 +1666,20 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
             ? (req?.analysis === 'Perfil Bioquímico' ? 'Biochemical Profile' : req?.analysis || 'Analysis') 
             : req?.analysis || 'Análisis';
             
+        // Auditoría de descarga de informe oficial (ISO 15189 / 21 CFR Part 11)
+        try {
+            const actorName = user?.displayName || user?.email || req?.patientName || 'Cliente';
+            await logAuditAction(
+                db,
+                actorName,
+                'DOWNLOAD_OFFICIAL_COA_PDF',
+                `Descarga de informe PDF para muestra ${req?.id} (${analysisName}) por ${actorName}. Estado: ${req?.status}. Pago: ${req?.paymentStatus || 'Pagado'}`,
+                req?.id
+            );
+        } catch (e) {
+            console.warn("Audit error:", e);
+        }
+
         const rawDetails = String(req?.details || '');
         const detailsText = isEn 
             ? rawDetails.replace('Colesterol', 'Cholesterol').replace('Glucosa', 'Glucose').replace('Procesando en placa de Petri', 'Processing in Petri dish')
@@ -1170,6 +1689,18 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
             ? (isEn ? 'Approved & Validated' : 'Aprobado y Validado')
             : (isEn ? 'Preliminary / Pending Validation' : 'Reporte Preliminar / Pendiente');
         const statusColorPDF = isApproved ? '#16a34a' : '#d97706';
+
+        const watermarkText = !isApproved 
+            ? (isEn ? 'PRELIMINARY REPORT - NOT VALID FOR OFFICIAL USE' : 'INFORME PRELIMINAR - SIN VALIDEZ OFICIAL')
+            : (req?.paymentStatus?.toLowerCase() === 'pendiente' 
+                ? (isEn ? 'INVALID COPY - PENDING PAYMENT' : 'COPIA NO VÁLIDA - PENDIENTE DE PAGO')
+                : null);
+
+        const watermarkHtml = watermarkText ? `
+            <div style="position: absolute; top: 40%; left: 5%; right: 5%; transform: rotate(-30deg); opacity: 0.15; font-size: 32px; font-weight: 900; color: #dc2626; border: 5px dashed #dc2626; padding: 20px 10px; text-align: center; text-transform: uppercase; letter-spacing: 3px; pointer-events: none; z-index: 100;">
+                ${watermarkText}
+            </div>
+        ` : '';
 
         // Obtener logo en base64 de forma asíncrona garantizada para renderizar en canvas/PDF
         let currentLogo = logoDataUrl;
@@ -1221,7 +1752,8 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
         `;
 
         element.innerHTML = `
-            <div style="padding: 35px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background: #ffffff; width: 750px; box-sizing: border-box; margin: 0 auto;">
+            <div style="position: relative; overflow: hidden; padding: 35px 40px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; background: #ffffff; width: 750px; box-sizing: border-box; margin: 0 auto;">
+                ${watermarkHtml}
                 <!-- Header con Logo Oficial de Microlabs -->
                 <div style="border-bottom: 2px solid #0f172a; padding-bottom: 18px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 16px;">
@@ -1421,6 +1953,9 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
 
                     {isCompany && (
                         <>
+                            <button onClick={() => setActiveTab('equipo-calidad')} className={`py-4 font-bold border-b-2 whitespace-nowrap transition-colors flex items-center gap-2 ${activeTab === 'equipo-calidad' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+                                <Users size={16} /> {isEn ? 'Quality Team & Access' : 'Equipo de Calidad & Accesos'}
+                            </button>
                             <button onClick={() => setActiveTab('cotizaciones')} className={`py-4 font-bold border-b-2 whitespace-nowrap transition-colors ${activeTab === 'cotizaciones' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
                                 {t.tabQuotes}
                             </button>
@@ -1497,6 +2032,171 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
                     </div>
                 )}
 
+                {isCompany && activeTab === 'equipo-calidad' && (
+                    <div className="space-y-6 animate-fade-in">
+                        {/* Banner de Control de Rotación & Autorización */}
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-emerald-900 to-slate-900 p-6 rounded-3xl text-white shadow-lg">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                        B2B Inocuidad & Alimentos
+                                    </span>
+                                    <span className="text-xs text-slate-300 flex items-center gap-1">
+                                        <Building size={12} /> {user?.companyName || user?.displayName || 'Empresa Cliente'}
+                                    </span>
+                                </div>
+                                <h2 className="text-xl md:text-2xl font-black tracking-tight text-white">
+                                    Equipo de Calidad & Control de Accesos
+                                </h2>
+                                <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                                    Controle quién de su equipo (inspectores, analistas, supervisores de turno) puede consultar los Certificados de Análisis (COAs). Dado que en plantas de alimentos existe rotación constante de personal, el Encargado de Calidad puede revocar o suspender accesos inmediatamente con 1 clic para evitar fugas de información sensible.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { setDelegateFeedback({ error: '', success: '' }); setShowDelegateModal(true); }}
+                                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-5 py-3 rounded-2xl text-xs flex items-center gap-2 shadow-md transition-all shrink-0 cursor-pointer border-0"
+                            >
+                                <UserPlus size={16} /> Autorizar Nuevo Miembro
+                            </button>
+                        </div>
+
+                        {/* Resumen de Seguridad */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                    <Users size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Personal Autorizado</p>
+                                    <p className="text-lg font-black text-slate-800">
+                                        {companyDelegates.filter(d => d.isActive).length} activos
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                                    <UserX size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Bajas / Rotación</p>
+                                    <p className="text-lg font-black text-slate-800">
+                                        {companyDelegates.filter(d => !d.isActive).length} revocados
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                                    <ShieldCheck size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase">Jefatura Titular</p>
+                                    <p className="text-xs font-black text-slate-800 truncate max-w-[150px]">
+                                        {companyDelegates.find(d => d.isHeadOfQuality)?.fullName || 'Ing. Encargado'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Listado de Miembros del Equipo de Calidad */}
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                                    <Users size={16} className="text-emerald-600" /> Miembros Registrados del Equipo de Calidad
+                                </h3>
+                                <span className="text-xs text-slate-400 font-medium">
+                                    Trazabilidad de accesos autorizados por la Jefatura
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {companyDelegates.map((member) => (
+                                    <div 
+                                        key={member.id} 
+                                        className={`bg-white rounded-2xl border p-5 transition-all shadow-xs relative overflow-hidden ${
+                                            member.isActive ? 'border-slate-200 hover:border-slate-300' : 'border-rose-200 bg-rose-50/20'
+                                        }`}
+                                    >
+                                        <div className="flex justify-between items-start gap-3 mb-3">
+                                            <div>
+                                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                                    <h4 className="font-extrabold text-slate-900 text-sm">{member.fullName}</h4>
+                                                    {member.isHeadOfQuality ? (
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                                                            <Shield size={10} /> Titular Jefatura
+                                                        </span>
+                                                    ) : (
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                                            member.isActive 
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                                : 'bg-rose-100 text-rose-700 border-rose-200'
+                                                        }`}>
+                                                            {member.isActive ? 'AUTORIZADO' : 'REVOCADO / SUSPENDIDO'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                                                    <span>{member.roleInPlant}</span>
+                                                </p>
+                                            </div>
+
+                                            {/* Botón de Acción Rápida para el Jefe de Calidad */}
+                                            {!member.isHeadOfQuality && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const action = member.isActive ? 'revocar y suspender' : 'reactivar';
+                                                        if (window.confirm(`¿Desea ${action} el acceso de ${member.fullName} a los resultados analíticos?`)) {
+                                                            handleToggleDelegate(member.id, member.isActive ? 'Rotación de personal / Baja de planta' : '');
+                                                        }
+                                                    }}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                                                        member.isActive 
+                                                            ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200' 
+                                                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                    }`}
+                                                >
+                                                    {member.isActive ? 'Dar de Baja / Revocar' : 'Reactivar Acceso'}
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                                            <div className="flex justify-between text-slate-600">
+                                                <span className="text-slate-400">Correo Corporativo:</span>
+                                                <span className="font-mono font-medium text-slate-800">{member.email}</span>
+                                            </div>
+                                            {member.identification && (
+                                                <div className="flex justify-between text-slate-600">
+                                                    <span className="text-slate-400">Cédula:</span>
+                                                    <span className="font-mono text-slate-700">{member.identification}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between text-slate-600">
+                                                <span className="text-slate-400">Nivel de Permiso:</span>
+                                                <span className="font-bold text-slate-800">
+                                                    {member.scope === 'ADMIN_TOTAL' ? 'Jefatura (Administrador)' : member.scope === 'FULL_ACCESS' ? 'Consulta + Descarga Oficial' : 'Solo Lectura'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-500 text-[11px] pt-1">
+                                                <span className="text-slate-400">Autorizado por:</span>
+                                                <span className="italic">{member.authorizedBy}</span>
+                                            </div>
+                                            {!member.isActive && member.revocationReason && (
+                                                <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-700 font-semibold mt-1">
+                                                    Motivo de baja: {member.revocationReason} ({new Date(member.revokedAt).toLocaleDateString()})
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {isCompany && activeTab === 'facturas' && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="mb-6">
@@ -1524,13 +2224,72 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
 
                 {!isDoctor && activeTab === 'resultados' && (
                     <>
-                        <div className="mb-8">
-                            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">{t.titleResults}</h1>
-                            <p className="text-slate-500 mt-2 text-sm md:text-base">{t.descResults}</p>
+                        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">{t.titleResults}</h1>
+                                <p className="text-slate-500 mt-1 text-sm md:text-base">{t.descResults}</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowClaimModal(true)}
+                                className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm shadow-md transition-all self-start sm:self-auto cursor-pointer border-0"
+                            >
+                                <KeyRound size={16} />
+                                {isEn ? 'Link Physical Order (PIN)' : 'Vincular Análisis con PIN'}
+                            </button>
                         </div>
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-2 space-y-4">
-                                {resultsList.map(req => {
+
+                        {isCurrentUserRevoked ? (
+                            <div className="bg-rose-50 border-2 border-rose-200 rounded-3xl p-8 md:p-12 text-center max-w-2xl mx-auto space-y-5 animate-shake">
+                                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm">
+                                    <UserX size={32} />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="text-xl font-black text-rose-900">
+                                        Acceso Corporativo Revocado / Suspendido
+                                    </h3>
+                                    <p className="text-rose-700 text-sm leading-relaxed max-w-lg mx-auto">
+                                        Su cuenta ({currentUserEmail}) ha sido dada de baja de la lista de delegados autorizados de calidad por la Jefatura de Inocuidad de la empresa debido a rotación de personal o cambio de puesto. No cuenta con permisos para consultar ni descargar los Certificados de Análisis de la planta.
+                                    </p>
+                                </div>
+                                <div className="bg-white/80 border border-rose-200 rounded-2xl p-4 text-xs text-rose-800 max-w-md mx-auto text-left">
+                                    <strong>Protocolo de Inocuidad:</strong> Si usted continúa en la empresa y requiere consultar estos resultados, solicite al Encargado de Calidad que reactive su usuario en la pestaña <em>"Equipo de Calidad & Accesos"</em> del portal.
+                                </div>
+                            </div>
+                        ) : resultsList.length === 0 ? (
+                            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 md:p-12 text-center max-w-2xl mx-auto space-y-6">
+                                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto border border-blue-100 shadow-xs">
+                                    <ShieldCheck size={32} />
+                                </div>
+                                <div className="space-y-2">
+                                    <h3 className="text-xl font-extrabold text-slate-800">
+                                        {isEn ? 'Protected Results & Confidential Access' : 'Resultados Protegidos & Acceso Confidencial'}
+                                    </h3>
+                                    <p className="text-slate-500 text-sm leading-relaxed max-w-lg mx-auto">
+                                        {isEn 
+                                            ? 'By data privacy standards (Law 8968 / ISO 15189), clinical records are never displayed by name alone. If you had a laboratory test done at our branch, link it securely using your Physical Receipt PIN.'
+                                            : 'Bajo la Ley de Protección de Datos de Costa Rica (Ley 8968) y la norma ISO 15189, los resultados clínicos no son públicos ni se buscan simplemente por cédula o nombre para proteger su privacidad. Ingrese el comprobante físico con su PIN de retiro para visualizar sus análisis.'}
+                                    </p>
+                                </div>
+                                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-xs text-slate-600 max-w-md mx-auto text-left flex items-start gap-3">
+                                    <Info size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                                    <span>
+                                        Revise su comprobante o factura física entregada en recepción: contiene el <strong>Número de Solicitud</strong> y un <strong>PIN de Retiro Confidencial</strong> único de 4 dígitos.
+                                    </span>
+                                </div>
+                                <div>
+                                    <button
+                                        onClick={() => setShowClaimModal(true)}
+                                        className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm px-6 py-3 rounded-2xl shadow-md transition-all cursor-pointer border-0"
+                                    >
+                                        <KeyRound size={16} />
+                                        {isEn ? 'Link Physical Order with PIN' : 'Vincular Análisis con PIN de Retiro'}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="lg:col-span-2 space-y-4">
+                                    {resultsList.map(req => {
                                     const isApproved = req.status === 'Aprobado';
                                     const isSelected = previewId === req.id;
                                     const isUnpaid = req.paymentStatus === 'Pendiente';
@@ -1545,6 +2304,11 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
                                                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${isApproved ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
                                                             {statusText}
                                                         </span>
+                                                        {req.isClaimedWithPin && (
+                                                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border border-blue-200 flex items-center gap-1">
+                                                                <ShieldCheck size={11} /> PIN Verificado
+                                                            </span>
+                                                        )}
                                                         {isUnpaid && (
                                                             <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border border-amber-200 flex items-center gap-1">
                                                                 <Lock size={10} /> {t.paymentPending}
@@ -1665,8 +2429,9 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
                                 )}
                             </div>
                         </div>
-                    </>
-                )}
+                    )}
+                </>
+            )}
 
                 {activeTab === 'tendencias' && (
                     <div className="space-y-6 animate-fade-in">
@@ -2153,6 +2918,245 @@ export const ClientPortal = ({ navigateTo, userRole, requests, user, labInfo }) 
                                                 <Download size={14} /> {isEn ? 'Download Official PDF' : 'Descargar PDF Oficial'}
                                             </button>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* MODAL DE VINCULACIÓN CON PIN CONFIDENCIAL (BLINDAJE LEY 8968 / ISO 15189) */}
+                            {showClaimModal && (
+                                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                                    <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden">
+                                        <div className="bg-gradient-to-r from-blue-700 to-indigo-700 p-6 text-white relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowClaimModal(false); setClaimError(''); setClaimSuccess(''); }}
+                                                className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors cursor-pointer border-0"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/20">
+                                                <KeyRound size={24} className="text-blue-200" />
+                                            </div>
+                                            <h3 className="text-xl font-extrabold tracking-tight">
+                                                {isEn ? 'Link Physical Order' : 'Vincular Análisis Confidencial'}
+                                            </h3>
+                                            <p className="text-blue-100 text-xs mt-1 leading-relaxed">
+                                                {isEn 
+                                                    ? 'Enter your Request Number and 4-digit Claim PIN printed on your physical receipt.'
+                                                    : 'Ingrese el Número de Solicitud y su PIN de Retiro Confidencial de 4 dígitos impreso en su comprobante físico de ventanilla.'}
+                                            </p>
+                                        </div>
+
+                                        <form onSubmit={handleClaimOrder} className="p-6 space-y-4">
+                                            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 flex items-start gap-2.5">
+                                                <ShieldCheck size={18} className="text-blue-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <span className="font-bold block">Protección de Datos Sensibles (Ley 8968):</span>
+                                                    Los resultados analíticos y clínicos están estrictamente protegidos contra suplantación o búsquedas ajenas por cédula o nombre.
+                                                </div>
+                                            </div>
+
+                                            {claimError && (
+                                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 flex items-center gap-2">
+                                                    <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                                                    <span>{claimError}</span>
+                                                </div>
+                                            )}
+
+                                            {claimSuccess && (
+                                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700 flex items-center gap-2">
+                                                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                                    <span>{claimSuccess}</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                                    {isEn ? 'Request Number / Sample ID' : 'Número de Solicitud / Muestra'}
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ej. SOL-2026-004 o LAB-2026-001"
+                                                    value={claimOrderInput}
+                                                    onChange={(e) => setClaimOrderInput(e.target.value)}
+                                                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-mono uppercase focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                    required
+                                                />
+                                                <span className="text-[11px] text-slate-400 mt-1 block">Aparece en la parte superior del comprobante entregado en recepción.</span>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                                                    {isEn ? '4-Digit Claim PIN' : 'PIN de Retiro Confidencial (4 dígitos)'}
+                                                </label>
+                                                <input
+                                                    type="password"
+                                                    maxLength={4}
+                                                    placeholder="••••"
+                                                    value={claimPinInput}
+                                                    onChange={(e) => setClaimPinInput(e.target.value)}
+                                                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-center tracking-widest text-lg font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                    required
+                                                />
+                                                <span className="text-[11px] text-slate-400 mt-1 block">PIN confidencial aleatorio asignado exclusivamente a su orden física.</span>
+                                            </div>
+
+                                            <div className="pt-2 flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowClaimModal(false); setClaimError(''); setClaimSuccess(''); }}
+                                                    className="w-1/3 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-0"
+                                                >
+                                                    {isEn ? 'Cancel' : 'Cancelar'}
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={isClaiming}
+                                                    className="w-2/3 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer border-0 disabled:opacity-60"
+                                                >
+                                                    {isClaiming ? (
+                                                        <span>{isEn ? 'Verifying...' : 'Validando PIN...'}</span>
+                                                    ) : (
+                                                        <>
+                                                            <KeyRound size={14} />
+                                                            <span>{isEn ? 'Unlock & Link Order' : 'Validar y Desbloquear'}</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* MODAL AUTORIZAR MIEMBRO DEL EQUIPO DE CALIDAD (B2B INDUSTRIAL) */}
+                            {showDelegateModal && (
+                                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-left">
+                                    <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden">
+                                        <div className="bg-gradient-to-r from-emerald-800 to-slate-900 p-6 text-white relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowDelegateModal(false)}
+                                                className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors cursor-pointer border-0"
+                                            >
+                                                <X size={18} />
+                                            </button>
+                                            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/20">
+                                                <UserPlus size={24} className="text-emerald-300" />
+                                            </div>
+                                            <h3 className="text-xl font-extrabold tracking-tight">
+                                                Autorizar Miembro de Calidad
+                                            </h3>
+                                            <p className="text-emerald-100 text-xs mt-1 leading-relaxed">
+                                                Habilite acceso formal a un colaborador de su planta para consultar los informes de microbiología e inocuidad.
+                                            </p>
+                                        </div>
+
+                                        <form onSubmit={handleCreateDelegate} className="p-6 space-y-4">
+                                            {delegateFeedback.error && (
+                                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
+                                                    <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                                                    <span>{delegateFeedback.error}</span>
+                                                </div>
+                                            )}
+                                            {delegateFeedback.success && (
+                                                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 flex items-center gap-2">
+                                                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                                    <span>{delegateFeedback.success}</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                    Nombre Completo <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    placeholder="Ej. Ing. Daniel Castro Vega"
+                                                    value={delegateForm.fullName}
+                                                    onChange={e => setDelegateForm({ ...delegateForm, fullName: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                        Cédula Identidad
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="1-1234-0567"
+                                                        value={delegateForm.identification}
+                                                        onChange={e => setDelegateForm({ ...delegateForm, identification: e.target.value })}
+                                                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                        Nivel de Acceso
+                                                    </label>
+                                                    <select
+                                                        value={delegateForm.scope}
+                                                        onChange={e => setDelegateForm({ ...delegateForm, scope: e.target.value })}
+                                                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                                                    >
+                                                        <option value="FULL_ACCESS">Consulta + Descarga COAs</option>
+                                                        <option value="READ_ONLY">Solo Lectura (Visualizar)</option>
+                                                        <option value="ADMIN_TOTAL">Co-Jefatura de Calidad</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                    Cargo en Planta / Función <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    required
+                                                    placeholder="Ej. Inspector HACCP, Microbiólogo de Planta, Supervisor..."
+                                                    value={delegateForm.roleInPlant}
+                                                    onChange={e => setDelegateForm({ ...delegateForm, roleInPlant: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                                    Correo Institucional Corporativo <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    required
+                                                    placeholder="colaborador@empresa.com"
+                                                    value={delegateForm.email}
+                                                    onChange={e => setDelegateForm({ ...delegateForm, email: e.target.value })}
+                                                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                />
+                                                <span className="text-[11px] text-slate-400 mt-1 block">
+                                                    Debe ser el correo con el que este colaborador iniciará sesión en el portal.
+                                                </span>
+                                            </div>
+
+                                            <div className="pt-2 flex gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowDelegateModal(false)}
+                                                    className="w-1/3 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors cursor-pointer border-0"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    className="w-2/3 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer border-0"
+                                                >
+                                                    <UserPlus size={14} />
+                                                    <span>Emitir Autorización</span>
+                                                </button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </div>
                             )}

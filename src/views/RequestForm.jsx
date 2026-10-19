@@ -1114,6 +1114,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                 const methodObj = (formMode === 'clinical' ? CLINICAL_METHOD_CODES : INDUSTRIAL_METHOD_CODES).find(m => m.code === sample.methodCode);
                 const platingMethodStr = methodObj ? methodObj.name : sample.methodCode;
                 const activeBranch = branchesList.find(b => b.id === selectedBranchId) || branchesList[0] || {};
+                const claimPin = Math.floor(1000 + Math.random() * 9000).toString();
                 return {
                     clientName: finalClientName, clientId: actualClientId,
                     clientType: formMode === 'clinical' ? 'Clínica' : 'Industria',
@@ -1121,6 +1122,7 @@ export const RequestForm = ({ db, user, navigateTo, clients, requests, labInfo }
                     sampleDescription: sample.description,
                     sampleLot: formMode === 'clinical' ? null : sample.lot,
                     sampleOther: sample.other,
+                    claimPin: claimPin, // PIN confidencial de retiro impreso en comprobante físico
                     requestDate: isOffline ? new Date(entryDate).toISOString() : serverTimestamp(),
                     analysisRequested: analysisName, analysisCode: sample.analysisCode,
                     methodCode: sample.methodCode, expectedPlatingMethod: platingMethodStr, deliveryMethod,

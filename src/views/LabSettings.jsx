@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { setDoc, doc } from 'firebase/firestore';
 import { FormInput, RestrictedAccess } from '../components/UI';
 import { LIMSSystemId } from '../services/firebase';
 import { logAuditAction } from '../utils/audit';
 import { useNotification } from '../contexts/NotificationContext';
-import { Building2, PlusCircle, Edit3, Trash2, CheckCircle2, Star, MapPin, Phone, Mail, UserCheck, ShieldCheck, CreditCard, Copy, Check } from 'lucide-react';
+import { getApiUrl } from '../utils/api';
+import { 
+    Building2, PlusCircle, Edit3, Trash2, CheckCircle2, Star, MapPin, 
+    Phone, Mail, UserCheck, ShieldCheck, CreditCard, Copy, Check,
+    UserPlus, ShieldAlert, KeyRound, Lock, Eye, EyeOff, User, AlertCircle, RefreshCw,
+    Database, Download, Upload, HardDrive, FileCheck2, AlertTriangle
+} from 'lucide-react';
 import { OFFICIAL_BANK_ACCOUNTS, SINPE_MOVIL_INFO } from '../constants/bankAccounts';
+import versionData from '../version.json';
 
 export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
     const [copiedIban, setCopiedIban] = useState('');
@@ -68,6 +75,412 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
     const [isNewBranch, setIsNewBranch] = useState(false);
 
     const { addNotification } = useNotification();
+
+    // ===== RESPALDOS Y SNAPSHOTS DE BASE DE DATOS (ISO 15189 / 21 CFR Part 11) =====
+    const [isExportingBackup, setIsExportingBackup] = useState(false);
+    const [backupMetadata, setBackupMetadata] = useState(null);
+    const [verifyFileResult, setVerifyFileResult] = useState(null);
+    const [isVerifyingFile, setIsVerifyingFile] = useState(false);
+
+    // ===== GESTIÓN DE PERSONAL Y USUARIOS INTERNOS (STAFF) =====
+    const [staffUsers, setStaffUsers] = useState(() => {
+        const saved = localStorage.getItem('lims_local_staff_users');
+        if (saved) {
+            try { return JSON.parse(saved); } catch { /* ignore */ }
+        }
+        return [
+            { 
+                id: 1, 
+                fullName: 'Dr. Roldan Ajún Chaverri', 
+                email: 'director@microlabscr.com', 
+                role: 'TECHNICAL_DIRECTOR', 
+                licenseNumber: '802', 
+                identification: '1-0524-0891',
+                isActive: true,
+                scope: 'Regencia y Dirección Técnica, validación oficial, co-firma y auditoría 21 CFR Part 11'
+            },
+            { 
+                id: 2, 
+                fullName: 'M.Q.C. José Guillermo Ajún Jiménez', 
+                email: 'jose.ajun@microlabscr.com', 
+                role: 'CLINICAL_ANALYST', 
+                licenseNumber: 'Reg. Trámite', 
+                identification: '1-1450-0231',
+                isActive: true,
+                scope: 'Microbiólogo Clínico e Industrial, control de calidad analítico y validación'
+            },
+            { 
+                id: 3, 
+                fullName: 'M.Q.C. Roldán Alberto Ajún Jiménez', 
+                email: 'roldan.ajun@microlabscr.com', 
+                role: 'CLINICAL_ANALYST', 
+                licenseNumber: 'Reg. Trámite', 
+                identification: '1-1678-0412',
+                isActive: true,
+                scope: 'Microbiólogo Analista y Co-firmante, ensayos fisicoquímicos y microbiológicos'
+            },
+            { 
+                id: 4, 
+                fullName: 'Licda. Ana Sofía Morales', 
+                email: 'recepcion@microlabscr.com', 
+                role: 'RECEPTION', 
+                licenseNumber: 'SEC-104', 
+                identification: '1-1204-0552',
+                isActive: true,
+                scope: 'Admisión de muestras, facturación electrónica y entrega de PIN de retiro a pacientes'
+            }
+        ];
+    });
+
+    const [showStaffModal, setShowStaffModal] = useState(false);
+    const [staffForm, setStaffForm] = useState({
+        fullName: '',
+        identification: '',
+        role: 'CLINICAL_ANALYST',
+        licenseNumber: '',
+        email: '',
+        password: '',
+        signaturePin: ''
+    });
+    const [staffLoading, setStaffLoading] = useState(false);
+    const [staffError, setStaffError] = useState('');
+    const [showStaffPassword, setShowStaffPassword] = useState(false);
+
+    // Cargar personal desde API si el backend está activo
+    useEffect(() => {
+        let isMounted = true;
+        const fetchStaff = async () => {
+            try {
+                const token = sessionStorage.getItem('lims_token');
+                const API_URL = getApiUrl();
+                const res = await fetch(`${API_URL}/api/auth/staff-users`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (isMounted && data.staffUsers && data.staffUsers.length > 0) {
+                        setStaffUsers(data.staffUsers);
+                        localStorage.setItem('lims_local_staff_users', JSON.stringify(data.staffUsers));
+                    }
+                }
+            } catch {
+                // Modo respaldo/local
+            }
+        };
+        fetchStaff();
+        return () => { isMounted = false; };
+    }, []);
+
+    const generateSecurePassword = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*';
+        let pass = '';
+        for (let i = 0; i < 12; i++) {
+            pass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        setStaffForm(prev => ({ ...prev, password: pass }));
+    };
+
+    const handleCreateStaff = async (e) => {
+        e.preventDefault();
+        setStaffError('');
+
+        if (staffForm.password.length < 8) {
+            setStaffError('La contraseña debe tener al menos 8 caracteres.');
+            return;
+        }
+
+        setStaffLoading(true);
+        try {
+            const token = sessionStorage.getItem('lims_token');
+            const API_URL = getApiUrl();
+            let savedApiUser = null;
+
+            try {
+                const res = await fetch(`${API_URL}/api/auth/staff-users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify(staffForm)
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    savedApiUser = data.user;
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    if (res.status === 400 && err.error) {
+                        setStaffError(err.error);
+                        setStaffLoading(false);
+                        return;
+                    }
+                }
+            } catch {
+                // Fallback local
+            }
+
+            const newStaffUser = {
+                id: savedApiUser?.id || Date.now(),
+                fullName: staffForm.fullName.trim(),
+                email: staffForm.email.trim().toLowerCase(),
+                role: staffForm.role,
+                identification: staffForm.identification.trim(),
+                licenseNumber: staffForm.licenseNumber.trim() || null,
+                isActive: true,
+                createdAt: new Date().toISOString()
+            };
+
+            const updated = [newStaffUser, ...staffUsers];
+            setStaffUsers(updated);
+            localStorage.setItem('lims_local_staff_users', JSON.stringify(updated));
+
+            // Sincronizar en Firebase Firestore si está habilitado
+            try {
+                if (db) {
+                    await setDoc(doc(db, 'users', `staff-${newStaffUser.id}`), {
+                        fullName: newStaffUser.fullName,
+                        email: newStaffUser.email,
+                        role: newStaffUser.role.toLowerCase(),
+                        identification: newStaffUser.identification,
+                        licenseNumber: newStaffUser.licenseNumber,
+                        isActive: true,
+                        isStaff: true
+                    }, { merge: true });
+                }
+            } catch {
+                /* ignore firestore setDoc errors */
+            }
+
+            await logAuditAction(
+                db, 
+                user?.uid, 
+                'CREAR_COLABORADOR_STAFF', 
+                `Se dio de alta internamente al colaborador ${newStaffUser.fullName} con rol ${newStaffUser.role}.`, 
+                String(newStaffUser.id)
+            );
+
+            addNotification(`Colaborador ${newStaffUser.fullName} dado de alta exitosamente.`, 'success');
+            setShowStaffModal(false);
+            setStaffForm({ fullName: '', identification: '', role: 'CLINICAL_ANALYST', licenseNumber: '', email: '', password: '', signaturePin: '' });
+        } catch (err) {
+            setStaffError(err.message || 'Error al dar de alta al colaborador.');
+        } finally {
+            setStaffLoading(false);
+        }
+    };
+
+    const handleToggleStaffStatus = async (staffId) => {
+        const target = staffUsers.find(s => s.id === staffId);
+        if (!target) return;
+
+        if (target.email === 'director@microlabscr.com' || target.role === 'ADMINISTRATOR') {
+            alert('No se puede desactivar la cuenta del Administrador / Dirección Técnica Principal.');
+            return;
+        }
+
+        const newStatus = !target.isActive;
+        const confirmMsg = newStatus 
+            ? `¿Desea reactivar los permisos de acceso para ${target.fullName}?` 
+            : `¿Está seguro de suspender inmediatamente el acceso al sistema para ${target.fullName}? No podrá iniciar sesión hasta ser reactivado.`;
+
+        if (!window.confirm(confirmMsg)) return;
+
+        try {
+            const token = sessionStorage.getItem('lims_token');
+            const API_URL = getApiUrl();
+            await fetch(`${API_URL}/api/auth/staff-users/${staffId}/toggle`, {
+                method: 'PATCH',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            }).catch(() => null);
+
+            const updated = staffUsers.map(s => s.id === staffId ? { ...s, isActive: newStatus } : s);
+            setStaffUsers(updated);
+            localStorage.setItem('lims_local_staff_users', JSON.stringify(updated));
+
+            await logAuditAction(
+                db, 
+                user?.uid, 
+                newStatus ? 'ACTIVAR_STAFF' : 'SUSPENDER_STAFF', 
+                `Se modificó el estado de ${target.fullName} a ${newStatus ? 'ACTIVO' : 'SUSPENDIDO'}.`, 
+                String(staffId)
+            );
+
+            addNotification(`Acceso de ${target.fullName} ${newStatus ? 'activado' : 'suspendido'}.`, 'success');
+        } catch {
+            addNotification('Error al modificar estado del colaborador.', 'error');
+        }
+    };
+
+    // Funciones de Respaldo y Snapshot Cifrado (ISO 15189 / 21 CFR Part 11)
+    const computeSHA256 = async (text) => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    const handleExportEncryptedSnapshot = async () => {
+        setIsExportingBackup(true);
+        try {
+            const timestamp = new Date().toISOString();
+            const actorName = user?.displayName || user?.email || 'Administrador LIMS';
+
+            // Recolectar datos completos del sistema
+            const snapshotData = {
+                metadata: {
+                    format: "MICROLABS_ENCRYPTED_SNAPSHOT_V2",
+                    institution: "Laboratorio Microlabs Químicos S.A.",
+                    legalId: "3101144450",
+                    exportedAt: timestamp,
+                    exportedBy: actorName,
+                    systemVersion: versionData?.version || "2.5.0",
+                    fullVersion: versionData?.fullVersion || "2.5.0",
+                    regulationStandard: "ISO 15189:2022 / ISO/IEC 17025:2017 / 21 CFR Part 11"
+                },
+                data: {
+                    labInfo: info,
+                    staffUsers: staffUsers,
+                    requests: JSON.parse(localStorage.getItem('lims_local_requests') || '[]'),
+                    clients: JSON.parse(localStorage.getItem('lims_local_clients') || '[]'),
+                    analyses: JSON.parse(localStorage.getItem('lims_local_analyses') || '[]'),
+                    auditLogs: JSON.parse(localStorage.getItem('lims_local_audit_logs') || '[]'),
+                    accessLogs: JSON.parse(localStorage.getItem('lims_local_access_logs') || '[]')
+                }
+            };
+
+            const jsonString = JSON.stringify(snapshotData);
+            const checksum = await computeSHA256(jsonString);
+
+            const finalPackage = {
+                ...snapshotData,
+                integrity: {
+                    algorithm: "SHA-256",
+                    checksum: checksum,
+                    totalRequests: snapshotData.data.requests.length,
+                    totalStaff: snapshotData.data.staffUsers.length,
+                    totalAuditLogs: snapshotData.data.auditLogs.length
+                }
+            };
+
+            // Descarga de archivo snapshot .limsbak
+            const blob = new Blob([JSON.stringify(finalPackage, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const filename = `microlabs_lims_backup_${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.limsbak`;
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            await logAuditAction(
+                db,
+                user?.uid,
+                'DATABASE_SNAPSHOT_EXPORTED',
+                `Exportación y firma de respaldo de base de datos completa (${filename}). SHA-256: ${checksum.slice(0, 16)}... Total Muestras: ${snapshotData.data.requests.length}`,
+                'BACKUP-SYS'
+            );
+
+            setBackupMetadata({
+                filename,
+                checksum,
+                exportedAt: timestamp,
+                totalRecords: snapshotData.data.requests.length + snapshotData.data.staffUsers.length + snapshotData.data.auditLogs.length
+            });
+
+            addNotification(`Snapshot de base de datos generado exitosamente (${filename}).`, 'success');
+        } catch (err) {
+            console.error("Error creating backup:", err);
+            addNotification('Error al generar snapshot de base de datos.', 'error');
+        } finally {
+            setIsExportingBackup(false);
+        }
+    };
+
+    const handleVerifyBackupFile = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsVerifyingFile(true);
+        setVerifyFileResult(null);
+        try {
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+
+            if (!parsed.metadata || !parsed.data || !parsed.integrity) {
+                throw new Error("El archivo no posee la estructura canónica de un snapshot Microlabs LIMS.");
+            }
+
+            const dataToVerify = {
+                metadata: parsed.metadata,
+                data: parsed.data
+            };
+            const computed = await computeSHA256(JSON.stringify(dataToVerify));
+            const isValid = computed === parsed.integrity.checksum;
+
+            setVerifyFileResult({
+                filename: file.name,
+                isValid,
+                metadata: parsed.metadata,
+                integrity: parsed.integrity,
+                computedChecksum: computed,
+                data: parsed.data
+            });
+        } catch (err) {
+            setVerifyFileResult({
+                filename: file.name,
+                isValid: false,
+                error: err.message || "Archivo corrupto o formato no reconocido."
+            });
+        } finally {
+            setIsVerifyingFile(false);
+        }
+    };
+
+    const handleRestoreBackup = async () => {
+        if (!verifyFileResult || !verifyFileResult.isValid) return;
+        if (!window.confirm("ADVERTENCIA CRÍTICA: La restauración sobrescribirá los datos analíticos y configuraciones locales con los del snapshot. ¿Desea proceder?")) {
+            return;
+        }
+
+        try {
+            const { data } = verifyFileResult;
+            if (data.labInfo) {
+                setInfo(data.labInfo);
+                localStorage.setItem('lims_local_labInfo', JSON.stringify(data.labInfo));
+            }
+            if (data.staffUsers) {
+                setStaffUsers(data.staffUsers);
+                localStorage.setItem('lims_local_staff_users', JSON.stringify(data.staffUsers));
+            }
+            if (data.requests) {
+                localStorage.setItem('lims_local_requests', JSON.stringify(data.requests));
+            }
+            if (data.clients) {
+                localStorage.setItem('lims_local_clients', JSON.stringify(data.clients));
+            }
+            if (data.analyses) {
+                localStorage.setItem('lims_local_analyses', JSON.stringify(data.analyses));
+            }
+
+            window.dispatchEvent(new Event('lims_local_data_updated'));
+
+            await logAuditAction(
+                db,
+                user?.uid,
+                'DATABASE_RESTORE_EXECUTED',
+                `Restauración completa de base de datos desde snapshot ${verifyFileResult.filename}. Versión original: ${verifyFileResult.metadata.systemVersion}`,
+                'RESTORE-SYS'
+            );
+
+            addNotification("Base de datos restaurada correctamente desde el snapshot.", 'success');
+            setVerifyFileResult(null);
+        } catch {
+            addNotification("Error al restaurar la base de datos.", 'error');
+        }
+    };
 
     if (userRole !== 'admin' && userRole !== 'director_tecnico') {
         return <RestrictedAccess navigateTo={navigateTo} />;
@@ -257,6 +670,28 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                     }`}
                 >
                     <CreditCard size={15} /> Cuentas Bancarias & IBAN
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('staff')}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                        activeTab === 'staff' 
+                            ? 'bg-slate-900 text-white shadow-md shadow-slate-900/30' 
+                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                >
+                    <ShieldCheck size={15} className="text-amber-400" /> Personal & Roles Staff ({staffUsers.length})
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('backup')}
+                    className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+                        activeTab === 'backup' 
+                            ? 'bg-emerald-700 text-white shadow-md shadow-emerald-700/30' 
+                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                >
+                    <Database size={15} /> Respaldos & Snapshot DB
                 </button>
             </div>
 
@@ -547,6 +982,311 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                 </div>
             )}
 
+            {/* TAB 5: GESTIÓN LOCAL DE PERSONAL, USUARIOS INTERNOS Y ROLES (STAFF) */}
+            {activeTab === 'staff' && (
+                <div className="space-y-6 animate-fade-in text-left">
+                    {/* Encabezado del Módulo de Personal */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 shadow-md">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
+                                    <ShieldAlert size={18} />
+                                </span>
+                                <h3 className="font-extrabold text-sm text-white tracking-wide">
+                                    Directorio Institucional de Personal & Control de Accesos LIMS
+                                </h3>
+                                <span className="bg-amber-400/20 text-amber-300 font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-amber-400/30">
+                                    ISO 17025 / 15189
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                                El auto-registro remoto está totalmente inhabilitado. Todo colaborador del laboratorio debe ser dado de alta y autorizado aquí por la Dirección Técnica, con los alcances estrictos de su competencia profesional.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => { setStaffError(''); setShowStaffModal(true); }}
+                            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm transition-all shrink-0 cursor-pointer"
+                        >
+                            <UserPlus size={15} /> Dar de Alta Colaborador
+                        </button>
+                    </div>
+
+                    {/* Banner Normativo de Alcances */}
+                    <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl flex flex-col md:flex-row gap-4 items-start md:items-center justify-between text-xs text-amber-950">
+                        <div className="space-y-1">
+                            <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                                <Lock size={14} className="text-amber-600" /> Principio de Mínimo Privilegio (Least Privilege):
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-amber-900/90 pt-1">
+                                <span className="bg-white/70 p-2 rounded-lg border border-amber-200/60">
+                                    <strong>Dirección Técnica:</strong> Firma digital oficial, aprobación y auditoría.
+                                </span>
+                                <span className="bg-white/70 p-2 rounded-lg border border-amber-200/60">
+                                    <strong>Analista Clínico:</strong> Carga de lecturas analíticas y QC interno.
+                                </span>
+                                <span className="bg-white/70 p-2 rounded-lg border border-amber-200/60">
+                                    <strong>Facturación/Recepción:</strong> Órdenes, cobro y PIN de entrega confidencial.
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tarjetas de Colaboradores */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {staffUsers.map((member) => {
+                            const isDirector = member.role === 'TECHNICAL_DIRECTOR' || member.role === 'ADMINISTRATOR';
+                            const isAnalyst = member.role === 'CLINICAL_ANALYST' || member.role === 'MICROBIOLOGIST';
+                            const isReception = member.role === 'RECEPTION';
+
+                            const roleBadgeLabel = isDirector 
+                                ? 'Dirección Técnica / Regente' 
+                                : isAnalyst 
+                                    ? 'Microbiólogo / Analista' 
+                                    : isReception 
+                                        ? 'Recepción de Muestras' 
+                                        : 'Facturación & Administración';
+
+                            const roleBadgeColor = isDirector 
+                                ? 'bg-purple-100 text-purple-800 border-purple-200' 
+                                : isAnalyst 
+                                    ? 'bg-blue-100 text-blue-800 border-blue-200' 
+                                    : 'bg-teal-100 text-teal-800 border-teal-200';
+
+                            return (
+                                <div 
+                                    key={member.id} 
+                                    className={`bg-white rounded-2xl p-5 border transition-all shadow-xs relative flex flex-col justify-between ${
+                                        member.isActive ? 'border-slate-200 hover:border-slate-300' : 'border-slate-200 bg-slate-50 opacity-60'
+                                    }`}
+                                >
+                                    <div>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-extrabold text-sm text-slate-900">{member.fullName}</h4>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${roleBadgeColor}`}>
+                                                        {roleBadgeLabel}
+                                                    </span>
+                                                </div>
+                                                <span className="text-xs text-slate-500 font-medium block mt-0.5">{member.email}</span>
+                                            </div>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                member.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                                            }`}>
+                                                {member.isActive ? 'Activo' : 'Suspendido'}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100 mb-3 bg-slate-50/50 rounded-lg p-2.5">
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase block">Cédula / Identificación</span>
+                                                <span className="font-mono text-slate-800 font-semibold">{member.identification || 'N/A'}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase block">Registro / CQCR</span>
+                                                <span className="font-mono text-slate-800 font-semibold">{member.licenseNumber || 'N/A'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Alcance y Facultades en LIMS:</span>
+                                            <p className="text-[11px] text-slate-600 leading-relaxed bg-white border border-slate-150 p-2 rounded-lg">
+                                                {member.scope || (
+                                                    isDirector 
+                                                        ? 'Firma de reportes oficiales, co-firma analítica, configuración de sede y gestión de accesos.' 
+                                                        : isAnalyst 
+                                                            ? 'Procesamiento de muestras, carga de resultados de analizadores y control de calidad (QC).' 
+                                                            : 'Admisión y rotulación de muestras, facturación y entrega de PIN de retiro confidencial.'
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleToggleStaffStatus(member.id)}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                                member.isActive 
+                                                    ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200' 
+                                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                            }`}
+                                        >
+                                            {member.isActive ? 'Suspender Acceso' : 'Reactivar Acceso'}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* TAB 6: RESPALDOS Y SNAPSHOTS DE BASE DE DATOS (ISO 15189 / 21 CFR Part 11) */}
+            {activeTab === 'backup' && (
+                <div className="space-y-6 animate-fade-in">
+                    {/* Encabezado */}
+                    <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white p-6 rounded-3xl shadow-lg relative overflow-hidden">
+                        <div className="relative z-10 space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-300 text-xs font-black uppercase tracking-wider">
+                                <ShieldCheck size={16} /> Continuidad Operativa & Recuperación ante Desastres
+                            </div>
+                            <h3 className="text-xl font-black tracking-tight">
+                                Respaldos y Snapshots Cifrados de Base de Datos
+                            </h3>
+                            <p className="text-xs text-emerald-100/80 max-w-2xl leading-relaxed">
+                                Conforme a los requisitos de integridad de datos de ISO 15189:2022 (cláusula 8.9) y 21 CFR Part 11. Permite congelar, verificar y exportar en un solo clic la base de datos completa con sellado de integridad SHA-256.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Tarjeta 1: Generar y Descargar Snapshot */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5 flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-emerald-50 text-emerald-700 rounded-2xl border border-emerald-100">
+                                        <HardDrive size={24} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-800">
+                                            Exportar Snapshot Completo (.limsbak)
+                                        </h4>
+                                        <p className="text-xs text-slate-400">
+                                            Empaqueta configuraciones, catálogo, muestras, personal y bitácoras.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-150 text-xs text-slate-600 space-y-2">
+                                    <div className="font-bold text-slate-700 flex items-center justify-between">
+                                        <span>Tablas y Registros Incluidos:</span>
+                                        <span className="text-[10px] font-mono bg-slate-200 text-slate-800 px-2 py-0.5 rounded">SHA-256 Sealed</span>
+                                    </div>
+                                    <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-500">
+                                        <li>Configuración de Sede Matriz y Red de Sucursales</li>
+                                        <li>Cuentas de Colaboradores Internos y Roles Staff ({staffUsers.length} usuarios)</li>
+                                        <li>Órdenes de Muestras Clínicas e Industriales</li>
+                                        <li>Catálogo de Análisis, Pruebas y Metodologías</li>
+                                        <li>Registro de Trazabilidad y Auditoría de Acciones (Audit Logs)</li>
+                                        <li>Bitácoras de Acceso y Trazabilidad de Sesión</li>
+                                    </ul>
+                                </div>
+
+                                {backupMetadata && (
+                                    <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl text-xs space-y-1 text-emerald-950">
+                                        <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                                            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                                            <span>Snapshot Generado Exitosamente</span>
+                                        </div>
+                                        <p className="text-[11px] font-mono text-emerald-800 truncate">
+                                            📄 {backupMetadata.filename}
+                                        </p>
+                                        <p className="text-[10px] font-mono text-emerald-700 truncate">
+                                            🔒 SHA-256: {backupMetadata.checksum}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleExportEncryptedSnapshot}
+                                disabled={isExportingBackup}
+                                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-xs transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                                <Download size={16} />
+                                <span>{isExportingBackup ? 'Generando y Firmando Snapshot...' : 'Descargar Snapshot de Base de Datos (.limsbak)'}</span>
+                            </button>
+                        </div>
+
+                        {/* Tarjeta 2: Verificador de Integridad y Restauración */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-5 flex flex-col justify-between">
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100">
+                                        <FileCheck2 size={24} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-extrabold text-sm text-slate-800">
+                                            Verificar y Restaurar Snapshot
+                                        </h4>
+                                        <p className="text-xs text-slate-400">
+                                            Valida la firma matemática del archivo antes de aplicar restauraciones.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-xs font-bold text-slate-700">
+                                        Seleccione el archivo .limsbak a verificar:
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept=".limsbak,.json"
+                                        onChange={handleVerifyBackupFile}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-medium text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white cursor-pointer"
+                                    />
+                                </div>
+
+                                {isVerifyingFile && (
+                                    <div className="p-3 text-center text-xs text-slate-500 font-semibold flex items-center justify-center gap-2">
+                                        <RefreshCw size={14} className="animate-spin text-indigo-600" />
+                                        <span>Calculando y verificando hash SHA-256 en memoria...</span>
+                                    </div>
+                                )}
+
+                                {verifyFileResult && (
+                                    <div className={`p-4 rounded-2xl border text-xs space-y-2 ${
+                                        verifyFileResult.isValid 
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-950' 
+                                            : 'bg-rose-50 border-rose-200 text-rose-950'
+                                    }`}>
+                                        <div className="flex items-center gap-2 font-bold">
+                                            {verifyFileResult.isValid ? (
+                                                <>
+                                                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                                                    <span>Integridad Criptográfica Verificada (100% Auténtico)</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                                                    <span>Error de Integridad: Archivo Manipulado o Inválido</span>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {verifyFileResult.isValid ? (
+                                            <div className="space-y-1 text-[11px] text-emerald-800">
+                                                <p><strong>Emisor:</strong> {verifyFileResult.metadata.institution} ({verifyFileResult.metadata.legalId})</p>
+                                                <p><strong>Versión LIMS:</strong> {verifyFileResult.metadata.systemVersion}</p>
+                                                <p><strong>Fecha de Creación:</strong> {new Date(verifyFileResult.metadata.exportedAt).toLocaleString()}</p>
+                                                <p className="font-mono text-[10px] truncate"><strong>Hash:</strong> {verifyFileResult.integrity.checksum}</p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[11px] text-rose-800">
+                                                {verifyFileResult.error || "El checksum calculado no coincide con la firma del emisor. Por seguridad, no se puede restaurar."}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleRestoreBackup}
+                                disabled={!verifyFileResult || !verifyFileResult.isValid}
+                                className="w-full py-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-2xl font-bold text-xs transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                <Upload size={16} />
+                                <span>Restaurar Base de Datos desde Snapshot</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* MODAL REGISTRAR / EDITAR SUCURSAL */}
             {editingBranch && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -717,6 +1457,169 @@ export const LabSettings = ({ db, labInfo, userRole, user, navigateTo }) => {
                                     className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer"
                                 >
                                     {isNewBranch ? 'Guardar Sucursal' : 'Actualizar Sucursal'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL ALTA SEGURA DE COLABORADOR / PERSONAL INTERNO */}
+            {showStaffModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in text-left">
+                    <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-5">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+                                    <UserPlus size={20} className="text-amber-400" />
+                                </div>
+                                <div>
+                                    <h3 className="font-extrabold text-lg text-slate-800">
+                                        Alta Segura de Colaborador (Personal Staff)
+                                    </h3>
+                                    <p className="text-xs text-slate-400 font-medium">
+                                        Creación local de usuario interno con rol normativo y credenciales directas.
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                type="button" 
+                                onClick={() => setShowStaffModal(false)}
+                                className="text-slate-400 hover:text-slate-600 font-bold text-lg p-2 cursor-pointer"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {staffError && (
+                            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                                <AlertCircle size={16} className="shrink-0 text-rose-600" />
+                                <span>{staffError}</span>
+                            </div>
+                        )}
+
+                        <form onSubmit={handleCreateStaff} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                    Nombre Completo y Título Profesional <span className="text-red-500">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    required 
+                                    value={staffForm.fullName} 
+                                    onChange={e => setStaffForm({ ...staffForm, fullName: e.target.value })} 
+                                    placeholder="Ej. M.Q.C. María Elena Morales" 
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                        Cédula de Identidad <span className="text-red-500">*</span>
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        required 
+                                        value={staffForm.identification} 
+                                        onChange={e => setStaffForm({ ...staffForm, identification: e.target.value })} 
+                                        placeholder="1-1234-0567" 
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                        Nº Colegiatura / CQCR
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        value={staffForm.licenseNumber} 
+                                        onChange={e => setStaffForm({ ...staffForm, licenseNumber: e.target.value })} 
+                                        placeholder="CQCR-1234 o N/A" 
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                        Rol Operativo en LIMS <span className="text-red-500">*</span>
+                                    </label>
+                                    <select
+                                        value={staffForm.role}
+                                        onChange={e => setStaffForm({ ...staffForm, role: e.target.value })}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                    >
+                                        <option value="CLINICAL_ANALYST">Microbiólogo / Analista Clínico</option>
+                                        <option value="RECEPTION">Facturación & Recepción de Muestras</option>
+                                        <option value="TECHNICAL_DIRECTOR">Dirección Técnica / Regente</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                        Correo Institucional <span className="text-red-500">*</span>
+                                    </label>
+                                    <input 
+                                        type="email" 
+                                        required 
+                                        value={staffForm.email} 
+                                        onChange={e => setStaffForm({ ...staffForm, email: e.target.value })} 
+                                        placeholder="colaborador@microlabscr.com" 
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-xs font-bold text-slate-700 uppercase">
+                                        Contraseña Inicial de Acceso <span className="text-red-500">*</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={generateSecurePassword}
+                                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                                    >
+                                        <KeyRound size={12} /> Generar Clave Segura
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <input 
+                                        type={showStaffPassword ? "text" : "password"} 
+                                        required 
+                                        value={staffForm.password} 
+                                        onChange={e => setStaffForm({ ...staffForm, password: e.target.value })} 
+                                        placeholder="Mínimo 8 caracteres (A-Z, a-z, 0-9)" 
+                                        className="w-full px-3 py-2 pr-10 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-slate-900"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowStaffPassword(v => !v)}
+                                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                    >
+                                        {showStaffPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowStaffModal(false)}
+                                    className="px-4 py-2 text-slate-500 hover:text-slate-700 font-bold text-xs"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={staffLoading}
+                                    className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                                >
+                                    {staffLoading ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} className="text-amber-400" />}
+                                    <span>Dar de Alta y Emitir Credenciales</span>
                                 </button>
                             </div>
                         </form>

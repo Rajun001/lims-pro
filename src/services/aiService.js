@@ -12,6 +12,15 @@ const MODELS_CASCADE = [
 ];
 
 /**
+ * Verificación de Privacidad Soberana Microlabs:
+ * Por defecto está en modo estricto local (100% On-Premise / Sin envío a la nube).
+ */
+export const isLocalPrivacyStrict = () => {
+    const userPref = localStorage.getItem('LIMS_STRICT_LOCAL_PRIVACY');
+    return userPref !== 'false'; // Por defecto: true (Soberano local)
+};
+
+/**
  * Retrieves the active Gemini API Key with safety fallback
  */
 export const getActiveApiKey = () => {
@@ -22,6 +31,11 @@ export const getActiveApiKey = () => {
  * Low-level multi-model resilient AI prompt runner
  */
 export const executeGeminiPrompt = async (promptText, inlineData = null, options = {}) => {
+    // Si la privacidad estricta está activa, se bloquea cualquier salida a servidores externos
+    if (isLocalPrivacyStrict() && !options.forceCloud) {
+        throw new Error("Modo de Privacidad Local Microlabs Activo: Ningún dato sale a la red externa.");
+    }
+
     const apiKey = options.apiKey || getActiveApiKey();
     const systemInstruction = options.systemInstruction || 'Eres el Asistente de Inteligencia Artificial del Software LIMS Microlabs, especializado en Microbiología Clínica, Análisis de Alimentos, Aguas, Calidad ISO 17025/15189 y Gestión de Laboratorios.';
     
@@ -310,13 +324,18 @@ export const generateReportAIEvaluation = async ({
     const complement = isEn
         ? 'M.Q.C. José Guillermo Ajún Jiménez (Analyst Microbiologist / Complementary Technical)'
         : 'M.Q.C. José Guillermo Ajún Jiménez (Microbiólogo Analista / Técnico Complementario)';
-    const results = request.analyzerResults || [];
+
+    const results = Array.isArray(request?.results) ? request.results : [];
 
     // Fallback inteligente en caso de no contar con clave API activa
     const buildSmartFallback = () => {
         if (isIndustrial) {
             const matrix = request.sampleType || request.sampleDescription || (isEn ? 'Food / Water Sample' : 'Muestra de Alimento / Agua');
             const lot = request.lotNumber || (isEn ? 'No Lot' : 'Sin Lote');
+            const thermalState = request.foodThermalState || request.thermalTreatment || (isEn ? 'Raw / Fresh Specimen' : 'Muestra Cruda / Fresca');
+            const postHandling = request.foodPostHandling || (isEn ? 'No post-cooking handling reported' : 'Sin manipulación posterior reportada');
+            const preservation = request.preservationCondition || request.receptionTemp ? `${request.preservationCondition || 'Refrigerada'} (${request.receptionTemp || '4°C'})` : 'Refrigerada (2°C - 5°C)';
+
             const hasPathogens = results.some(r => {
                 const val = String(r.value || '').toLowerCase();
                 return val.includes('presencia') || val.includes('positivo') || val.includes('presence') || val.includes('positive') || (parseFloat(r.value) > 100);
@@ -326,14 +345,22 @@ export const generateReportAIEvaluation = async ({
             if (isEn) {
                 return `🔬 TECHNICAL OPINION ON MICROBIOLOGICAL SAFETY (ISO 17025 / US-FDA BAM / RTCA)
 
-1. Regulatory Compliance Assessment:
-The specimen matrix "${matrix}" (Lot: ${lot}) was tested in accordance with official reference methodologies (RTCA Processed Foods / SMEWW 23rd Ed. / US-FDA BAM). According to applicable sanitary specifications, the analytical batch is declared: ${verdict}.
+1. Mandatory Pre-analytical Information & Sample Conditioning:
+• Matrix: "${matrix}" (Lot: ${lot})
+• Thermal State / Processing: ${thermalState}
+• Post-processing Handling: ${postHandling}
+• Storage & Cold Chain: ${preservation}
 
-2. Target Microbial Indicators & Pathogen Screen:
+2. Regulatory Compliance Assessment:
+The analytical findings were evaluated taking into account the prior state of the food matrix. Under applicable sanitary specifications (RTCA Processed Foods / US-FDA BAM), the analytical batch is declared: ${verdict}.
+
+3. Target Microbial Indicators & Pathogen Screen:
 ${results.map(r => `• ${r.testName || r.testCode}: ${r.value} ${r.unit || ''} (Specification: ${r.specificationLimit || r.referenceRange || 'Conforming'})`).join('\n') || '• Target microbial parameters within analytical method limits of detection.'}
 
-3. Preventive Sanitary Recommendations (GMP / SSOP):
-Maintain strict cold chain controls and hygiene sanitation procedures during storage, transport, and delivery to preserve food microbiological safety and stability.
+4. Preventative Food Safety Recommendations (GMP / SSOP):
+${thermalState.toLowerCase().includes('raw') || thermalState.toLowerCase().includes('cruda')
+    ? 'Raw meat/specimen requires complete internal core cooking (>74°C) prior to consumption to eliminate vegetative bacteria.'
+    : 'Maintain strict post-process hygiene to prevent cross-contamination during slicing, portioning, packaging, and cold distribution.'}
 
 Technical Validation: ${director} · ${complement}.
 Microlabs Químicos S.A. Laboratory — San José, Costa Rica.`;
@@ -341,14 +368,22 @@ Microlabs Químicos S.A. Laboratory — San José, Costa Rica.`;
 
             return `🔬 DICTAMEN TÉCNICO DE INOCUIDAD MICROBIOLÓGICA (ISO 17025 / RTCA)
 
-1. Evaluación de Conformidad Normativa:
-La matriz "${matrix}" (Lote: ${lot}) ha sido sometida a ensayo bajo directrices de normas de referencia oficiales (RTCA Alimentos Procesados / SMEWW 23rd Ed. / BAM FDA). De acuerdo con los criterios microbiológicos aplicables, los resultados analíticos obtenidos clasifican el lote como: ${verdict}.
+1. Información Previa Obligatoria y Acondicionamiento de la Muestra:
+• Matriz: "${matrix}" (Lote: ${lot})
+• Estado Térmico / Tratamiento Previo: ${thermalState}
+• Manipulación Posterior al Proceso: ${postHandling}
+• Condición de Conservación: ${preservation}
 
-2. Análisis de Microorganismos Indicadores y Patógenos:
+2. Evaluación de Conformidad Normativa:
+La evaluación microbiológica se emite considerando el estado previo y tratamiento de la muestra. De acuerdo con los criterios normativos aplicables (RTCA Alimentos Procesados / BAM FDA / SMEWW), los resultados obtenidos clasifican el lote como: ${verdict}.
+
+3. Análisis de Microorganismos Indicadores y Patógenos:
 ${results.map(r => `• ${r.testName || r.testCode}: ${r.value} ${r.unit || ''} (Criterio: ${r.specificationLimit || r.referenceRange || 'Conforme'})`).join('\n') || '• Parámetros microbiológicos analizados dentro de los límites de detección del método.'}
 
-3. Recomendaciones Preventivas de Inocuidad (BPM / POES):
-Se recomienda mantener las condiciones de cadena de frío y buenas prácticas de manipulación e higiene en las etapas de almacenamiento y distribución para garantizar la estabilidad e inocuidad del producto.
+4. Recomendaciones Preventivas de Inocuidad (BPM / POES):
+${thermalState.toLowerCase().includes('cruda') || thermalState.toLowerCase().includes('fresca')
+    ? 'Al tratarse de una muestra cruda, se recuerda que requiere cocción completa en el punto central (>74°C) previo a su consumo para inactivar la flora bacteriana natural.'
+    : 'Al tratarse de alimento cocido / procesado, se deben extremar las buenas prácticas de manipulación (BPM) para evitar recontaminación cruzada durante el porcionado, rebanado o empaque.'}
 
 Supervisión Técnica: ${director} · ${complement}.
 Laboratorio Microlabs Químicos S.A. — San José, Costa Rica.`;
@@ -356,27 +391,35 @@ Laboratorio Microlabs Químicos S.A. — San José, Costa Rica.`;
 
         // Clínico
         const patientName = request.patientName || request.clientName || (isEn ? 'Patient' : 'Paciente');
+        const fastingInfo = request.fastingHours || (isEn ? 'Fasting standard (8-12h)' : 'Ayuno habitual (8-12h)');
+        const medications = request.currentMedications || (isEn ? 'None reported' : 'Ninguno reportado');
+        const specialConditions = request.specialConditions || (isEn ? 'None reported' : 'Ninguna reportada');
         const abnormalResults = results.filter(r => r.flag === 'HIGH' || r.flag === 'LOW' || r.flag === 'CRITICAL');
         
         if (isEn) {
             return `📋 COMPREHENSIVE CLINICAL EVALUATION (ISO 15189)
 
-1. Pathophysiological Correlation & Analytical State:
-Analytical parameters for the requested ${request.analysisRequested || 'Clinical Chemistry / Hematology'} order were quantitatively evaluated. ${
+1. Preanalytical Baseline & Patient Conditions:
+• Fasting State: ${fastingInfo}
+• Reported Medications / Pharmacological Interferences: ${medications}
+• Clinical Baseline / Special Conditions: ${specialConditions}
+
+2. Pathophysiological Correlation & Analytical State:
+Analytical parameters for the requested ${request.analysisRequested || 'Clinical Chemistry / Hematology'} order were quantitatively evaluated considering reported medications and fasting status. ${
     abnormalResults.length > 0
         ? `Observed deviations detected in: ${abnormalResults.map(a => `${a.testName || a.testCode} (${a.value} ${a.unit || ''}, ${a.flag === 'HIGH' ? 'Elevated' : 'Low'})`).join(', ')}.`
         : 'All quantified biological parameters fall within standard physiological reference intervals for patient age and sex.'
 }
 
-2. Educational Summary for Patient ("What do my results mean?"):
+3. Educational Summary for Patient ("What do my results mean?"):
 Dear ${patientName}: Your lab tests reflect your current internal metabolic status. ${
     abnormalResults.length > 0
         ? 'Certain values are slightly outside customary target intervals. We suggest consulting your attending physician to evaluate dietary, hydration, or treatment adjustments.'
         : 'Your results reflect a balanced biochemical profile. We encourage continued healthy lifestyle habits, balanced nutrition, and regular exercise.'
 }
 
-3. Professional Recommendation:
-These laboratory findings must be correlated with clinical history and physical examination by your physician.
+4. Professional Recommendation & Interferences:
+These laboratory findings must be correlated with clinical history, physical examination, and declared medications by your attending physician.
 
 Reviewed and Validated: ${director} · ${complement}.
 Microlabs Químicos S.A. Laboratory — San José, Costa Rica.`;
@@ -384,22 +427,27 @@ Microlabs Químicos S.A. Laboratory — San José, Costa Rica.`;
 
         return `📋 EVALUACIÓN CLÍNICA INTEGRAL (ISO 15189)
 
-1. Correlación Fisiológica y Estado Analítico:
-Se analizaron los parámetros correspondientes a la solicitud de ${request.analysisRequested || 'Química Clínica / Hematología'}. ${
+1. Información Preanalítica y Condiciones del Paciente:
+• Estado de Ayuno: ${fastingInfo}
+• Medicamentos Actuales / Posibles Interferencias: ${medications}
+• Condiciones Especiales de Salud: ${specialConditions}
+
+2. Correlación Fisiológica y Estado Analítico:
+Se analizaron los parámetros correspondientes a la solicitud de ${request.analysisRequested || 'Química Clínica / Hematología'}, ponderando el estado de ayuno y la farmacoterapia reportada. ${
     abnormalResults.length > 0
         ? `Se identifican desviaciones analíticas en: ${abnormalResults.map(a => `${a.testName || a.testCode} (${a.value} ${a.unit || ''}, ${a.flag === 'HIGH' ? 'Elevado' : 'Bajo'})`).join(', ')}.`
         : 'Todos los parámetros cuantificados se encuentran dentro de los intervalos de referencia biológica estándar para la edad y sexo del paciente.'
 }
 
-2. Resumen Didáctico para el Paciente ("¿Qué significan mis resultados?"):
+3. Resumen Didáctico para el Paciente ("¿Qué significan mis resultados?"):
 Estimado(a) ${patientName}: Sus exámenes reflejan el estado metabólico actual de su organismo. ${
     abnormalResults.length > 0
         ? 'Algunos valores se encuentran fuera del rango habitual, lo cual sugiere la conveniencia de consultar con su médico tratante para valorar ajustes en su alimentación, hidratación o tratamiento.'
         : 'Los valores obtenidos muestran un perfil bioquímico equilibrado. Le recomendamos mantener un estilo de vida saludable, dieta balanceada y actividad física regular.'
 }
 
-3. Recomendación Profesional:
-Estos resultados deben correlacionarse con la historia clínica y el examen físico del paciente.
+4. Recomendación Profesional e Interferencias:
+Estos resultados deben correlacionarse con la historia clínica, el examen físico y los medicamentos vigentes reportados.
 
 Revisado y Validado: ${director} · ${complement}.
 Laboratorio Microlabs Químicos S.A. — San José, Costa Rica.`;
@@ -412,42 +460,55 @@ Laboratorio Microlabs Químicos S.A. — San José, Costa Rica.`;
         }
 
         const systemInstruction = isEn
-            ? `You are an elite Clinical Pathologist and Technical Director at Microlabs Químicos S.A. in Costa Rica. You craft internationally accredited laboratory evaluations in pristine English adhering to ISO 15189 and ISO 17025 standards (similar to Mayo Clinic Laboratories and Quest Diagnostics). Your tone is scientific, empathetic, authoritative, and didactic.`
-            : `Eres un Médico Especialista y Microbiólogo Químico Clínico de alta experiencia, Director del prestigioso Laboratorio Microlabs Químicos S.A. en Costa Rica. Escribes reportes de laboratorio de nivel internacional (similares a Mayo Clinic, Quest Diagnostics o Laboratorios de Referencia ISO 17025 / ISO 15189). Tu redacción debe ser elegante, precisa, científica, y a la vez educativa y clara para el cliente o paciente.`;
+            ? `You are an elite Clinical Pathologist and Technical Director at Microlabs Químicos S.A. in Costa Rica. You craft internationally accredited laboratory evaluations in pristine English adhering to ISO 15189 and ISO 17025 standards. You always analyze prior conditions: in food/industrial, you evaluate thermal processing (raw vs cooked), post-handling, and RTE classification; in clinical, you assess fasting hours, medications, and pharmacological interferences before emitting diagnostic conclusions.`
+            : `Eres un Médico Especialista y Microbiólogo Químico Clínico de alta experiencia, Director del prestigioso Laboratorio Microlabs Químicos S.A. en Costa Rica. Escribes reportes de laboratorio de nivel internacional (ISO 17025 e ISO 15189). Siempre solicitas y ponderas la información previa: en alimentos/industria, evalúas estado térmico (cruda vs cocida), manipulación post-proceso y categoría RTE; en clínica, evalúas horas de ayuno, medicamentos actuales e interferencias farmacológicas antes de emitir cualquier dictamen o conclusión.`;
 
         const prompt = isIndustrial ? `
 Generate an outstanding Technical Opinion & Microbiological Assessment for this Certificate of Analysis (COA):
 - Client / Enterprise: ${request.clientName || 'Industrial Client'}
 - Matrix / Specimen: ${request.sampleType || request.sampleDescription || 'Food/Water'}
+- Prior Thermal State / Processing: ${request.foodThermalState || request.thermalTreatment || 'Raw / Fresh'}
+- Post-process Handling: ${request.foodPostHandling || 'None reported'}
+- Storage / Cold Chain: ${request.preservationCondition || 'Refrigerated 4°C'}
 - Lot: ${request.lotNumber || 'N/A'}
 - Protocol: ${request.samplingProtocol || 'RTCA / ISO / SMEWW'}
-- Evaluation Focus: ${evaluationType}
 - Target Language: ${isEn ? 'English' : 'Spanish'}
 - Analytical Results:
 ${results.map(r => `- ${r.testName || r.testCode}: ${r.value} ${r.unit || ''} (Normative Limit: ${r.specificationLimit || r.referenceRange || 'N/A'})`).join('\n')}
 
 Structure:
-1. Regulatory Compliance Assessment (RTCA / FDA BAM / SMEWW).
-2. Official Lot Verdict: CONFORMING or NON-CONFORMING with clear justification.
-3. Microbiological Interpretation of Hygiene Indicators and Pathogens.
+1. Sample Prior Conditioning Assessment (raw vs cooked, post-handling implications).
+2. Regulatory Compliance Assessment (RTCA / FDA BAM / SMEWW).
+3. Official Lot Verdict: CONFORMING or NON-CONFORMING with clear justification based on prior conditions.
 4. Preventative Food Safety Recommendations (GMP / SSOP).
 Signatures: ${director} and ${complement}.
 ` : `
 Generate an outstanding Comprehensive Clinical & Diagnostic Evaluation for this Laboratory Report:
 - Patient: ${request.patientName || request.clientName} (Age: ${request.patientAge || 'N/A'}, Sex: ${request.patientGender || 'N/A'})
 - Requested Order: ${request.analysisRequested || 'Laboratory Profile'}
+- Fasting State: ${request.fastingHours || '8-12 hours'}
+- Reported Current Medications / Supplements: ${request.currentMedications || 'None reported'}
+- Special Health Conditions: ${request.specialConditions || 'None reported'}
 - Attending Physician: ${request.physicianName || 'External Consultation'}
-- Evaluation Focus: ${evaluationType}
 - Target Language: ${isEn ? 'English' : 'Spanish'}
 - Quantified Results:
 ${results.map(r => `- ${r.testName || r.testCode}: ${r.value} ${r.unit || ''} (Ref: ${r.appliedReferenceRange || r.referenceRange || 'N/A'}, Status: ${r.flag || 'Normal'})`).join('\n')}
 
 Structure:
-1. Pathophysiological Correlation of Parameters (metabolic, renal, hepatic, or lipid as applicable).
-2. Educational Summary for Patient ("What do my results mean?"): clear, warm, empathetic explanation.
-3. Lifestyle & Medical Follow-up Recommendations.
+1. Preanalytical Baseline & Drug Interference Check (fasting, medications, pregnancy, etc.).
+2. Pathophysiological Correlation of Parameters.
+3. Educational Summary for Patient ("What do my results mean?").
+4. Lifestyle & Medical Follow-up Recommendations.
 Signatures: ${director} and ${complement}.
 `;
+
+        // PRIVACIDAD SOBERANA MICROLABS:
+        // Si el laboratorio opera en Modo de Privacidad Estricta (por defecto),
+        // se genera el dictamen 100% de forma local en memoria con el motor experto de Microlabs,
+        // garantizando que NINGÚN dato de paciente, empresa o análisis viaje por internet.
+        if (isLocalPrivacyStrict() || modelChoice === 'auto' || modelChoice === 'local_expert') {
+            return buildSmartFallback();
+        }
 
         const preferred = modelChoice === 'auto' ? 'gemini-2.5-flash' : modelChoice;
         const res = await executeGeminiPrompt(prompt, null, { systemInstruction, preferredModel: preferred });

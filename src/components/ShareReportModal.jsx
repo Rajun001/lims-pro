@@ -7,9 +7,8 @@ export const ShareReportModal = ({ isOpen, onClose, request, labInfo, reportLang
     const [email, setEmail] = useState(request?.clientEmail || request?.email || '');
     const [copied, setCopied] = useState(false);
 
-    // URL oficial de verificación pública accesible desde cualquier dispositivo móvil o web
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
-    const origin = (typeof window !== 'undefined' && !isLocal) ? window.location.origin : 'https://lims-microlabs.web.app';
+    // URL oficial de verificación pública confinada al servidor local
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const reqId = request?.id || '';
     const verifyUrl = `${origin}/verify/${reqId}`;
 

@@ -1686,7 +1686,6 @@ export const PublicWebsiteView = ({ navigateTo, labInfo }) => {
                     setStaffPasscodeSuccess(false);
                     navigateTo('login', null, { 
                         loginType: 'staff', 
-                        staffAuthCode: 'MICROLABS-2026', 
                         authorized: true 
                     });
                 }, 700);

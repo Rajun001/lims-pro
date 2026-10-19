@@ -5,7 +5,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { 
     ArrowLeft, Printer, Share2, Smartphone, Mail, Microscope, 
     ShieldCheck, Sliders, CheckSquare, Layers, Eye, FileText, 
-    TrendingUp, Sparkles, Camera, Check, Settings2, Edit3, MessageCircle, RefreshCw
+    TrendingUp, Sparkles, Camera, Check, Settings2, Edit3, MessageCircle, RefreshCw,
+    History, AlertTriangle
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Logo, BarcodeDisplay } from '../components/UI';
@@ -18,6 +19,7 @@ import { generateReportAIEvaluation } from '../services/aiService';
 import { AnalyticalSafetyGuard } from '../components/AnalyticalSafetyGuard';
 import { QualityLibraryModal } from '../components/QualityLibraryModal';
 import { MICROBIOLOGY_STANDARDS, findStandardByCommodity } from '../constants/microbiologyStandards';
+import { logAuditAction } from '../utils/audit';
 import versionData from '../version.json';
 
 const RangeIndicator = ({ value, min, max, reportLang }) => {
@@ -403,9 +405,8 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         return isIndustrial ? defaultMicrobiologyEvidence : [];
     });
 
-    // URL dinámica oficial de verificación en tiempo real accesible desde móviles
-    const isLocalHost = typeof window !== 'undefined' && (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1'));
-    const origin = (typeof window !== 'undefined' && !isLocalHost) ? window.location.origin : 'https://lims-microlabs.web.app';
+    // URL dinámica oficial de verificación en tiempo real (100% confinada al origen local de Microlabs)
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const reqId = request?.id || '';
     const verificationUrl = `${origin}/verify/${reqId}`;
 
@@ -579,8 +580,101 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         fetchHistory();
     }, [db, isIndustrial, request, reportLang]);
 
+    // Protocolo Oficial de Enmiendas y Rectificaciones (ISO/IEC 17025:2017 Cláusula 7.8.8 & ISO 15189)
+    const [isAmendmentModalOpen, setIsAmendmentModalOpen] = useState(false);
+    const [amendmentReason, setAmendmentReason] = useState('');
+    const [amendmentAuthorizer, setAmendmentAuthorizer] = useState('');
+    const [amendmentNotice, setAmendmentNotice] = useState('');
+    const [currentReportVersion, setCurrentReportVersion] = useState(() => request?.reportVersion || 1);
+    const [currentAmendmentNote, setCurrentAmendmentNote] = useState(() => request?.amendmentNote || '');
+    const [isSavingAmendment, setIsSavingAmendment] = useState(false);
+
     if (!request) return null;
-    const handlePrint = () => window.print();
+
+    const isApproved = request?.status === 'Completado' || request?.status === 'Aprobado';
+    const isPaymentPending = request?.paymentStatus?.toLowerCase() === 'pendiente';
+
+    // Marca de agua dinámica de seguridad analítica (ISO 15189 / ISO 17025)
+    const watermarkText = !isApproved 
+        ? (reportLang === 'es' ? 'INFORME PRELIMINAR — SIN VALIDEZ OFICIAL' : 'PRELIMINARY REPORT — NO LEGAL VALIDITY')
+        : (isPaymentPending 
+            ? (reportLang === 'es' ? 'COPIA NO VÁLIDA — PENDIENTE DE PAGO' : 'INVALID COPY — PAYMENT PENDING')
+            : null);
+
+    const handleIssueAmendment = async (e) => {
+        e.preventDefault();
+        if (!amendmentReason.trim()) {
+            alert(reportLang === 'es' ? 'Debe especificar el motivo técnico o analítico de la enmienda (ISO 17025).' : 'A valid amendment reason is mandatory under ISO 17025.');
+            return;
+        }
+        setIsSavingAmendment(true);
+        try {
+            const newVersion = (currentReportVersion || 1) + 1;
+            const amendedNote = amendmentReason.trim();
+            const currentUser = JSON.parse(sessionStorage.getItem('lims_user') || '{}');
+            const authorizer = amendmentAuthorizer.trim() || currentUser.displayName || 'Regente Microbiólogo';
+            const timestamp = new Date().toISOString();
+
+            setCurrentReportVersion(newVersion);
+            setCurrentAmendmentNote(amendedNote);
+            request.reportVersion = newVersion;
+            request.amendmentNote = amendedNote;
+            request.amendedAt = timestamp;
+            request.amendedBy = authorizer;
+
+            await logAuditAction(
+                db,
+                authorizer,
+                'REPORT_AMENDMENT_ISSUED',
+                `Emisión de Enmienda/Rectificación V${newVersion} para informe ${request.id}. Motivo: "${amendedNote}". Autorizado por: ${authorizer}`,
+                request.id
+            );
+
+            try {
+                const localRequests = localStorage.getItem('lims_local_requests');
+                if (localRequests) {
+                    const parsed = JSON.parse(localRequests);
+                    const updated = parsed.map(r => r.id === request.id ? { 
+                        ...r, 
+                        reportVersion: newVersion, 
+                        amendmentNote: amendedNote,
+                        amendedAt: timestamp,
+                        amendedBy: authorizer
+                    } : r);
+                    localStorage.setItem('lims_local_requests', JSON.stringify(updated));
+                    window.dispatchEvent(new Event('lims_local_data_updated'));
+                }
+            } catch {
+                /* ignore local storage write error */
+            }
+
+            setAmendmentNotice(reportLang === 'es' ? `Enmienda Versión ${newVersion} emitida y asentada con trazabilidad legal ISO 17025.` : `Amendment Version ${newVersion} successfully issued under ISO 17025.`);
+            setIsAmendmentModalOpen(false);
+            setAmendmentReason('');
+        } catch (err) {
+            console.error("Error issuing amendment:", err);
+            alert(reportLang === 'es' ? 'Error al emitir la enmienda' : 'Error issuing amendment');
+        } finally {
+            setIsSavingAmendment(false);
+        }
+    };
+
+    const handlePrint = async () => {
+        try {
+            const currentUser = JSON.parse(sessionStorage.getItem('lims_user') || '{}');
+            const actorName = currentUser.displayName || currentUser.email || 'Analista';
+            await logAuditAction(
+                db,
+                actorName,
+                'REPORT_PRINT_OR_PDF_EXPORT',
+                `Impresión o exportación a PDF del informe oficial ${request?.id} (Versión ${request?.reportVersion || currentReportVersion || 1}). Estado: ${request?.status || 'Completado'}. Idioma: ${reportLang.toUpperCase()}`,
+                request?.id
+            );
+        } catch (e) {
+            console.warn("Audit error:", e);
+        }
+        window.print();
+    };
 
     const isCulture = request.analysisRequested?.toLowerCase().includes('cultivo') || 
                       request.analysisRequested?.toLowerCase().includes('antibiograma') || 
@@ -590,7 +684,8 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const microData = getMicrobiologyData(request);
     const hasFoodUFC = !!request.foodUFCResult;
 
-    const qrUrl = localQrUrl || request?.qrUrl || `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verificationUrl)}`;
+    // Código QR 100% generado en memoria local (0 llamadas a servidores externos)
+    const qrUrl = localQrUrl || request?.qrUrl || '';
 
     const translateAnalysisName = (name) => {
         if (reportLang === 'es') return name;
@@ -727,6 +822,10 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
         if (!abnormal.length && !panicItems.length) return null;
 
         const lines = [];
+
+        if (request.fastingHours || request.currentMedications || request.specialConditions) {
+            lines.push(`📋 Preanalítica y Condiciones del Paciente (ISO 15189): Ayuno informado: ${request.fastingHours || '8-12h'} | Fármacos/Interferencias: ${request.currentMedications || 'Ninguna declarada'}${request.specialConditions ? ` | Condición clínica: ${request.specialConditions}` : ''}.`);
+        }
 
         if (panicItems.length > 0) {
             const names = panicItems.map(p => `${p.name} (${p.val} ${p.unit}, ${p.dir} en ~${p.pct}%)`).join('; ');
@@ -1245,11 +1344,33 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                         >
                             <Share2 size={15} /> <span>{reportLang === 'es' ? 'Compartir' : 'Share'}</span>
                         </button>
+                        {/* Botón de Enmienda / Rectificación Oficial (ISO 17025 / 15189) */}
+                        {isApproved && (
+                            <button
+                                type="button"
+                                onClick={() => setIsAmendmentModalOpen(true)}
+                                className="flex items-center bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition-all font-bold shadow-xs text-xs gap-1.5 cursor-pointer"
+                                title="Emitir rectificación formal de resultados según cláusula 7.8.8 de ISO 17025"
+                            >
+                                <History size={14} /> <span>{reportLang === 'es' ? 'Enmienda (ISO 17025)' : 'Amendment'}</span>
+                            </button>
+                        )}
                         <button onClick={handlePrint} className="flex items-center bg-blue-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-blue-700 transition-all font-bold shadow-xs text-xs cursor-pointer">
                             <Printer size={15} className="mr-1.5" /> <span>{reportLang === 'es' ? 'Imprimir / PDF' : 'Print / PDF'}</span>
                         </button>
                     </div>
                 </div>
+
+                {/* Notificación de Enmienda ISO 17025 */}
+                {amendmentNotice && (
+                    <div className="mb-2 p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs font-semibold flex items-center justify-between shadow-xs animate-fade-in print:hidden">
+                        <div className="flex items-center gap-2">
+                            <History size={15} className="text-amber-600 shrink-0" />
+                            <span>{amendmentNotice}</span>
+                        </div>
+                        <button onClick={() => setAmendmentNotice('')} className="text-amber-500 hover:text-amber-800 text-xs font-bold cursor-pointer">✕</button>
+                    </div>
+                )}
 
                 {/* Notificación de Éxito de IA */}
                 {aiNotice && (
@@ -1461,15 +1582,46 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
             {/* Escudo de Seguridad e Integridad Analítica Microlabs */}
             <AnalyticalSafetyGuard request={request} reportLang={reportLang} />
 
-            <div id="report-content" className="bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0">
-                {/* Banner de Enmienda ISO 15189 si el reporte ha sido corregido */}
-                {request.reportVersion && request.reportVersion > 1 && (
+            {/* Alerta en Pantalla de Informe Preliminar No Aprobado */}
+            {!isApproved && (
+                <div className="mb-4 p-3.5 bg-amber-500/10 border-2 border-amber-400 rounded-2xl text-amber-900 text-xs font-bold flex items-center justify-between shadow-xs print:hidden animate-fade-in">
+                    <div className="flex items-center gap-2.5">
+                        <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                        <div>
+                            <span>{reportLang === 'es' ? 'DOCUMENTO PRELIMINAR: Esta muestra aún se encuentra en proceso analítico o pendiente de co-firma oficial por regencia técnica.' : 'PRELIMINARY DOCUMENT: Analysis in progress or pending official co-signature by technical regency.'}</span>
+                            <span className="block text-[10px] text-amber-700 font-normal mt-0.5">
+                                {reportLang === 'es' ? 'Los valores mostrados son provisionales y no constituyen certificación legal hasta ser aprobados formalmente.' : 'Values are provisional and do not constitute legal certification until approved.'}
+                            </span>
+                        </div>
+                    </div>
+                    <span className="text-[10px] bg-amber-200 text-amber-900 px-2.5 py-1 rounded-lg font-black uppercase shrink-0">
+                        {request.status || 'En Proceso'}
+                    </span>
+                </div>
+            )}
+
+            <div id="report-content" className="relative bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0 overflow-hidden">
+                {/* Marca de agua translúcida dinámica de seguridad analítica (ISO 15189 / ISO 17025) */}
+                {watermarkText && (
+                    <div 
+                        aria-hidden="true"
+                        className="pointer-events-none select-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden"
+                    >
+                        <div className="transform -rotate-35 text-rose-500/15 print:text-rose-500/20 text-center font-black tracking-widest leading-relaxed text-2xl sm:text-4xl border-6 border-dashed border-rose-500/25 p-8 rounded-3xl uppercase max-w-xl">
+                            {watermarkText}
+                        </div>
+                    </div>
+                )}
+
+                {/* Banner de Enmienda ISO 15189 / ISO 17025 si el reporte ha sido corregido */}
+                {(request.reportVersion || currentReportVersion) > 1 && (
                     <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-3 mb-6 text-center">
                         <div className="text-xs font-black text-amber-900 uppercase tracking-wide flex items-center justify-center gap-1.5">
-                            <span>⚠️ INFORME CORREGIDO / ENMIENDA OFICIAL (Versión {request.reportVersion})</span>
+                            <History size={15} className="text-amber-700" />
+                            <span>⚠️ INFORME CORREGIDO / ENMIENDA OFICIAL (Versión {request.reportVersion || currentReportVersion})</span>
                         </div>
                         <p className="text-[11px] text-amber-800 mt-0.5">
-                            <strong>Motivo de la Enmienda:</strong> {request.amendmentNote || 'Actualización y verificación analítica según protocolo ISO 15189'}. Este documento oficial sustituye y anula la versión anterior.
+                            <strong>Motivo de la Enmienda (ISO 17025 cl. 7.8.8):</strong> {request.amendmentNote || currentAmendmentNote || 'Actualización y verificación analítica según protocolo normativo'}. Este documento oficial sustituye y anula la versión anterior.
                         </p>
                     </div>
                 )}
@@ -1565,6 +1717,26 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     {request.samplingLocation || 'Instalaciones del Solicitante'}
                                 </span>
                             </div>
+                            {(request.foodThermalState || request.thermalTreatment) && (
+                                <div>
+                                    <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                        {reportLang === 'es' ? 'Estado Térmico / Previo' : 'Thermal / Processing State'}
+                                    </span>
+                                    <span className="font-semibold text-slate-800">
+                                        {request.foodThermalState || request.thermalTreatment}
+                                    </span>
+                                </div>
+                            )}
+                            {request.foodPostHandling && (
+                                <div>
+                                    <span className="text-[9.5px] font-bold text-slate-400 uppercase block mb-0.5">
+                                        {reportLang === 'es' ? 'Manipulación Posterior' : 'Post-process Handling'}
+                                    </span>
+                                    <span className="font-semibold text-slate-800">
+                                        {request.foodPostHandling}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 ) : (
@@ -1659,6 +1831,25 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                     {request.doctorName || 'A Solicitud del Paciente'}
                                 </span>
                             </div>
+                            {(request.fastingHours || request.currentMedications || request.specialConditions) && (
+                                <div className="sm:col-span-3 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100/80 flex flex-wrap gap-4 text-[11px] text-slate-700">
+                                    {request.fastingHours && (
+                                        <span>
+                                            <strong className="text-indigo-900">{reportLang === 'es' ? 'Horas de Ayuno:' : 'Fasting Hours:'}</strong> {request.fastingHours}
+                                        </span>
+                                    )}
+                                    {request.currentMedications && (
+                                        <span>
+                                            <strong className="text-indigo-900">{reportLang === 'es' ? 'Fármacos / Interferencias:' : 'Medications / Interferences:'}</strong> {request.currentMedications}
+                                        </span>
+                                    )}
+                                    {request.specialConditions && (
+                                        <span>
+                                            <strong className="text-indigo-900">{reportLang === 'es' ? 'Condición Especial:' : 'Special Condition:'}</strong> {request.specialConditions}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -2873,6 +3064,87 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                 isOpen={isQualityModalOpen} 
                 onClose={() => setIsQualityModalOpen(false)} 
             />
+
+            {/* Modal de Emisión de Enmienda / Rectificación Oficial (ISO 17025 / ISO 15189) */}
+            {isAmendmentModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-3 bg-amber-100 text-amber-700 rounded-xl">
+                                <History size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-slate-800">
+                                    {reportLang === 'es' ? 'Emitir Enmienda / Rectificación Oficial' : 'Issue Official Amendment'}
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    ISO/IEC 17025:2017 (Cláusula 7.8.8) & ISO 15189
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs leading-relaxed space-y-1">
+                            <p className="font-semibold">⚠️ Este proceso generará la Versión {(currentReportVersion || 1) + 1} del informe.</p>
+                            <p className="text-[11px] text-amber-800">
+                                Por requerimiento normativo, cualquier cambio posterior a la emisión original debe registrar un motivo técnico auditable que será impreso en el encabezado oficial sustitutivo.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleIssueAmendment} className="space-y-3.5">
+                            <div className="space-y-1">
+                                <label className="block text-xs font-bold text-slate-700">
+                                    {reportLang === 'es' ? 'Motivo Técnico de la Enmienda (Obligatorio)' : 'Technical Reason for Amendment (Mandatory)'}
+                                </label>
+                                <textarea
+                                    required
+                                    rows={3}
+                                    value={amendmentReason}
+                                    onChange={(e) => setAmendmentReason(e.target.value)}
+                                    placeholder={reportLang === 'es' ? 'Ej: Corrección de identificación del lote, repetición de ensayo por desviación en blanco analítico, actualización de rango según norma RTCA...' : 'Specify clear reason for rectification...'}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 font-medium resize-none"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="block text-xs font-bold text-slate-700">
+                                    {reportLang === 'es' ? 'Profesional que Autoriza la Enmienda' : 'Authorizing Professional'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={amendmentAuthorizer}
+                                    onChange={(e) => setAmendmentAuthorizer(e.target.value)}
+                                    placeholder="Dr. Roldan Ajún Chaverri (Regente Microbiólogo)"
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                                />
+                            </div>
+
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsAmendmentModalOpen(false);
+                                        setAmendmentReason('');
+                                    }}
+                                    className="flex-1 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                                >
+                                    {reportLang === 'es' ? 'Cancelar' : 'Cancel'}
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSavingAmendment || !amendmentReason.trim()}
+                                    className="flex-1 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                                >
+                                    {isSavingAmendment ? (reportLang === 'es' ? 'Emitiendo...' : 'Issuing...') : (
+                                        <>
+                                            <Check size={16} /> {reportLang === 'es' ? 'Emitir y Sellar Enmienda' : 'Issue & Seal Amendment'}
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

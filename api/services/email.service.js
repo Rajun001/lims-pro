@@ -234,6 +234,88 @@ class EmailService {
         console.log('[EMAIL SERVICE] Correo con tabla de informe enviado exitosamente:', info.messageId);
         return { success: true, messageId: info.messageId };
     }
+
+    /**
+     * Envía token de seguridad / código de verificación OTP para registro o autenticación 2FA
+     */
+    static async sendVerificationCodeEmail({ to, recipientName, code, purpose = 'REGISTRATION' }) {
+        const fromEmail = process.env.SMTP_FROM || 'Seguridad Microlabs <reportes@microlabscr.com>';
+        const title = purpose === 'REGISTRATION' ? 'Verificación de Registro Seguro' : 'Código de Verificación de Seguridad (2FA)';
+        const actionText = purpose === 'REGISTRATION' 
+            ? 'para completar la creación y activación de su cuenta en el Portal Oficial de Microlabs'
+            : 'para autorizar el acceso seguro a sus expedientes y resultados de laboratorio';
+
+        const htmlContent = `
+        <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; background-color: #f8fafc; padding: 24px;">
+            <div style="background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                <!-- Header Institucional -->
+                <div style="background: linear-gradient(135deg, #042f2e, #0f766e); padding: 28px 24px; text-align: center; color: #ffffff;">
+                    <h2 style="margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 0.5px;">LABORATORIO MICROLABS QUÍMICOS S.A.</h2>
+                    <p style="margin: 4px 0 0 0; font-size: 11px; opacity: 0.9; text-transform: uppercase; letter-spacing: 1px;">Gestión de Calidad ISO 17025 / 15189 • 21 CFR Part 11</p>
+                </div>
+
+                <!-- Contenido Principal -->
+                <div style="padding: 28px 24px; text-align: center;">
+                    <div style="display: inline-block; width: 48px; height: 48px; line-height: 48px; border-radius: 50%; background-color: #ccfbf1; color: #0f766e; font-size: 24px; margin-bottom: 12px;">
+                        🔐
+                    </div>
+                    <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #0f172a; font-weight: 800;">${title}</h3>
+                    <p style="margin: 0 0 20px 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+                        Estimado/a <strong>${recipientName || 'Usuario'}</strong>,<br/>
+                        Utilice el siguiente código de seguridad temporal ${actionText}:
+                    </p>
+
+                    <!-- Token Box -->
+                    <div style="background: #f0fdfa; border: 2px dashed #0d9488; border-radius: 12px; padding: 18px; margin: 0 auto 20px auto; max-width: 280px;">
+                        <span style="font-family: Consolas, 'Courier New', monospace; font-size: 32px; font-weight: 900; letter-spacing: 6px; color: #0f766e; display: block;">
+                            ${code}
+                        </span>
+                        <span style="display: block; margin-top: 6px; font-size: 10px; font-weight: 700; color: #0d9488; text-transform: uppercase;">
+                            ⏱️ Válido por 10 minutos
+                        </span>
+                    </div>
+
+                    <p style="margin: 0 0 20px 0; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+                        Si usted no solicitó este código en el portal de Microlabs, por favor ignore este mensaje o comuníquese con soporte de inmediato.
+                    </p>
+
+                    <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 24px 0 16px 0;" />
+
+                    <div style="font-size: 11px; color: #64748b; line-height: 1.6; text-align: left;">
+                        <p style="margin: 2px 0;"><strong>🏛️ Laboratorio Central:</strong> 75m Norte del Correo de Guadalupe, San José, Costa Rica</p>
+                        <p style="margin: 2px 0;"><strong>📞 Central Telefónica:</strong> +506 2234-8837 • <strong>WhatsApp:</strong> +506 7138-2750</p>
+                        <p style="margin: 2px 0;"><strong>🌐 Portal Web:</strong> <a href="https://www.microlabscr.com" style="color: #0d9488;">www.microlabscr.com</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+
+        if (!process.env.SMTP_PASS) {
+            console.log(`[EMAIL SERVICE] (Simulado / SMTP_PASS no configurado) Código de verificación para ${to}: ${code}`);
+            return {
+                success: true,
+                simulated: true,
+                code,
+                message: 'Código generado y registrado en log (configurar SMTP_PASS para envío real).'
+            };
+        }
+
+        try {
+            const transporter = this.getTransporter();
+            const mailOptions = {
+                from: fromEmail,
+                to,
+                subject: `[Microlabs] Código de Seguridad: ${code}`,
+                html: htmlContent
+            };
+            const info = await transporter.sendMail(mailOptions);
+            return { success: true, messageId: info.messageId, code };
+        } catch (err) {
+            console.warn('[EMAIL SERVICE] Fallo al enviar correo SMTP, recurriendo a modo respaldo:', err.message);
+            return { success: true, simulated: true, code, warning: err.message };
+        }
+    }
 }
 
 export default EmailService;

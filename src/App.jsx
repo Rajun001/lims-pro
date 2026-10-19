@@ -47,6 +47,7 @@ import { VersionUpdateNotifier } from './components/VersionUpdateNotifier';
 import { CommandPalette } from './components/CommandPalette';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { InactivityTimeout } from './components/InactivityTimeout';
 
 // Lazy load views
 const LoginView = lazy(() => import('./views/LoginView').then(m => ({ default: m.LoginView })));
@@ -650,26 +651,38 @@ const AppContent = () => {
         const unsub = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 setUser(u);
-                setLoading(true);
                 if (u.uid !== 'offline-user') {
                     try {
                         const userDoc = await getDoc(doc(db, 'users', u.uid));
                         if (userDoc.exists()) {
-                            setUserRole(userDoc.data().role);
+                            const dbRole = userDoc.data().role;
+                            setUserRole(dbRole);
+                            sessionStorage.setItem('userRole', dbRole);
                         } else {
-                            console.warn("Usuario sin rol asignado en la base de datos.");
-                            setUserRole(null);
+                            // Si aún se está completando el registro, preservar el rol de sesión
+                            const sessionRole = sessionStorage.getItem('userRole');
+                            if (sessionRole) {
+                                setUserRole(sessionRole);
+                            } else {
+                                console.warn("Usuario sin rol asignado en la base de datos.");
+                                setUserRole(null);
+                            }
                         }
                     } catch (e) {
                         console.error("Error al cargar el rol del usuario:", e);
+                        const fallbackRole = sessionStorage.getItem('userRole');
+                        if (fallbackRole) setUserRole(fallbackRole);
                     }
                 }
             } else {
-                const saved = sessionStorage.getItem('offlineUser');
+                const saved = sessionStorage.getItem('offlineUser') || sessionStorage.getItem('lims_user');
+                const savedRole = sessionStorage.getItem('userRole');
                 if (!saved) {
                     setUser(null);
                     setUserRole(null);
                     sessionStorage.removeItem('userRole');
+                } else if (savedRole) {
+                    setUserRole(savedRole);
                 }
                 setLoading(false);
             }
@@ -913,7 +926,7 @@ const AppContent = () => {
                 <Route path="/client_portal" element={
                     <Suspense fallback={<LoadingSpinner />}>
                         <ClientRoute user={user} userRole={userRole}>
-                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} user={user} labInfo={labInfo} />
+                            <ClientPortal navigateTo={navigateTo} userRole={userRole} requests={requests} user={user} labInfo={labInfo} db={db} />
                         </ClientRoute>
                     </Suspense>
                 } />
@@ -981,6 +994,16 @@ const AppContent = () => {
                 onClose={() => setIsShortcutsModalOpen(false)} 
             />
             <VersionUpdateNotifier />
+            <InactivityTimeout 
+                user={user} 
+                userRole={userRole} 
+                onLogout={(reason) => {
+                    if (reason === 'inactivity') {
+                        addNotification('Sesión finalizada automáticamente por inactividad reglamentaria (ISO 15189 / 21 CFR Part 11).', 'warning');
+                    }
+                    navigateTo('login');
+                }} 
+            />
         </ErrorBoundary>
     );
 };

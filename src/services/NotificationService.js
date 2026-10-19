@@ -39,9 +39,9 @@ class NotificationService {
         let subscription = await registration.pushManager.getSubscription();
 
         if (!subscription) {
-            // Clave pública VAPID simulada para PWA local
+            // Endpoint de sesión local para PWA offline
             subscription = {
-                endpoint: 'https://fcm.googleapis.com/fcm/send/simulated-lims-endpoint',
+                endpoint: 'local://lims-microlabs/push/local-session',
                 subscribedAt: new Date().toISOString()
             };
         }

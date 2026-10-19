@@ -9,8 +9,7 @@ const firebaseConfig = {
     projectId: "lims-microlabs",
     storageBucket: "lims-microlabs.firebasestorage.app",
     messagingSenderId: "244307478529",
-    appId: "1:244307478529:web:61c4da911089adc8b39800",
-    measurementId: "G-CVNQ87T4M6"
+    appId: "1:244307478529:web:61c4da911089adc8b39800"
 };
 
 export const LIMSSystemId = 'lims-final-v5';
