@@ -631,10 +631,15 @@ export const PublicVerificationView = () => {
             </main>
 
             {/* Footer */}
-            <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500 px-4 print:hidden">
-                <p>© {new Date().getFullYear()} Laboratorios Microlabs Químicos S.A. Todos los derechos reservados.</p>
-                <p className="text-[10px] mt-1 text-slate-400 font-mono">
-                    Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'} respaldado con trazabilidad auditada de extremo a extremo.
+            <footer className="border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500 px-4 print:hidden space-y-1 select-none">
+                <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-bold text-slate-700">
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-300">
+                        🛡️ Diseño Propietario Registrado
+                    </span>
+                    <span>© {new Date().getFullYear()} Microlabs Químicos S.A. | Cédula Jurídica: 3-101-144450</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-mono">
+                    Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'} • Formatos, diseño de informe y algoritmos analíticos protegidos bajo la Ley N° 6683 y Ley N° 7978 de Costa Rica. Prohibida su copia o clonación.
                 </p>
             </footer>
         </div>

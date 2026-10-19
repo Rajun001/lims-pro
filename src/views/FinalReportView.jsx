@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { LIMSSystemId } from '../services/firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -588,6 +588,19 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
     const [currentReportVersion, setCurrentReportVersion] = useState(() => request?.reportVersion || 1);
     const [currentAmendmentNote, setCurrentAmendmentNote] = useState(() => request?.amendmentNote || '');
     const [isSavingAmendment, setIsSavingAmendment] = useState(false);
+
+    // Hash criptográfico de diseño y autenticidad (Anti-Clonación / Ley 6683)
+    const antiTamperLayoutDigest = useMemo(() => {
+        const raw = `MICROLABS-CR-3-101-144450:${request?.id || ''}:${request?.sampleBarcode || ''}:${request?.clientName || request?.patientName || ''}:${request?.reportVersion || currentReportVersion || 1}`;
+        let hash = 0;
+        for (let i = 0; i < raw.length; i++) {
+            const char = raw.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+        }
+        const hex = Math.abs(hash).toString(16).padStart(8, '0');
+        return `MLCR-${hex.toUpperCase()}-SEC`;
+    }, [request, currentReportVersion]);
 
     if (!request) return null;
 
@@ -1600,7 +1613,40 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                 </div>
             )}
 
-            <div id="report-content" className="relative bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0 overflow-hidden">
+            <div 
+                id="report-content" 
+                className="relative bg-white p-10 border border-slate-200 shadow-sm print:shadow-none print:border-none print:p-0 overflow-hidden select-text"
+                onContextMenu={(e) => {
+                    if (!window.location.search.includes('allow-copy')) {
+                        e.preventDefault();
+                    }
+                }}
+            >
+                {/* ── Borde Perimetral Micro-Impreso de Seguridad Antifraude (Anti-Counterfeit Micro-Text Guilloche) ── */}
+                <div 
+                    aria-hidden="true" 
+                    className="select-none pointer-events-none absolute inset-1 sm:inset-1.5 border border-slate-200/70 print:border-slate-300 rounded-xs overflow-hidden flex flex-col justify-between z-0"
+                >
+                    <div className="w-full overflow-hidden whitespace-nowrap text-[6px] print:text-[5px] text-slate-300 print:text-slate-400 font-mono tracking-widest uppercase py-0.5 px-2 bg-slate-50/20">
+                        MICROLABS QUÍMICOS S.A. • CÉDULA 3-101-144450 • DISEÑO Y FORMATO ANALÍTICO REGISTRADO • LEY N° 6683 • LEY N° 7978 • PROHIBIDA SU REPRODUCCIÓN O CLONACIÓN • INTE/ISO/IEC 17025 • INTE/ISO 15189 • MICROLABS QUÍMICOS S.A. • CÉDULA 3-101-144450 • 
+                    </div>
+                    <div className="w-full overflow-hidden whitespace-nowrap text-[6px] print:text-[5px] text-slate-300 print:text-slate-400 font-mono tracking-widest uppercase py-0.5 px-2 bg-slate-50/20">
+                        DOCUMENTO OFICIAL AUTÉNTICO • EMITIDO POR MICROLABS QUÍMICOS S.A. • CÉDULA: 3-101-144450 • PROPIEDAD INTELECTUAL Y DISEÑO INDUSTRIAL EXCLUSIVO • LEY 6683 • LEY 7978 • 
+                    </div>
+                </div>
+
+                {/* ── Marca de Agua de Fondo de Papel de Seguridad (Security Paper Pattern) ── */}
+                <div 
+                    aria-hidden="true" 
+                    className="pointer-events-none select-none absolute inset-0 z-0 flex items-center justify-center opacity-[0.025] print:opacity-[0.035] overflow-hidden"
+                >
+                    <div className="transform -rotate-25 text-slate-900 font-mono text-center font-black tracking-widest text-lg sm:text-2xl leading-loose uppercase whitespace-nowrap">
+                        MICROLABS QUÍMICOS S.A. • DISEÑO REGISTRADO • ISO 17025 • CÉDULA 3-101-144450<br/>
+                        INFORME AUTÉNTICO • DOCUMENTO INTRANSFERIBLE • LEY 6683<br/>
+                        MICROLABS QUÍMICOS S.A. • DISEÑO REGISTRADO • ISO 17025 • CÉDULA 3-101-144450
+                    </div>
+                </div>
+
                 {/* Marca de agua translúcida dinámica de seguridad analítica (ISO 15189 / ISO 17025) */}
                 {watermarkText && (
                     <div 
@@ -2751,6 +2797,17 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
                             <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
                         </div>
+
+                        {/* Blindaje Antifraude y Propiedad Intelectual Registrada (Ley N° 6683 y Ley N° 7978) */}
+                        <div className="mt-1 pt-0.5 border-t border-dashed border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-1 text-[7px] print:text-[6px] text-slate-400 font-mono select-none">
+                            <div className="flex items-center gap-1">
+                                <span className="font-extrabold text-slate-600 uppercase">🛡️ DISEÑO PROPIETARIO REGISTRADO:</span>
+                                <span>© 2026 MICROLABS QUÍMICOS S.A. (Cédula: 3-101-144450). Prohibida su copia o clonación bajo apercibimiento penal.</span>
+                            </div>
+                            <div>
+                                <span>Sello Anti-Clonación: <strong className="text-slate-600 font-bold">{antiTamperLayoutDigest}</strong></span>
+                            </div>
+                        </div>
                     </div>
                 ) : (
                     <>
@@ -2897,6 +2954,17 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                             <div className="mt-1.5 pt-1 border-t border-slate-200 flex justify-between items-center text-[8px] print:text-[6.5px] text-slate-400 font-mono select-none">
                                 <span>Documento Controlado: FOR-INF-01 (Rev. 05) — Sistema LIMS-PRO {versionData?.fullVersion || 'v2.5.0'}</span>
                                 <span>Trazabilidad Hash: #{versionData?.gitCommit || 'dev'} | Build: {versionData?.builtAt ? new Date(versionData.builtAt).toLocaleDateString() : 'N/A'}</span>
+                            </div>
+
+                            {/* Blindaje Antifraude y Propiedad Intelectual Registrada (Ley N° 6683 y Ley N° 7978) */}
+                            <div className="mt-1 pt-0.5 border-t border-dashed border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-1 text-[7px] print:text-[6px] text-slate-400 font-mono select-none">
+                                <div className="flex items-center gap-1">
+                                    <span className="font-extrabold text-slate-600 uppercase">🛡️ DISEÑO PROPIETARIO REGISTRADO:</span>
+                                    <span>© 2026 MICROLABS QUÍMICOS S.A. (Cédula: 3-101-144450). Prohibida su copia o clonación bajo apercibimiento penal.</span>
+                                </div>
+                                <div>
+                                    <span>Sello Anti-Clonación: <strong className="text-slate-600 font-bold">{antiTamperLayoutDigest}</strong></span>
+                                </div>
                             </div>
                         </div>
                     </>

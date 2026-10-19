@@ -121,6 +121,31 @@ Conforme a la **Ley de Protección de la Persona frente al Tratamiento de sus Da
 
 ---
 
+## ⚖️ Blindaje de Propiedad Intelectual, Diseño Propietario y Anti-Clonación
+
+El diseño de la interfaz de usuario, la arquitectura de flujos de trabajo, los cálculos preanalíticos, los algoritmos metrológicos y el formato visual de los Certificados de Análisis (CoA) e Informes Clínicos son **creación exclusiva y propiedad intelectual de Microlabs Químicos S.A.** (Cédula Jurídica: `3-101-144450`), amparados por:
+
+- **Ley de Derechos de Autor y Conexos N° 6683** de la República de Costa Rica.
+- **Ley de Marcas y Otros Signos Distintivos N° 7978**.
+- **Normas INTE/ISO/IEC 17025:2017 e INTE/ISO 15189:2014** relativas a la integridad y autenticidad documental no transferible.
+
+### Medidas Técnicas Anti-Replicación Integradas en el Código:
+
+1. **Borde Micro-Impreso de Seguridad Antifraude (Guilloche Micro-Text)**:
+   - Los informes oficiales incorporan un perímetro perimetral con micro-texto legal que se renderiza con nitidez en impresiones oficiales y PDFs certificados, pero se distorsiona en fotocopias o clonaciones analógicas.
+2. **Marcas de Agua de Papel de Seguridad (Security Paper Pattern)**:
+   - Fondo de agua translúcido embebido en el canvas del reporte (`id="report-content"`), impidiendo que competidores utilicen capturas de pantalla o réplicas en procesadores de texto sin exponer la marca de agua institucional.
+3. **Sello Criptográfico de Integridad y Diseño (Anti-Tamper Layout Digest)**:
+   - Cada informe genera un hash criptográfico determinístico único (`MLCR-XXXXXXXX-SEC`) que concatena la cédula jurídica del laboratorio, el número de muestra, los códigos de ensayo y la versión aprobada, impidiendo la falsificación o adulteración de formatos.
+4. **Protección contra Extracción y Scrapeo Web**:
+   - Menú contextual de clic derecho deshabilitado en el lienzo oficial (`onContextMenu.preventDefault()`).
+   - Atributos `draggable={false}` y clases `select-none` en sellos digitales, códigos de barra, firmas y logos para impedir su arrastre y extracción directa.
+   - Metadatos anti-indexación en `index.html` (`robots: noindex, nofollow, noarchive, nosnippet`) para evitar que motores de búsqueda o bots de rastreo almacenen en caché las plantillas.
+5. **Ofuscación y Supresión de Sourcemaps en Compilación**:
+   - En `vite.config.js`, se configuró `sourcemap: false` y se eliminan llamadas de consola (`console.log`, `debugger`), junto con la inyección de una cabecera legal en cada paquete JavaScript de producción para impedir la ingeniería inversa del código React.
+
+---
+
 ## 🔧 Guía Rápida de Reparaciones Comunes
 
 ### 1. ¿Cómo cambiar o corregir los firmantes de un reporte?

@@ -49,10 +49,16 @@ export default defineConfig({
       }
     }
   },
+  esbuild: {
+    drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
+    legalComments: 'none'
+  },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
+        banner: '/* © 2026 Microlabs Químicos S.A. Cédula Jurídica: 3-101-144450. Software Propietario LIMS-PRO. Prohibida su copia o ingeniería inversa bajo Ley N° 6683. */',
         manualChunks(id) {
           if (id.includes('node_modules')) {
             if (id.includes('html2pdf.js')) return 'vendor-pdf';
