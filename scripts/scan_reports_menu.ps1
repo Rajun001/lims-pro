@@ -61,4 +61,4 @@ public class ReportScanner {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-[ReportScanner]::ScanReports([IntPtr]6228972)
+[ReportScanner]::ScanReports([IntPtr]1445120)

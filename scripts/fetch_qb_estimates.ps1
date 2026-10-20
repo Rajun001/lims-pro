@@ -50,7 +50,7 @@ try {
         $filterXml += "<RefNumberFilter><MatchCriterion>Contains</MatchCriterion><RefNumber>$RefNumber</RefNumber></RefNumberFilter>"
     }
     if (![string]::IsNullOrWhiteSpace($FromTxnDate)) {
-        $filterXml += "<FromTxnDate>$FromTxnDate</FromTxnDate>"
+        $filterXml += "<TxnDateRangeFilter><FromTxnDate>$FromTxnDate</FromTxnDate></TxnDateRangeFilter>"
     }
 
     $query = @"

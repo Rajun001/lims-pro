@@ -47,8 +47,8 @@ public class ClipCopier {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-# rptGridHwnd: 19662876
-[ClipCopier]::CopyReport([IntPtr]19662876)
+# rptGridHwnd: 726504
+[ClipCopier]::CopyReport([IntPtr]726504)
 
 $clip = Get-Clipboard -Raw
 if (![string]::IsNullOrWhiteSpace($clip)) {

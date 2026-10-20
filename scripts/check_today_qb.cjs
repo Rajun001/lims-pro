@@ -63,23 +63,23 @@ async function check() {
 
         // Revisar últimas muestras clínicas e industriales
         const latestClinical = await prisma.clinicalSample.findMany({
-            orderBy: { collectionDate: 'desc' },
+            orderBy: { collectionTime: 'desc' },
             take: 5,
             include: { patient: true }
         });
         console.log('\n--- ÚLTIMAS 5 MUESTRAS CLÍNICAS (POR FECHA DE TOMA) ---');
         latestClinical.forEach(s => {
-            console.log(`Muestra: ${s.sampleCode} | Paciente: ${s.patient?.fullName} | Fecha Toma: ${s.collectionDate?.toISOString()}`);
+            console.log(`Muestra: ${s.barcode} | Paciente: ${s.patient?.firstName} ${s.patient?.lastName} | Fecha Toma: ${s.collectionTime?.toISOString()}`);
         });
 
         const latestIndustrial = await prisma.industrialSample.findMany({
-            orderBy: { samplingDate: 'desc' },
+            orderBy: { receivedAt: 'desc' },
             take: 5,
             include: { contract: { include: { client: true } } }
         });
-        console.log('\n--- ÚLTIMAS 5 MUESTRAS INDUSTRIALES (POR FECHA DE MUESTREO) ---');
+        console.log('\n--- ÚLTIMAS 5 MUESTRAS INDUSTRIALES (POR FECHA DE RECEPCIÓN) ---');
         latestIndustrial.forEach(s => {
-            console.log(`Muestra: ${s.sampleCode} | Empresa: ${s.contract?.client?.companyName} | Fecha Muestreo: ${s.samplingDate?.toISOString()}`);
+            console.log(`Muestra: ${s.barcode} | Empresa: ${s.contract?.client?.companyName} | Fecha Recepción: ${s.receivedAt?.toISOString()}`);
         });
 
         // Revisar QbSettings

@@ -21,7 +21,7 @@ Add-Type -TypeDefinition $cs -Language CSharp
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
-$rptHwnd = [IntPtr]8195866
+$rptHwnd = [IntPtr]726504
 $root = [System.Windows.Automation.AutomationElement]::FromHandle($rptHwnd)
 
 # Find all Text controls in the report

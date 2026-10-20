@@ -59,4 +59,4 @@ public class MouseClicker {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-[MouseClicker]::ClickElement([IntPtr]11994880)
+[MouseClicker]::ClickElement([IntPtr]922198)

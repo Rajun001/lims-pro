@@ -34,5 +34,5 @@ public class ReportOpenerReal {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-# 17327 = Estimates by Job
-[ReportOpenerReal]::OpenReport([IntPtr]6228972, 17327)
+# 19683 = Estimates by Job
+[ReportOpenerReal]::OpenReport([IntPtr]1445120, 19683)

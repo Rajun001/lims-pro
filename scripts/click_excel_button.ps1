@@ -61,4 +61,4 @@ public class ExcelClicker {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-[ExcelClicker]::ClickExcel([IntPtr]1447094)
+[ExcelClicker]::ClickExcel([IntPtr]19137298)

@@ -33,4 +33,15 @@ public class QBCleaner {
 "@
 
 Add-Type -TypeDefinition $cs -Language CSharp
-[QBCleaner]::CloseAll([IntPtr]6228972)
+
+$qb = (Get-Process qbw* -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -match "QuickBooks" } | Select-Object -First 1)
+$hwnd = [IntPtr]::Zero
+if ($qb -and $qb.MainWindowHandle -ne [IntPtr]::Zero) {
+    $hwnd = $qb.MainWindowHandle
+} else {
+    $scanner = [System.IO.File]::ReadAllText("c:\lims-microlabs\scripts\DesktopScanner.cs")
+    $hwnd = [IntPtr]1445120
+}
+
+Write-Host "Cerrando subventanas de QuickBooks en HWND $hwnd..."
+[QBCleaner]::CloseAll($hwnd)
