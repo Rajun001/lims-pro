@@ -31,12 +31,13 @@ export const getWorkcards = async (req, res) => {
     const formattedClinical = clinicalSamples.map(s => {
       const order = s.orders?.[0] || {};
       const test = order.tests?.[0] || {};
+      const microStatus = s.status === 'RECEIVED' ? 'siembra' : (s.status === 'IN_ANALYSIS' ? 'lectura' : 'completado');
       return {
         id: `CLIN-${s.id}`,
         barcode: s.barcode,
         clientName: s.patient ? `${s.patient.firstName} ${s.patient.lastName}`.trim() : 'Paciente Clínico',
         analysisRequested: test.testName || s.sampleType || 'Cultivo Microbiológico',
-        microbiologyStatus: s.status === 'RECEIVED' ? 'siembra' : (s.status === 'IN_ANALYSIS' ? 'lectura_1' : 'completado'),
+        microbiologyStatus: microStatus,
         date: s.receivedAt,
         status: s.status,
         media: 'Agar Sangre / MacConkey',
@@ -49,12 +50,13 @@ export const getWorkcards = async (req, res) => {
     const formattedIndustrial = industrialSamples.map(s => {
       const test = s.tests?.[0] || {};
       const client = s.contract?.client;
+      const microStatus = s.status === 'RECEIVED' ? 'siembra' : (s.status === 'IN_ANALYSIS' ? 'lectura' : 'completado');
       return {
         id: `IND-${s.id}`,
         barcode: s.barcode,
         clientName: client?.companyName || 'Cliente Industrial',
         analysisRequested: test.parameterName || s.matrixType || 'Análisis Microbiológico',
-        microbiologyStatus: s.status === 'RECEIVED' ? 'siembra' : (s.status === 'IN_ANALYSIS' ? 'lectura_1' : 'completado'),
+        microbiologyStatus: microStatus,
         date: s.receivedAt,
         status: s.status,
         media: 'BHI / PCA',

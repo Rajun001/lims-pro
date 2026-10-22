@@ -151,6 +151,8 @@ const mapSqlReportToRequest = (sqlReport) => {
         id: sqlReport.reportNumber,
         numericId: sqlReport.id,
         reportNumber: sqlReport.reportNumber,
+        barcode: isInd ? (sample?.barcode || sqlReport.reportNumber) : (clinicalSample?.barcode || sqlReport.reportNumber),
+        customId: isInd ? (sample?.barcode || sqlReport.reportNumber) : (clinicalSample?.barcode || sqlReport.reportNumber),
         reportType: sqlReport.reportType,
         isClinical,
         clientName: isInd ? (client?.companyName || 'Cliente Industrial') : (patientFullName || 'Paciente'),

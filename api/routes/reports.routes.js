@@ -116,12 +116,16 @@ router.get('/reports/details/:id', authenticateJWT, async (req, res) => {
   const param = String(req.params.id || '').trim();
   const numericId = parseInt(param);
   try {
-    const whereClause = !isNaN(numericId) && String(numericId) === param
-      ? { OR: [{ id: numericId }, { reportNumber: param }] }
-      : { reportNumber: param };
+    const whereConditions = [];
+    if (!isNaN(numericId) && String(numericId) === param) {
+      whereConditions.push({ id: numericId });
+    }
+    whereConditions.push({ reportNumber: param });
+    whereConditions.push({ industrialSample: { barcode: param } });
+    whereConditions.push({ clinicalOrder: { sample: { barcode: param } } });
 
     let report = await prisma.report.findFirst({
-      where: whereClause,
+      where: { OR: whereConditions },
       include: {
         industrialSample: {
           include: {
@@ -143,7 +147,39 @@ router.get('/reports/details/:id', authenticateJWT, async (req, res) => {
     });
 
     if (!report) {
-      // Just-in-Time (JIT): Intentar traer de QuickBooks si fue recién creado
+      // 1. Buscar si es una Muestra Industrial recibida aún sin Reporte
+      const indSample = await prisma.industrialSample.findFirst({
+        where: {
+          OR: [
+            { barcode: param },
+            ...(!isNaN(numericId) ? [{ id: numericId }] : [])
+          ]
+        },
+        include: {
+          contract: { include: { client: true } },
+          tests: true
+        }
+      });
+
+      if (indSample) {
+        report = {
+          id: indSample.id,
+          reportNumber: indSample.barcode,
+          reportType: 'INDUSTRIAL_COA',
+          status: indSample.status === 'COMPLETED' ? 'ISSUED' : 'DRAFT',
+          industrialSampleId: indSample.id,
+          industrialSample: indSample,
+          clinicalOrder: null,
+          createdAt: indSample.createdAt,
+          signedAt: null,
+          technicalDirector: null,
+          signature: null
+        };
+      }
+    }
+
+    if (!report) {
+      // 2. Just-in-Time (JIT): Intentar traer de QuickBooks si fue recién creado
       report = await fetchAndIngestSingleEstimate(param);
     }
 

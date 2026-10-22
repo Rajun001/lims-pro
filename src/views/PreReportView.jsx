@@ -4,20 +4,47 @@ import { Logo, BarcodeDisplay } from '../components/UI';
 import versionData from '../version.json';
 
 export const PreReportView = ({ request, analyses = [], navigateTo, labInfo }) => {
-    if (!request) return null;
-
-    const reqDate = request.requestDate?.seconds 
-        ? new Date(request.requestDate.seconds * 1000).toLocaleString() 
-        : (typeof request.requestDate === 'string' ? new Date(request.requestDate).toLocaleString() : new Date().toLocaleString());
-
     const handlePrint = () => window.print();
 
     // Determinar la lista de ensayos solicitados sin saturar
     const testList = useMemo(() => {
+        if (!request) return [];
         const rows = [];
         const catalog = analyses || [];
 
-        // 1. Si vienen seleccionados múltiples análisis
+        // 1. Si vienen resultados de autoanalizador o ensayos SQL (Clínicos o Industriales)
+        if (Array.isArray(request.analyzerResults) && request.analyzerResults.length > 0) {
+            request.analyzerResults.forEach((t, idx) => {
+                rows.push({
+                    id: t.id || idx,
+                    code: t.testCode || `ENS-0${idx + 1}`,
+                    name: t.testName || t.testCode,
+                    method: t.isoStandardRef || t.method || request.expectedPlatingMethod || 'Método Normalizado',
+                    unit: t.unit || '',
+                    ref: t.specificationLimit || t.referenceRange || t.appliedReferenceRange || '—',
+                    preliminaryValue: t.value || ''
+                });
+            });
+            return rows;
+        }
+
+        // 2. Si vienen ensayos crudos vinculados a la muestra
+        if (Array.isArray(request.tests) && request.tests.length > 0) {
+            request.tests.forEach((t, idx) => {
+                rows.push({
+                    id: t.id || idx,
+                    code: t.parameterName ? t.parameterName.substring(0, 8).toUpperCase() : `ENS-0${idx + 1}`,
+                    name: t.parameterName || t.testName || 'Ensayo',
+                    method: t.isoStandardRef || 'Método Normalizado',
+                    unit: t.unit || (t.quantitativeResult !== null ? 'UFC/g' : ''),
+                    ref: t.specificationLimit || 'Norma Sanitaria',
+                    preliminaryValue: t.qualitativeResult || (t.quantitativeResult !== null ? String(t.quantitativeResult) : '')
+                });
+            });
+            return rows;
+        }
+
+        // 3. Si vienen seleccionados múltiples análisis
         if (Array.isArray(request.selectedAnalyses) && request.selectedAnalyses.length > 0) {
             request.selectedAnalyses.forEach((item, idx) => {
                 const code = typeof item === 'string' ? item : item.code;
@@ -36,7 +63,7 @@ export const PreReportView = ({ request, analyses = [], navigateTo, labInfo }) =
             return rows;
         }
 
-        // 2. Si viene un análisis solicitado principal
+        // 4. Si viene un análisis solicitado principal
         if (request.analysisRequested) {
             const match = catalog.find(c => c.code === request.analysisCode || c.name === request.analysisRequested);
             const currentRes = request.results?.[request.analysisCode] || request.results?.[request.analysisRequested] || '';
@@ -54,6 +81,12 @@ export const PreReportView = ({ request, analyses = [], navigateTo, labInfo }) =
 
         return rows;
     }, [request, analyses]);
+
+    if (!request) return null;
+
+    const reqDate = request.requestDate?.seconds 
+        ? new Date(request.requestDate.seconds * 1000).toLocaleString() 
+        : (typeof request.requestDate === 'string' ? new Date(request.requestDate).toLocaleString() : new Date().toLocaleString());
 
     return (
         <div className="max-w-4xl mx-auto animate-fade-in pb-12 font-sans">
