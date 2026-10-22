@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { generateReportAccessToken } from '../utils/securityTokens.js';
 
 /**
  * Servicio Oficial de Envíos de Correo Electrónico LIMS MicroLabs
@@ -26,8 +27,6 @@ class EmailService {
     }
 
     /**
-     * Envía informe de resultados a cliente o paciente
-    /**
      * Envía informe de resultados a cliente o paciente con tabla analítica completa en el cuerpo del correo
      */
     static async sendReportEmail({ 
@@ -36,12 +35,23 @@ class EmailService {
         reportNumber, 
         analysisRequested, 
         verificationUrl,
+        ownerIdentifier,
         sampleType,
         matrix,
         samplingLocation,
         resultsList,
         interpretation
     }) {
+        let secureUrl = verificationUrl || `https://lims-microlabs.web.app/verify/${reportNumber || ''}`;
+        if (ownerIdentifier && reportNumber) {
+            try {
+                const token = generateReportAccessToken(reportNumber, ownerIdentifier, 30);
+                const base = secureUrl.split('?')[0];
+                secureUrl = `${base}?token=${token}`;
+            } catch (tokErr) {
+                console.warn('[EMAIL SERVICE] No se pudo generar token efímero:', tokErr.message);
+            }
+        }
         if (!process.env.SMTP_PASS) {
             console.warn('[EMAIL SERVICE] SMTP_PASS no está configurada aún en .env');
             return {
@@ -201,7 +211,7 @@ class EmailService {
                 <!-- Botón de Consulta y Descarga en Línea -->
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin: 20px 0; text-align: center;">
                     <p style="margin: 0 0 10px 0; font-size: 12px; color: #64748b; font-weight: bold;">CONSULTA DIGITAL EN TIEMPO REAL Y DESCARGA OFICIAL</p>
-                    <a href="${verificationUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                    <a href="${secureUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #059669, #0d9488); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: bold; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
                         📄 Abrir y Descargar Informe Oficial en Línea (PDF)
                     </a>
                     <p style="margin: 8px 0 0 0; font-size: 11px; color: #94a3b8;">

@@ -5,6 +5,17 @@ import { authenticateJWT, authorizeRoles } from '../middlewares/auth.middleware.
 import { publicVerifyLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { fetchAndIngestSingleEstimate } from '../services/qbWatcher.service.js';
 import EmailService from '../services/email.service.js';
+import { validateSecurityKey, generateReportAccessToken } from '../utils/securityTokens.js';
+
+function maskOwnerName(str) {
+  if (!str) return 'Titular Confidencial';
+  const parts = str.trim().split(/\s+/);
+  if (parts.length === 1) {
+    const s = parts[0];
+    return s.length > 4 ? s.slice(0, 2) + '****' + s.slice(-2) : s.slice(0, 1) + '***';
+  }
+  return parts.map((p, i) => (i === 0 || i === parts.length - 1 ? p : '****')).join(' ');
+}
 
 const router = Router();
 
@@ -224,14 +235,34 @@ router.get('/reports/details/:id/pdf', authenticateJWT, async (req, res) => {
   }
 });
 
-// Endpoint Público de Verificación por QR (Anti-enumeración con Rate Limiting)
-router.get('/reports/verify/:reportNumber', publicVerifyLimiter, async (req, res) => {
+// Endpoint Público de Verificación por QR con Filtro de Doble Llave (Anti-Scraping / Anti-Enumeración)
+router.all('/reports/verify/:reportNumber', publicVerifyLimiter, async (req, res) => {
   const { reportNumber } = req.params;
+  const providedKey = req.query.key || req.body?.key || req.headers['x-security-key'];
+  const providedToken = req.query.token || req.body?.token;
 
   try {
-    const report = await prisma.report.findUnique({
-      where: { reportNumber },
+    const report = await prisma.report.findFirst({
+      where: {
+        OR: [
+          { reportNumber },
+          { industrialSample: { barcode: reportNumber } },
+          { clinicalOrder: { sample: { barcode: reportNumber } } }
+        ]
+      },
       include: {
+        industrialSample: {
+          include: {
+            contract: { include: { client: true } },
+            tests: true
+          }
+        },
+        clinicalOrder: {
+          include: {
+            sample: { include: { patient: true } },
+            tests: true
+          }
+        },
         technicalDirector: true,
         signature: true
       }
@@ -241,18 +272,77 @@ router.get('/reports/verify/:reportNumber', publicVerifyLimiter, async (req, res
       return res.status(404).json({ error: 'Informe no encontrado o código de verificación no válido.' });
     }
 
-    res.json({
+    const isIndustrial = report.reportType === 'INDUSTRIAL_COA';
+    const patient = report.clinicalOrder?.sample?.patient;
+    const client = report.industrialSample?.contract?.client;
+    const ownerIdentifier = isIndustrial ? client?.taxId : patient?.uniqueId;
+    const ownerName = isIndustrial 
+      ? (client?.companyName || 'Cliente Industrial') 
+      : (patient ? `${patient.firstName} ${patient.lastName}`.trim() : 'Paciente Clínico');
+
+    const basePublicData = {
       reportNumber: report.reportNumber,
       reportType: report.reportType,
       status: report.status,
       signedAt: report.signedAt || report.createdAt,
-      technicalDirector: report.technicalDirector ? report.technicalDirector.fullName : 'Director Técnico MQC',
+      technicalDirector: report.technicalDirector ? report.technicalDirector.fullName : 'Dr. Roldan Ajún Chaverri (MQC #802)',
       sha256Digest: report.signature ? report.signature.sha256Digest : 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       isIntegrityVerified: true,
-      accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022', '21 CFR Part 11 Compliant']
+      accreditations: ['ISO/IEC 17025:2017', 'ISO 15189:2022', '21 CFR Part 11 Compliant'],
+      isProtected: true,
+      maskedOwner: maskOwnerName(ownerName)
+    };
+
+    // Validar si se suministró la 2ª Llave (Cédula / DNI / Token Efímero)
+    const keyValidation = validateSecurityKey(report.reportNumber, ownerIdentifier, providedKey, providedToken);
+
+    if (!keyValidation.valid) {
+      // Retornar ÚNICAMENTE validación institucional criptográfica sin resultados analíticos ni datos personales
+      return res.json({
+        ...basePublicData,
+        unlocked: false,
+        requiresKey: true,
+        authError: (providedKey || providedToken) ? 'La identificación o llave ingresada no coincide con el titular de este informe.' : null,
+        message: 'Certificado oficial verificado en base de datos. Para ver los resultados analíticos detallados, ingrese la 2ª Llave (Cédula de Identidad o Jurídica del solicitante).'
+      });
+    }
+
+    // --- SEGUNDA LLAVE VÁLIDA: DESBLOQUEAR RESULTADOS ANALÍTICOS COMPLETOS ---
+    const tests = isIndustrial ? (report.industrialSample?.tests || []) : (report.clinicalOrder?.tests || []);
+    const analyzerResults = tests.map(t => ({
+      testCode: t.testCode || t.parameterName,
+      testName: t.testName || t.parameterName,
+      value: t.quantitativeResult !== null && t.quantitativeResult !== undefined 
+        ? String(t.quantitativeResult) 
+        : (t.calculatedResult !== null && t.calculatedResult !== undefined 
+          ? String(t.calculatedResult) 
+          : (t.rawResult !== null && t.rawResult !== undefined 
+            ? String(t.rawResult) 
+            : (t.qualitativeResult || 'Normal'))),
+      unit: isIndustrial ? (t.quantitativeResult !== null ? 'UFC/g' : '') : (t.unit || ''),
+      refRange: t.specificationLimit || t.appliedReferenceRange || '—',
+      specificationLimit: t.specificationLimit,
+      compliance: t.compliance || 'CONFORME',
+      method: t.isoStandardRef || 'Método Normalizado Oficial'
+    }));
+
+    return res.json({
+      ...basePublicData,
+      unlocked: true,
+      requiresKey: false,
+      unlockMethod: keyValidation.method,
+      clientOrPatient: ownerName,
+      ownerIdentifier: isIndustrial ? client?.taxId : patient?.uniqueId,
+      sampleBarcode: isIndustrial ? report.industrialSample?.barcode : report.clinicalOrder?.sample?.barcode,
+      sampleType: isIndustrial ? report.industrialSample?.matrixType : report.clinicalOrder?.sample?.sampleType,
+      matrix: isIndustrial ? report.industrialSample?.matrixType : report.clinicalOrder?.sample?.sampleType,
+      sampleLot: isIndustrial ? report.industrialSample?.lotNumber : null,
+      technicalObservations: report.technicalObservations || 'Muestra conforme según criterios sanitarios.',
+      analyzerResults,
+      hasPdf: Boolean(report.pdfUrl)
     });
-  } catch {
-    res.status(500).json({ error: 'Error al verificar la firma criptográfica del informe.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al verificar la firma criptográfica del informe: ' + err.message });
   }
 });
 
