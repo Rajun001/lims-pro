@@ -57,7 +57,9 @@ scripts/*.html
 scripts/*.log
 scripts/*.txt
 scripts/*.cs
-scripts/qb_estimates_latest.json
+# Generated uploads
+api/uploads/*
+!api/uploads/.gitkeep
 
 
 

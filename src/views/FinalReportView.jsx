@@ -1368,6 +1368,15 @@ export const FinalReportView = ({ request, navigateTo, labInfo, availableAnalyse
                                 <History size={14} /> <span>{reportLang === 'es' ? 'Enmienda (ISO 17025)' : 'Amendment'}</span>
                             </button>
                         )}
+                        <a 
+                            href={`/api/reports/details/${request.reportNumber || request.id}/pdf`} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="flex items-center bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg transition-all font-bold shadow-xs text-xs cursor-pointer gap-1.5" 
+                            title={reportLang === 'es' ? 'Ver o descargar el PDF físico idéntico oficial' : 'View or download identical official PDF'}
+                        >
+                            <FileText size={15} /> <span>{reportLang === 'es' ? 'PDF Oficial Idéntico' : 'Official Identical PDF'}</span>
+                        </a>
                         <button onClick={handlePrint} className="flex items-center bg-blue-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-blue-700 transition-all font-bold shadow-xs text-xs cursor-pointer">
                             <Printer size={15} className="mr-1.5" /> <span>{reportLang === 'es' ? 'Imprimir / PDF' : 'Print / PDF'}</span>
                         </button>

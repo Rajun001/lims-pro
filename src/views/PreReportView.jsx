@@ -99,6 +99,15 @@ export const PreReportView = ({ request, analyses = [], navigateTo, labInfo }) =
                     <ArrowLeft size={18} className="mr-2" /> Volver a Detalles
                 </button>
                 <div className="flex gap-2">
+                    <a 
+                        href={`/api/reports/details/${request.reportNumber || request.id}/pdf`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="flex items-center bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl transition-all font-bold text-sm shadow-md cursor-pointer gap-2"
+                        title="Ver o descargar el PDF físico idéntico oficial"
+                    >
+                        <Printer size={18} /> Ver PDF Idéntico Oficial
+                    </a>
                     <button 
                         onClick={handlePrint} 
                         className="flex items-center bg-indigo-600 text-white px-5 py-2.5 rounded-xl hover:bg-indigo-700 transition-all font-bold text-sm shadow-md cursor-pointer gap-2"

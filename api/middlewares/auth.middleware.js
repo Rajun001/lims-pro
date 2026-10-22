@@ -7,8 +7,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'lims_iso_secure_secret_key_2026';
  */
 export const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const token = (authHeader && authHeader.startsWith('Bearer ')) 
+    ? authHeader.split(' ')[1] 
+    : (req.query?.token || null);
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!token) {
     const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '';
     const isLoopback = ip === '127.0.0.1' || ip === '::1' || ip.includes('127.0.0.1') || ip === '::ffff:127.0.0.1';
     if (isLoopback) {
@@ -17,8 +20,6 @@ export const authenticateJWT = (req, res, next) => {
     }
     return res.status(401).json({ error: 'Acceso no autorizado: Token JWT no proporcionado.' });
   }
-
-  const token = authHeader.split(' ')[1];
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);

@@ -6,6 +6,7 @@ import { publicVerifyLimiter } from '../middlewares/rateLimiter.middleware.js';
 import { fetchAndIngestSingleEstimate } from '../services/qbWatcher.service.js';
 import EmailService from '../services/email.service.js';
 import { validateSecurityKey, generateReportAccessToken } from '../utils/securityTokens.js';
+import { IdenticalPdfService } from '../services/identicalPdf.service.js';
 
 function maskOwnerName(str) {
   if (!str) return 'Titular Confidencial';
@@ -220,18 +221,47 @@ router.put('/reports/:id/evidence', authenticateJWT, authorizeRoles('TECHNICAL_D
   }
 });
 
-// Descarga Directa del PDF Oficial (Protegido con JWT)
+// Descarga Directa del PDF Oficial Idéntico (Protegido con JWT o Acceso Local)
 router.get('/reports/details/:id/pdf', authenticateJWT, async (req, res) => {
-  const id = parseInt(req.params.id);
+  const param = String(req.params.id || '').trim();
+  const numericId = parseInt(param);
   try {
-    const report = await prisma.report.findUnique({ where: { id } });
-    if (!report || !report.pdfUrl) {
-      return res.status(404).json({ error: 'El informe no cuenta con PDF físico asociado.' });
+    const whereConditions = [];
+    if (!isNaN(numericId) && String(numericId) === param) {
+      whereConditions.push({ id: numericId });
+    }
+    whereConditions.push({ reportNumber: param });
+
+    const report = await prisma.report.findFirst({
+      where: { OR: whereConditions },
+      include: {
+        industrialSample: {
+          include: {
+            contract: { include: { client: true } },
+            tests: true
+          }
+        },
+        clinicalOrder: {
+          include: {
+            sample: { include: { patient: true } },
+            tests: true
+          }
+        },
+        technicalDirector: true,
+        signature: true
+      }
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: 'Informe no encontrado para descarga de PDF.' });
     }
 
-    res.sendFile(report.pdfUrl);
+    const pdfPath = await IdenticalPdfService.ensureIdenticalPdf(report);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${report.reportNumber}.pdf"`);
+    res.sendFile(pdfPath);
   } catch (err) {
-    res.status(500).json({ error: 'Error al descargar PDF: ' + err.message });
+    res.status(500).json({ error: 'Error al procesar/descargar PDF: ' + err.message });
   }
 });
 

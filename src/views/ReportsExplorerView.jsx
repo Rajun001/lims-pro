@@ -446,6 +446,16 @@ export const ReportsExplorerView = ({ navigateTo, _userRole, _user }) => {
                                                         <span>{isClinical ? 'Ver Informe Clínico' : 'Ver Certificado'}</span>
                                                     </button>
                                                     <a
+                                                        href={`/api/reports/details/${r.reportNumber}/pdf`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                                                        title="Abrir o descargar PDF idéntico oficial"
+                                                    >
+                                                        <Download size={13} />
+                                                        <span>PDF</span>
+                                                    </a>
+                                                    <a
                                                         href={`/verify/${r.reportNumber}`}
                                                         target="_blank"
                                                         rel="noreferrer"
